@@ -29,3 +29,6 @@ Thumbs.db
 # Local test output
 tests/execution/logs/
 *.log
+
+# Local Claude Code skills (project-private, do not publish)
+.claude/
