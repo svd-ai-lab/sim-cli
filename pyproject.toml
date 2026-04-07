@@ -1,7 +1,7 @@
 [project]
 name = "sim-cli"
 version = "0.2.0"
-description = "The physics simulation runtime for AI agents"
+description = "Make every engineering tool agent-native — a CLI runtime that lets LLM agents launch, drive, and observe CAD/CAE software"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10,<3.13"

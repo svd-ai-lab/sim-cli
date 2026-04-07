@@ -4,9 +4,9 @@
 
 <br>
 
-**The container runtime for physics simulations.**
+**Make every engineering tool agent-native.**
 
-*Today's CAE software was built for engineers clicking through GUIs.*
+*Today's CAD and CAE software was built for engineers clicking through GUIs.*
 *Tomorrow's user is an LLM agent — and it needs a way in.*
 
 <p align="center">
