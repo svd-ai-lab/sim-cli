@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 360" width="1200" height="360">
+  <title>sim — the container runtime for physics simulations</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0"   stop-color="#0b1220"/>
+      <stop offset="0.55" stop-color="#111a35"/>
+      <stop offset="1"   stop-color="#1a1245"/>
+    </linearGradient>
+    <linearGradient id="brand" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#60a5fa"/>
+      <stop offset="1" stop-color="#c084fc"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#60a5fa" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#60a5fa" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1200" height="360" fill="url(#bg)"/>
+
+  <!-- subtle grid -->
+  <g stroke="#1f2a44" stroke-width="1">
+    <path d="M0 60 H1200 M0 120 H1200 M0 180 H1200 M0 240 H1200 M0 300 H1200"/>
+    <path d="M120 0 V360 M240 0 V360 M360 0 V360 M480 0 V360 M600 0 V360 M720 0 V360 M840 0 V360 M960 0 V360 M1080 0 V360"/>
+  </g>
+
+  <!-- left glow -->
+  <circle cx="220" cy="180" r="220" fill="url(#glow)"/>
+
+  <!-- orbital motif (echo of logo) -->
+  <g transform="translate(220 180)" fill="none" stroke="#ffffff" stroke-linecap="round">
+    <circle r="120" stroke="#60a5fa" stroke-opacity="0.25" stroke-width="2"/>
+    <circle r="80"  stroke="#a78bfa" stroke-opacity="0.40" stroke-width="2"/>
+    <circle r="40"  stroke="#ffffff" stroke-opacity="0.85" stroke-width="2.5"/>
+  </g>
+  <g transform="translate(220 180)" fill="#ffffff">
+    <circle cx="0"   cy="-120" r="5"/>
+    <circle cx="120" cy="0"    r="5"/>
+    <circle cx="0"   cy="120"  r="5"/>
+    <circle cx="-120" cy="0"   r="5"/>
+    <circle cx="85"  cy="-85"  r="3.5" fill-opacity="0.7"/>
+    <circle cx="85"  cy="85"   r="3.5" fill-opacity="0.7"/>
+    <circle cx="-85" cy="85"   r="3.5" fill-opacity="0.7"/>
+    <circle cx="-85" cy="-85"  r="3.5" fill-opacity="0.7"/>
+  </g>
+
+  <!-- wordmark -->
+  <g font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif">
+    <text x="430" y="160" font-size="116" font-weight="800" fill="url(#brand)" letter-spacing="-2">sim</text>
+    <text x="430" y="210" font-size="26" font-weight="600" fill="#e2e8f0">The container runtime for physics simulations.</text>
+    <text x="430" y="248" font-size="18" font-weight="400" fill="#94a3b8">One CLI. One HTTP protocol. Seven solver backends.</text>
+    <text x="430" y="276" font-size="18" font-weight="400" fill="#94a3b8">Built so AI agents can launch, drive, and observe CAE jobs.</text>
+
+    <!-- chiplets -->
+    <g font-size="14" font-weight="600">
+      <rect x="430" y="298" width="78"  height="26" rx="13" fill="#1e293b" stroke="#334155"/>
+      <text x="469" y="316" text-anchor="middle" fill="#93c5fd">Fluent</text>
+      <rect x="516" y="298" width="78"  height="26" rx="13" fill="#1e293b" stroke="#334155"/>
+      <text x="555" y="316" text-anchor="middle" fill="#c4b5fd">COMSOL</text>
+      <rect x="602" y="298" width="78"  height="26" rx="13" fill="#1e293b" stroke="#334155"/>
+      <text x="641" y="316" text-anchor="middle" fill="#fda4af">MATLAB</text>
+      <rect x="688" y="298" width="84"  height="26" rx="13" fill="#1e293b" stroke="#334155"/>
+      <text x="730" y="316" text-anchor="middle" fill="#86efac">OpenFOAM</text>
+      <rect x="780" y="298" width="62"  height="26" rx="13" fill="#1e293b" stroke="#334155"/>
+      <text x="811" y="316" text-anchor="middle" fill="#fcd34d">ANSA</text>
+      <rect x="850" y="298" width="84"  height="26" rx="13" fill="#1e293b" stroke="#334155"/>
+      <text x="892" y="316" text-anchor="middle" fill="#7dd3fc">Flotherm</text>
+      <rect x="942" y="298" width="78"  height="26" rx="13" fill="#1e293b" stroke="#334155"/>
+      <text x="981" y="316" text-anchor="middle" fill="#a5f3fc">PyBaMM</text>
+    </g>
+  </g>
+</svg>

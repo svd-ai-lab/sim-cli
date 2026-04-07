@@ -1,70 +1,140 @@
-# sim
+<div align="center">
 
-> The container runtime for physics simulations.
+<img src="assets/banner.svg" alt="sim — the container runtime for physics simulations" width="820">
 
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.10--3.12-blue.svg)](pyproject.toml)
-[![Status](https://img.shields.io/badge/status-alpha-orange.svg)](#supported-solvers)
-[![Skills](https://img.shields.io/badge/agent_skills-sim--skills-8A2BE2.svg)](https://github.com/svd-ai-lab/sim-skills)
+<br>
 
-**English** | [Deutsch](docs/README.de.md) | [日本語](docs/README.ja.md) | [中文](docs/README.zh.md)
+**The container runtime for physics simulations.**
+
+*Today's CAE software was built for engineers clicking through GUIs.*
+*Tomorrow's user is an LLM agent — and it needs a way in.*
+
+<p align="center">
+  <a href="#-quick-start"><img src="https://img.shields.io/badge/Quick_Start-2_min-3b82f6?style=for-the-badge" alt="Quick Start"></a>
+  <a href="#-supported-solvers"><img src="https://img.shields.io/badge/Solvers-7_backends-22c55e?style=for-the-badge" alt="7 Solvers"></a>
+  <a href="https://github.com/svd-ai-lab/sim-skills"><img src="https://img.shields.io/badge/Agent_Skills-sim--skills-8b5cf6?style=for-the-badge" alt="Companion skills"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-eab308?style=for-the-badge" alt="License"></a>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/python-3.10--3.12-3776AB?logo=python&logoColor=white" alt="Python">
+  <img src="https://img.shields.io/badge/CLI-Click_8-blue" alt="Click">
+  <img src="https://img.shields.io/badge/server-FastAPI-009688?logo=fastapi&logoColor=white" alt="FastAPI">
+  <img src="https://img.shields.io/badge/transport-HTTP%2FJSON-orange" alt="HTTP/JSON">
+  <img src="https://img.shields.io/badge/status-alpha-f97316" alt="Status: alpha">
+</p>
+
+**English** · [Deutsch](docs/README.de.md) · [日本語](docs/README.ja.md) · [中文](docs/README.zh.md)
+
+[Why sim](#-why-sim) · [Quick Start](#-quick-start) · [Demo](#-demo) · [Commands](#-commands) · [Solvers](#-supported-solvers) · [Skills](https://github.com/svd-ai-lab/sim-skills)
+
+</div>
 
 ---
 
-LLM agents already know how to write PyFluent, MATLAB, COMSOL, and OpenFOAM scripts — training data is full of them. What they *don't* have is a standard way to **launch a solver, drive it step by step, and observe what happened** before deciding the next move. `sim` is that missing layer: one CLI, one HTTP protocol, seven solver backends, persistent sessions you can introspect between every action.
+## 📰 News
 
-## Architecture
+- **2026-04-07** 🚀 **sim-cli v0.2.0** — first public release on GitHub. Rebrand of `svd-ai-lab/ion @ feature/openfoam-driver`. Seven drivers in the registry: Fluent, ANSA, COMSOL, Flotherm, MATLAB, OpenFOAM, PyBaMM.
+- **2026-04-07** 🧠 Companion repo [`sim-skills`](https://github.com/svd-ai-lab/sim-skills) published — six per-solver agent skills (Anthropic skill format) so an LLM can drive each backend without prior context.
 
-```
-   Agent / engineer                       Workstation with the solver
-  ┌──────────────────┐    HTTP / JSON    ┌──────────────────────────┐
-  │   sim CLI        │ ───────────────►  │   sim serve  (FastAPI)   │
-  │   (any host)     │ ◄───────────────  │            │             │
-  └──────────────────┘                   │   ┌────────▼─────────┐   │
-         ▲                               │   │  Live solver     │   │
-         │  one-shot mode                │   │  Fluent / COMSOL │   │
-         │  (sim run)                    │   │  MATLAB / ANSA   │   │
-         └───────────────────────────────┤   │  Flotherm /      │   │
-                                         │   │  OpenFOAM /      │   │
-                                         │   │  PyBaMM          │   │
-                                         │   └──────────────────┘   │
-                                         └──────────────────────────┘
-```
+---
 
-Two execution modes from the same CLI:
+## 🤔 Why sim?
+
+LLM agents already know how to write PyFluent, MATLAB, COMSOL, and OpenFOAM scripts — training data is full of them. What they *don't* have is a standard way to **launch a solver, drive it step by step, and observe what happened** before deciding the next move.
+
+Today, the choices are awful:
+
+- **Fire-and-forget scripts** — agent writes 200 lines, runs the whole thing, an error at line 30 surfaces as garbage at line 200, no introspection, no recovery.
+- **Bespoke wrappers per solver** — every team rebuilds the same launch / exec / inspect / teardown loop in a different shape.
+- **Closed proprietary glue** — vendor SDKs that don't compose, don't share a vocabulary, and don't speak HTTP.
+
+`sim` is the missing layer:
+
+- **One CLI**, one HTTP protocol, **seven solver backends**.
+- **Persistent sessions** the agent introspects between every step.
+- **Remote-by-default** — the CLI client and the live solver can sit on different machines (LAN, Tailscale, HPC head node).
+- **Companion agent skills** that teach an LLM how to drive each backend safely.
+
+> Like a container runtime standardized how Kubernetes talks to containers, **sim** standardizes how agents talk to solvers.
+
+---
+
+## 🏛 Architecture
+
+<div align="center">
+  <img src="assets/architecture.svg" alt="sim architecture: CLI client over HTTP/JSON to a sim serve FastAPI process holding a live solver session" width="900">
+</div>
+
+Two execution modes from the same CLI, sharing the same `DriverProtocol`:
 
 | Mode | Command | When to use it |
 |---|---|---|
-| **Persistent session** | `sim serve` + `sim connect/exec/inspect` | Long, stateful workflows the agent inspects between steps |
-| **One-shot** | `sim run script.py --solver X` | Whole-script jobs you want stored as a numbered run |
+| **Persistent session** | `sim serve` + `sim connect / exec / inspect` | Long, stateful workflows the agent inspects between steps |
+| **One-shot** | `sim run script.py --solver X` | Whole-script jobs you want stored as a numbered run in `.sim/runs/` |
 
-## Quick Start
+For the full driver protocol, server endpoints, and execution pipeline see [CLAUDE.md](CLAUDE.md).
+
+---
+
+## 🚀 Quick Start
 
 ```bash
-# On the box that has the solver (e.g. a Fluent workstation):
+# 1. On the box that has the solver (e.g. a Fluent workstation):
 uv pip install "git+https://github.com/svd-ai-lab/sim-cli.git"
-sim serve --host 0.0.0.0
+sim serve --host 0.0.0.0          # FastAPI server on :7600
 
-# From the agent / your laptop / anywhere on the network:
+# 2. From the agent / your laptop / anywhere on the network:
 sim --host <server-ip> connect --solver fluent --mode solver --ui-mode gui
 sim --host <server-ip> exec "solver.settings.mesh.check()"
 sim --host <server-ip> inspect session.summary
+sim --host <server-ip> screenshot -o shot.png
 sim --host <server-ip> disconnect
 ```
 
-That's the full loop: launch, drive, observe, tear down — with the engineer optionally watching the solver GUI in real time.
+That's the full loop: **launch → drive → observe → tear down** — with the engineer optionally watching the solver GUI in real time.
 
-## What you get
+---
 
-- **Seven solver drivers** behind one protocol — Fluent, COMSOL, MATLAB, OpenFOAM, ANSA, Flotherm, PyBaMM
-- **Persistent sessions** that survive across snippets, so an agent never restarts the solver mid-task
-- **Step-by-step introspection** — `sim inspect` between actions instead of fire-and-forget scripts
-- **Pre-flight `lint`** that catches missing imports and unsupported APIs before launch
+## 🎬 Demo
+
+> **Recording in progress.** A short terminal capture of `sim connect → exec → inspect → screenshot` against a real Fluent session will land here. The exact sequence to record:
+>
+> ```bash
+> sim serve --host 0.0.0.0
+> sim --host <ip> connect --solver fluent --mode solver --ui-mode gui
+> sim --host <ip> exec "solver.settings.file.read_case(file_name='mixing_elbow.cas.h5')"
+> sim --host <ip> exec "solver.settings.solution.initialization.hybrid_initialize()"
+> sim --host <ip> exec "solver.settings.solution.run_calculation.iterate(iter_count=20)"
+> sim --host <ip> inspect session.summary
+> sim --host <ip> disconnect
+> ```
+>
+> Want to contribute the recording? Use [`vhs`](https://github.com/charmbracelet/vhs) or [`asciinema`](https://asciinema.org/) and open a PR against `assets/demo.gif`.
+
+---
+
+## ✨ Features
+
+### 🧠 Built for agents
+- **Persistent sessions** that survive across snippets — never restart the solver mid-task
+- **Step-by-step introspection** with `sim inspect` between every action
+- **Pre-flight `sim lint`** catches missing imports and unsupported APIs before launch
 - **Numbered run history** in `.sim/runs/` for one-shot jobs, browsable via `sim logs`
-- **Remote-by-default** — the CLI client and the server can live on different machines (LAN, Tailscale, or HPC head node)
-- **Companion agent skills** in [`sim-skills`](https://github.com/svd-ai-lab/sim-skills) so an LLM knows how to drive each solver
 
-## Commands
+### 🔌 Solver-agnostic
+- **One protocol** (`DriverProtocol`) for seven backends — drivers are ~200 LOC each
+- **Persistent + one-shot** from the same CLI — no separate client per mode
+- **Companion skills** in [`sim-skills`](https://github.com/svd-ai-lab/sim-skills) so LLMs know each backend's gotchas
+
+### 🌐 Remote-friendly
+- **HTTP/JSON transport** — runs anywhere `httpx` runs
+- **Client / server split** — agent on a laptop, solver on an HPC node, GUI on a workstation
+- **Tailscale-ready** — designed for cross-network mesh deployments
+
+---
+
+## ⚙️ Commands
 
 | Command | What it does | Analogy |
 |---|---|---|
@@ -82,7 +152,9 @@ That's the full loop: launch, drive, observe, tear down — with the engineer op
 
 Environment: `SIM_HOST`, `SIM_PORT` for the client; `SIM_DIR` (default `.sim/`) for run storage.
 
-## Why not just run scripts?
+---
+
+## 🆚 Why not just run scripts?
 
 | Fire-and-forget script | sim |
 |---|---|
@@ -91,22 +163,27 @@ Environment: `SIM_HOST`, `SIM_PORT` for the client; `SIM_DIR` (default `.sim/`) 
 | Agent has no view of solver state | `sim inspect` between every action |
 | Solver restarts on every iteration | One persistent session, snippets at will |
 | GUI invisible to the human | Engineer watches the GUI while the agent drives |
+| Output parsing reinvented per project | `driver.parse_output()` returns structured fields |
 
-## Supported Solvers
+---
+
+## 🧪 Supported Solvers
 
 | Solver | Driver | Sessions | Status |
 |---|---|---|---|
-| Ansys Fluent | `fluent` (PyFluent) | persistent + one-shot | Working |
-| BETA CAE ANSA | `ansa` | persistent + one-shot | Working (Phase 1, batch) |
-| COMSOL Multiphysics | `comsol` (JPype) | one-shot | Working |
-| Simcenter Flotherm | `flotherm` (Win32 / FloSCRIPT) | one-shot | Working (Phase A) |
-| MATLAB | `matlab` (matlabengine) | one-shot | Working (v0) |
-| OpenFOAM | `openfoam` | one-shot | Working (via `sim serve` on Linux) |
-| PyBaMM | `pybamm` | one-shot | Working |
+| **Ansys Fluent** | `fluent` (PyFluent) | persistent + one-shot | ✅ Working |
+| **BETA CAE ANSA** | `ansa` (batch) | persistent + one-shot | ✅ Working (Phase 1) |
+| **COMSOL Multiphysics** | `comsol` (JPype) | one-shot | ✅ Working |
+| **Simcenter Flotherm** | `flotherm` (Win32 / FloSCRIPT) | one-shot | ✅ Working (Phase A) |
+| **MATLAB** | `matlab` (matlabengine) | one-shot | ✅ Working (v0) |
+| **OpenFOAM** | `openfoam` | one-shot | ✅ Working (via `sim serve` on Linux) |
+| **PyBaMM** | `pybamm` | one-shot | ✅ Working |
 
 Per-solver protocols, snippets, and demo workflows live in [`sim-skills`](https://github.com/svd-ai-lab/sim-skills).
 
-## Development
+---
+
+## 🛠 Development
 
 ```bash
 git clone https://github.com/svd-ai-lab/sim-cli.git
@@ -118,31 +195,39 @@ pytest -q -m integration        # integration tests (need solvers + sim serve)
 ruff check src/sim tests
 ```
 
-For deeper architectural notes — driver protocol, server endpoints, execution pipeline — see [CLAUDE.md](CLAUDE.md).
+Adding a new driver? Drop a `DriverProtocol` implementation under `src/sim/drivers/<name>/driver.py`, register it in `drivers/__init__.py`, and you're done. See `pybamm/driver.py` for the smallest reference; `fluent/` for a full persistent-session example.
 
-## Project layout
+---
+
+## 📂 Project layout
 
 ```
 src/sim/
-  cli.py           # Click app, all subcommands
-  server.py        # FastAPI server (sim serve)
-  session.py       # HTTP client used by connect/exec/inspect
-  driver.py        # DriverProtocol + dataclasses
+  cli.py           Click app, all subcommands
+  server.py        FastAPI server (sim serve)
+  session.py       HTTP client used by connect/exec/inspect
+  driver.py        DriverProtocol + result dataclasses
   drivers/
-    fluent/        # PyFluent driver  (driver.py + runtime.py + queries.py)
-    ansa/          # ANSA driver      (driver.py + runtime.py + schemas.py)
-    comsol/        # COMSOL driver
-    flotherm/      # Flotherm driver
-    matlab/        # MATLAB driver
-    openfoam/      # OpenFOAM driver
-    pybamm/        # PyBaMM driver
-tests/             # unit tests + fixtures + execution snippets
+    fluent/        PyFluent driver  (driver.py + runtime.py + queries.py)
+    ansa/          ANSA driver      (driver.py + runtime.py + schemas.py)
+    comsol/        COMSOL driver
+    flotherm/      Flotherm driver  (driver.py + _helpers.py)
+    matlab/        MATLAB driver
+    openfoam/      OpenFOAM driver
+    pybamm/        PyBaMM driver
+tests/             unit tests + fixtures + execution snippets
+assets/            logo · banner · architecture (SVG)
+docs/              translated READMEs (de · ja · zh)
 ```
 
-## Related projects
+---
 
-- [`sim-skills`](https://github.com/svd-ai-lab/sim-skills) — agent skills, snippets, and demo workflows for each supported solver
+## 🔗 Related projects
 
-## License
+- **[`sim-skills`](https://github.com/svd-ai-lab/sim-skills)** — agent skills, snippets, and demo workflows for each supported solver
+
+---
+
+## 📄 License
 
 Apache-2.0 — see [LICENSE](LICENSE).

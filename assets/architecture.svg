@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 460" width="1000" height="460">
+  <title>sim architecture</title>
+  <defs>
+    <linearGradient id="bgArch" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0f172a"/>
+      <stop offset="1" stop-color="#111a35"/>
+    </linearGradient>
+    <linearGradient id="cli" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1e3a8a"/>
+      <stop offset="1" stop-color="#3b82f6"/>
+    </linearGradient>
+    <linearGradient id="srv" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4c1d95"/>
+      <stop offset="1" stop-color="#8b5cf6"/>
+    </linearGradient>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#94a3b8"/>
+    </marker>
+  </defs>
+
+  <rect width="1000" height="460" fill="url(#bgArch)"/>
+
+  <g font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif">
+
+    <!-- Left: client side -->
+    <g>
+      <text x="160" y="40" text-anchor="middle" fill="#94a3b8" font-size="14" font-weight="600" letter-spacing="1">CLIENT SIDE</text>
+      <rect x="40" y="80" width="240" height="120" rx="14" fill="url(#cli)" stroke="#3b82f6"/>
+      <text x="160" y="125" text-anchor="middle" fill="#ffffff" font-size="22" font-weight="700">sim CLI</text>
+      <text x="160" y="150" text-anchor="middle" fill="#dbeafe" font-size="13">Click app · `sim connect/exec/inspect`</text>
+      <text x="160" y="170" text-anchor="middle" fill="#dbeafe" font-size="13">runs on agent host or laptop</text>
+      <text x="160" y="190" text-anchor="middle" fill="#bfdbfe" font-size="12">SIM_HOST · SIM_PORT</text>
+
+      <!-- one-shot path -->
+      <rect x="40" y="240" width="240" height="100" rx="14" fill="#0b1220" stroke="#1e3a8a" stroke-dasharray="4 4"/>
+      <text x="160" y="270" text-anchor="middle" fill="#93c5fd" font-size="14" font-weight="600">one-shot mode</text>
+      <text x="160" y="294" text-anchor="middle" fill="#cbd5e1" font-size="13">sim run script.py --solver X</text>
+      <text x="160" y="316" text-anchor="middle" fill="#94a3b8" font-size="12">stored as numbered run in .sim/runs/</text>
+    </g>
+
+    <!-- arrows between client and server -->
+    <g stroke="#94a3b8" stroke-width="2" fill="none">
+      <path d="M280 130 L460 130" marker-end="url(#arrow)"/>
+      <path d="M460 165 L280 165" marker-end="url(#arrow)"/>
+    </g>
+    <text x="370" y="120" text-anchor="middle" fill="#cbd5e1" font-size="12" font-weight="600">HTTP / JSON</text>
+    <text x="370" y="185" text-anchor="middle" fill="#94a3b8" font-size="11">stdout · result · diagnostics</text>
+
+    <!-- Right: server side -->
+    <g>
+      <text x="700" y="40" text-anchor="middle" fill="#94a3b8" font-size="14" font-weight="600" letter-spacing="1">SOLVER WORKSTATION</text>
+      <rect x="460" y="80" width="500" height="320" rx="14" fill="#0b1020" stroke="#334155"/>
+
+      <rect x="490" y="110" width="220" height="100" rx="12" fill="url(#srv)" stroke="#8b5cf6"/>
+      <text x="600" y="148" text-anchor="middle" fill="#ffffff" font-size="20" font-weight="700">sim serve</text>
+      <text x="600" y="172" text-anchor="middle" fill="#ede9fe" font-size="13">FastAPI · port 7600</text>
+      <text x="600" y="192" text-anchor="middle" fill="#ddd6fe" font-size="12">one global session</text>
+
+      <!-- driver registry -->
+      <rect x="730" y="110" width="210" height="270" rx="12" fill="#0f172a" stroke="#334155"/>
+      <text x="835" y="135" text-anchor="middle" fill="#cbd5e1" font-size="13" font-weight="600">DriverProtocol</text>
+      <g font-size="12" fill="#e2e8f0">
+        <text x="745" y="160">• fluent     (PyFluent · sessions)</text>
+        <text x="745" y="180">• ansa       (BETA CAE · sessions)</text>
+        <text x="745" y="200">• comsol     (JPype)</text>
+        <text x="745" y="220">• matlab     (matlabengine)</text>
+        <text x="745" y="240">• flotherm   (Win32 / FloSCRIPT)</text>
+        <text x="745" y="260">• openfoam   (Linux subprocess)</text>
+        <text x="745" y="280">• pybamm     (direct Python)</text>
+      </g>
+      <text x="835" y="350" text-anchor="middle" fill="#94a3b8" font-size="11">src/sim/drivers/&lt;name&gt;/driver.py</text>
+      <text x="835" y="368" text-anchor="middle" fill="#94a3b8" font-size="11">register in drivers/__init__.py</text>
+
+      <!-- arrow from server to driver -->
+      <path d="M710 160 L730 160" stroke="#94a3b8" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+
+      <!-- live solver -->
+      <rect x="490" y="240" width="220" height="140" rx="12" fill="#0f172a" stroke="#334155"/>
+      <text x="600" y="265" text-anchor="middle" fill="#cbd5e1" font-size="13" font-weight="600">Live solver process</text>
+      <text x="600" y="290" text-anchor="middle" fill="#86efac" font-size="13">Fluent GUI · COMSOL · MATLAB</text>
+      <text x="600" y="310" text-anchor="middle" fill="#86efac" font-size="13">ANSA · Flotherm · OpenFOAM</text>
+      <text x="600" y="332" text-anchor="middle" fill="#94a3b8" font-size="12">engineer can watch in real time</text>
+      <text x="600" y="358" text-anchor="middle" fill="#94a3b8" font-size="11">launched once, snippets at will</text>
+
+      <path d="M600 210 L600 240" stroke="#94a3b8" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+    </g>
+  </g>
+</svg>
