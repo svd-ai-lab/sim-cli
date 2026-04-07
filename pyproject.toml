@@ -1,0 +1,35 @@
+[project]
+name = "sim-cli"
+version = "0.2.0"
+description = "The physics simulation runtime for AI agents"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10,<3.13"
+dependencies = [
+    "click>=8.0",
+    "httpx>=0.28",
+    "fastapi>=0.115",
+    "uvicorn>=0.34",
+    "ansys-fluent-core>=0.20",
+]
+
+[project.optional-dependencies]
+matlab = ["matlabengine"]
+dev = ["pytest>=8.0", "ruff>=0.4"]
+
+[project.scripts]
+sim = "sim.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sim"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["integration: requires solver packages installed"]
+
+[tool.ruff]
+target-version = "py310"

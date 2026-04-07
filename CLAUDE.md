@@ -1,0 +1,138 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+**sim** is a unified CLI + HTTP runtime that lets LLM agents (and engineers) launch, drive, and observe CAD/CAE simulations across multiple solvers through one consistent interface. It is the "container runtime for simulations" — agents talk to `sim`, `sim` talks to solvers.
+
+The runtime supports two execution modes:
+
+- **One-shot** (`sim run script --solver=X`): subprocess execution, result stored as a numbered run, `sim logs` to browse.
+- **Persistent session** (`sim serve` + `sim connect/exec/inspect/disconnect`): a long-lived HTTP server holds a live solver session; agents send code snippets and inspect state without restarting the solver.
+
+The companion repo `sim-skills/` contains per-solver agent skills, reference docs, demo workflows, and integration tests that drive this runtime.
+
+## Commands
+
+```bash
+# Install
+uv pip install -e ".[dev]"          # core + pytest + ruff
+
+# Tests
+pytest -q                            # unit tests (no solver needed)
+pytest tests/test_lint.py            # single test file
+pytest -q -m integration             # integration tests (need solvers + sim serve)
+
+# Lint
+ruff check src/sim tests
+ruff check --fix src/sim tests
+
+# CLI
+sim serve --host 0.0.0.0             # start HTTP server (default port 7600)
+sim --host <ip> connect --solver fluent --mode solver --ui-mode gui
+sim --host <ip> exec "solver.settings.mesh.check()"
+sim --host <ip> inspect session.summary
+sim --host <ip> screenshot -o shot.png
+sim --host <ip> disconnect
+
+sim run script.py --solver pybamm    # one-shot mode
+sim logs                              # list runs
+sim logs last --field voltage_V      # extract a parsed field
+sim check fluent                      # solver availability
+sim lint script.py                    # validate before running
+```
+
+Environment variables: `SIM_HOST`, `SIM_PORT` (CLI client), `SIM_DIR` (run history dir, default `.sim/`).
+
+## Architecture
+
+### CLI (`src/sim/cli.py`)
+Click app with subcommands: `serve`, `check`, `lint`, `run`, `connect`, `exec`, `inspect`, `ps`, `disconnect`, `screenshot`, `logs`. The session-related commands (`connect`/`exec`/`inspect`/`ps`/`disconnect`/`screenshot`) all delegate to `sim.session.SessionClient`, an HTTP client that talks to a running `sim serve`. The non-session commands (`run`, `lint`, `check`, `logs`) work locally without a server.
+
+### HTTP server (`src/sim/server.py`)
+FastAPI app exposing:
+- `POST /connect` — launch a solver, hold session in module-level `_state`
+- `POST /exec` — `exec()` a Python snippet against the live `session`/`meshing`/`solver` namespace, capture stdout/stderr/return value, append to `_state.runs`
+- `GET /inspect/<name>` — query `session.summary`, `session.mode`, `last.result`, `workflow.summary`
+- `POST /run` — one-shot script execution (no session required)
+- `GET /ps` — current session status
+- `GET /screenshot` — base64 PNG of the server's desktop
+- `POST /disconnect` — tear down the session
+
+The server keeps a single global `_state: SessionState` (one session per server process).
+
+### Driver protocol (`src/sim/driver.py`)
+`DriverProtocol` (a `runtime_checkable` `Protocol`):
+- `name: str` — registered driver name
+- `detect(script) -> bool` — does this script target this solver?
+- `lint(script) -> LintResult` — pre-execution validation, returns `Diagnostic`s
+- `connect() -> ConnectionInfo` — package availability + version check
+- `parse_output(stdout) -> dict` — extract structured results (convention: last JSON line on stdout)
+- `run_file(script) -> RunResult` — one-shot execution
+
+`LintResult`, `Diagnostic`, `RunResult`, `ConnectionInfo` are dataclasses with `to_dict()` for JSON serialization.
+
+### Driver registry (`src/sim/drivers/__init__.py`)
+`DRIVERS` — module-level list of instantiated driver objects:
+
+| Name | Class | Layout |
+|---|---|---|
+| `pybamm` | `PyBaMMLDriver` | `pybamm/driver.py` |
+| `fluent` | `PyFluentDriver` | `fluent/driver.py` + `runtime.py` + `queries.py` |
+| `matlab` | `MatlabDriver` | `matlab/driver.py` |
+| `comsol` | `ComsolDriver` | `comsol/driver.py` |
+| `flotherm` | `FlothermDriver` | `flotherm/driver.py` + `_helpers.py` |
+| `ansa` | `AnsaDriver` | `ansa/driver.py` + `runtime.py` + `schemas.py` |
+| `openfoam` | `OpenFOAMDriver` | `openfoam/driver.py` |
+
+Drivers with a separate `runtime.py` (fluent, ansa) implement persistent-session support; the rest are one-shot only at this point.
+
+`get_driver(name)` looks up by `.name` attribute.
+
+### Execution pipeline — one-shot (`run`)
+1. `cli.run` → `runner.execute_script(script, solver, driver)` → subprocess, captures stdout/stderr/duration
+2. `driver.parse_output(stdout)` → extract structured fields
+3. `store.RunStore.save(result, parsed_output)` → write `.sim/runs/NNN.json`, return numeric `run_id`
+4. `sim logs <id>` reads back via `RunStore.get`
+
+### Execution pipeline — persistent session (`exec`)
+1. `cli.connect` → HTTP `POST /connect` to server → `driver.launch(...)` → `_state.session` populated
+2. `cli.exec` → HTTP `POST /exec` with code → server `_execute_snippet()` runs `exec(code, namespace)` where `namespace` has `session`, `meshing`/`solver`, `_result`
+3. `cli.inspect <name>` → HTTP `GET /inspect/<name>` → driver- or session-specific query
+4. `cli.disconnect` → HTTP `POST /disconnect` → driver-specific teardown, clear `_state`
+
+## Adding a new driver
+
+1. Create `src/sim/drivers/<name>/driver.py` implementing `DriverProtocol`
+2. (Optional) `runtime.py` for persistent-session support
+3. Register in `src/sim/drivers/__init__.py`: import and append to `DRIVERS`
+4. If the driver needs server-side launch logic, extend `server.py`'s `/connect` handler accordingly
+
+See `pybamm/driver.py` for the smallest reference implementation; `fluent/` for a full persistent-session example.
+
+## Test Layout
+
+```
+tests/
+  __init__.py
+  fixtures/                          mock solver scripts (good/bad imports/no-solve/...)
+  execution/                         end-to-end .ps1 + .py snippets used in manual runs
+  test_cli.py                        smoke tests for click commands
+  test_connect.py                    driver.connect() availability checks
+  test_lint.py                       lint protocol coverage
+  test_run.py                        one-shot subprocess execution
+  test_store.py                      RunStore persistence
+  test_logs.py                       sim logs CLI
+  test_comsol_driver.py              comsol driver unit tests
+  test_matlab_driver.py              matlab driver unit tests
+```
+
+Tests that need a real solver are gated by import-availability flags (e.g. `HAS_PYBAMM`) and skip gracefully when the package is missing.
+
+## Notes
+
+- Run storage lives in `.sim/runs/` (overridable via `SIM_DIR`); git-ignored
+- The server holds **one** session at a time (single global `_state`) — multi-tenant is not yet implemented
+- Project uses `uv` for dependency locking (`uv.lock`)
+- Companion knowledge / skills / workflows live in the sibling `sim-skills/` tree, one folder per solver
