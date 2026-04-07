@@ -48,25 +48,23 @@
   <g font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif">
     <text x="430" y="160" font-size="116" font-weight="800" fill="url(#brand)" letter-spacing="-2">sim</text>
     <text x="430" y="210" font-size="26" font-weight="600" fill="#e2e8f0">The container runtime for physics simulations.</text>
-    <text x="430" y="248" font-size="18" font-weight="400" fill="#94a3b8">One CLI. One HTTP protocol. Seven solver backends.</text>
+    <text x="430" y="248" font-size="18" font-weight="400" fill="#94a3b8">One CLI. One HTTP protocol. A driver registry that grows.</text>
     <text x="430" y="276" font-size="18" font-weight="400" fill="#94a3b8">Built so AI agents can launch, drive, and observe CAE jobs.</text>
 
-    <!-- chiplets -->
+    <!-- chiplets — sample of supported solvers, NOT an exhaustive list -->
     <g font-size="14" font-weight="600">
       <rect x="430" y="298" width="78"  height="26" rx="13" fill="#1e293b" stroke="#334155"/>
       <text x="469" y="316" text-anchor="middle" fill="#93c5fd">Fluent</text>
       <rect x="516" y="298" width="78"  height="26" rx="13" fill="#1e293b" stroke="#334155"/>
       <text x="555" y="316" text-anchor="middle" fill="#c4b5fd">COMSOL</text>
-      <rect x="602" y="298" width="78"  height="26" rx="13" fill="#1e293b" stroke="#334155"/>
-      <text x="641" y="316" text-anchor="middle" fill="#fda4af">MATLAB</text>
-      <rect x="688" y="298" width="84"  height="26" rx="13" fill="#1e293b" stroke="#334155"/>
-      <text x="730" y="316" text-anchor="middle" fill="#86efac">OpenFOAM</text>
-      <rect x="780" y="298" width="62"  height="26" rx="13" fill="#1e293b" stroke="#334155"/>
-      <text x="811" y="316" text-anchor="middle" fill="#fcd34d">ANSA</text>
-      <rect x="850" y="298" width="84"  height="26" rx="13" fill="#1e293b" stroke="#334155"/>
-      <text x="892" y="316" text-anchor="middle" fill="#7dd3fc">Flotherm</text>
-      <rect x="942" y="298" width="78"  height="26" rx="13" fill="#1e293b" stroke="#334155"/>
-      <text x="981" y="316" text-anchor="middle" fill="#a5f3fc">PyBaMM</text>
+      <rect x="602" y="298" width="84"  height="26" rx="13" fill="#1e293b" stroke="#334155"/>
+      <text x="644" y="316" text-anchor="middle" fill="#86efac">OpenFOAM</text>
+      <rect x="694" y="298" width="78"  height="26" rx="13" fill="#1e293b" stroke="#334155"/>
+      <text x="733" y="316" text-anchor="middle" fill="#fda4af">MATLAB</text>
+      <rect x="780" y="298" width="60"  height="26" rx="13" fill="#0f172a" stroke="#334155" stroke-dasharray="3 3"/>
+      <text x="810" y="316" text-anchor="middle" fill="#94a3b8">…</text>
+      <rect x="848" y="298" width="120" height="26" rx="13" fill="#1e293b" stroke="#475569"/>
+      <text x="908" y="316" text-anchor="middle" fill="#cbd5e1">+ your solver</text>
     </g>
   </g>
 </svg>

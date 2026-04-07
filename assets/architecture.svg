@@ -60,13 +60,14 @@
       <rect x="730" y="110" width="210" height="270" rx="12" fill="#0f172a" stroke="#334155"/>
       <text x="835" y="135" text-anchor="middle" fill="#cbd5e1" font-size="13" font-weight="600">DriverProtocol</text>
       <g font-size="12" fill="#e2e8f0">
-        <text x="745" y="160">• fluent     (PyFluent · sessions)</text>
-        <text x="745" y="180">• ansa       (BETA CAE · sessions)</text>
-        <text x="745" y="200">• comsol     (JPype)</text>
-        <text x="745" y="220">• matlab     (matlabengine)</text>
-        <text x="745" y="240">• flotherm   (Win32 / FloSCRIPT)</text>
-        <text x="745" y="260">• openfoam   (Linux subprocess)</text>
-        <text x="745" y="280">• pybamm     (direct Python)</text>
+        <text x="745" y="162">• fluent     (PyFluent · sessions)</text>
+        <text x="745" y="182">• comsol     (JPype)</text>
+        <text x="745" y="202">• openfoam   (Linux subprocess)</text>
+        <text x="745" y="222">• matlab     (matlabengine)</text>
+        <text x="745" y="242">• …  more in the registry</text>
+        <text x="745" y="270" fill="#cbd5e1">• + your driver here</text>
+        <text x="745" y="288" font-size="11" fill="#94a3b8">  (~200 LOC, register in</text>
+        <text x="745" y="302" font-size="11" fill="#94a3b8">   drivers/__init__.py)</text>
       </g>
       <text x="835" y="350" text-anchor="middle" fill="#94a3b8" font-size="11">src/sim/drivers/&lt;name&gt;/driver.py</text>
       <text x="835" y="368" text-anchor="middle" fill="#94a3b8" font-size="11">register in drivers/__init__.py</text>

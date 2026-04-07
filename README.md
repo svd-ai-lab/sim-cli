@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="#-quick-start"><img src="https://img.shields.io/badge/Quick_Start-2_min-3b82f6?style=for-the-badge" alt="Quick Start"></a>
-  <a href="#-supported-solvers"><img src="https://img.shields.io/badge/Solvers-7_backends-22c55e?style=for-the-badge" alt="7 Solvers"></a>
+  <a href="#-supported-solvers"><img src="https://img.shields.io/badge/Solvers-growing_registry-22c55e?style=for-the-badge" alt="Growing solver registry"></a>
   <a href="https://github.com/svd-ai-lab/sim-skills"><img src="https://img.shields.io/badge/Agent_Skills-sim--skills-8b5cf6?style=for-the-badge" alt="Companion skills"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-eab308?style=for-the-badge" alt="License"></a>
 </p>
@@ -34,8 +34,8 @@
 
 ## 📰 News
 
-- **2026-04-07** 🚀 **sim-cli v0.2.0** — first public release on GitHub. Rebrand of `svd-ai-lab/ion @ feature/openfoam-driver`. Seven drivers in the registry: Fluent, ANSA, COMSOL, Flotherm, MATLAB, OpenFOAM, PyBaMM.
-- **2026-04-07** 🧠 Companion repo [`sim-skills`](https://github.com/svd-ai-lab/sim-skills) published — six per-solver agent skills (Anthropic skill format) so an LLM can drive each backend without prior context.
+- **2026-04-07** 🚀 **sim-cli v0.2.0** — first public release on GitHub. Rebrand of `svd-ai-lab/ion @ feature/openfoam-driver`. The driver registry now spans CFD, multiphysics, thermal, structural pre-processing, and battery solvers — and is designed to keep growing.
+- **2026-04-07** 🧠 Companion repo [`sim-skills`](https://github.com/svd-ai-lab/sim-skills) published — per-solver agent skills in the Anthropic skill format, so an LLM can drive each new backend without prior context.
 
 ---
 
@@ -51,7 +51,7 @@ Today, the choices are awful:
 
 `sim` is the missing layer:
 
-- **One CLI**, one HTTP protocol, **seven solver backends**.
+- **One CLI**, one HTTP protocol, **a growing driver registry** spanning CFD, multiphysics, thermal, pre-processing, and beyond.
 - **Persistent sessions** the agent introspects between every step.
 - **Remote-by-default** — the CLI client and the live solver can sit on different machines (LAN, Tailscale, HPC head node).
 - **Companion agent skills** that teach an LLM how to drive each backend safely.
@@ -123,9 +123,10 @@ That's the full loop: **launch → drive → observe → tear down** — with th
 - **Numbered run history** in `.sim/runs/` for one-shot jobs, browsable via `sim logs`
 
 ### 🔌 Solver-agnostic
-- **One protocol** (`DriverProtocol`) for seven backends — drivers are ~200 LOC each
+- **One protocol** (`DriverProtocol`) — every driver is ~200 LOC, registered in `drivers/__init__.py`
 - **Persistent + one-shot** from the same CLI — no separate client per mode
-- **Companion skills** in [`sim-skills`](https://github.com/svd-ai-lab/sim-skills) so LLMs know each backend's gotchas
+- **Open registry** — new solvers land continuously; CFD, multiphysics, thermal, pre-processing, battery models all in scope
+- **Companion skills** in [`sim-skills`](https://github.com/svd-ai-lab/sim-skills) so an LLM picks up each new backend without prior context
 
 ### 🌐 Remote-friendly
 - **HTTP/JSON transport** — runs anywhere `httpx` runs
@@ -167,19 +168,21 @@ Environment: `SIM_HOST`, `SIM_PORT` for the client; `SIM_DIR` (default `.sim/`) 
 
 ---
 
-## 🧪 Supported Solvers
+## 🧪 Solver registry
 
-| Solver | Driver | Sessions | Status |
+The driver registry is **open and intentionally growing** — adding a new backend is a ~200-LOC `DriverProtocol` implementation plus one line in `drivers/__init__.py`. Below is a snapshot of what currently ships in `main`:
+
+| Domain | Example backends shipping today | Sessions | Status |
 |---|---|---|---|
-| **Ansys Fluent** | `fluent` (PyFluent) | persistent + one-shot | ✅ Working |
-| **BETA CAE ANSA** | `ansa` (batch) | persistent + one-shot | ✅ Working (Phase 1) |
-| **COMSOL Multiphysics** | `comsol` (JPype) | one-shot | ✅ Working |
-| **Simcenter Flotherm** | `flotherm` (Win32 / FloSCRIPT) | one-shot | ✅ Working (Phase A) |
-| **MATLAB** | `matlab` (matlabengine) | one-shot | ✅ Working (v0) |
-| **OpenFOAM** | `openfoam` | one-shot | ✅ Working (via `sim serve` on Linux) |
-| **PyBaMM** | `pybamm` | one-shot | ✅ Working |
+| CFD | Ansys Fluent, OpenFOAM | persistent / one-shot | ✅ Working |
+| Multiphysics | COMSOL Multiphysics | one-shot | ✅ Working |
+| Pre-processing | BETA CAE ANSA | persistent / one-shot | ✅ Working (Phase 1) |
+| Electronics thermal | Simcenter Flotherm | one-shot | ✅ Working (Phase A) |
+| Numerical / scripting | MATLAB | one-shot | ✅ Working (v0) |
+| Battery modeling | PyBaMM | one-shot | ✅ Working |
+| **+ your solver** | open a PR — see [Adding a driver](#-development) | — | 🛠 |
 
-Per-solver protocols, snippets, and demo workflows live in [`sim-skills`](https://github.com/svd-ai-lab/sim-skills).
+Per-solver protocols, snippets, and demo workflows live in [`sim-skills`](https://github.com/svd-ai-lab/sim-skills), which is **also designed to grow** alongside the driver registry — one new agent skill per new backend.
 
 ---
 
@@ -208,13 +211,11 @@ src/sim/
   session.py       HTTP client used by connect/exec/inspect
   driver.py        DriverProtocol + result dataclasses
   drivers/
-    fluent/        PyFluent driver  (driver.py + runtime.py + queries.py)
-    ansa/          ANSA driver      (driver.py + runtime.py + schemas.py)
-    comsol/        COMSOL driver
-    flotherm/      Flotherm driver  (driver.py + _helpers.py)
-    matlab/        MATLAB driver
-    openfoam/      OpenFOAM driver
-    pybamm/        PyBaMM driver
+    fluent/        Reference example: persistent-session driver
+                   (driver.py + runtime.py + queries.py)
+    pybamm/        Reference example: smallest one-shot driver
+    …              and more — one folder per registered backend
+    __init__.py    DRIVERS registry — register new backends here
 tests/             unit tests + fixtures + execution snippets
 assets/            logo · banner · architecture (SVG)
 docs/              translated READMEs (de · ja · zh)
