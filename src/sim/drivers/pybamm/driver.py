@@ -64,12 +64,10 @@ class PyBaMMLDriver:
         text = script.read_text()
         diagnostics: list[Diagnostic] = []
 
-        # Check: pybamm imported?
         has_import = bool(
             re.search(r"^\s*(import pybamm|from pybamm\b)", text, re.MULTILINE)
         )
         if not has_import:
-            # Check if pybamm is used without import
             if "pybamm" in text:
                 diagnostics.append(
                     Diagnostic(
@@ -82,7 +80,6 @@ class PyBaMMLDriver:
                     Diagnostic(level="error", message="No pybamm import found")
                 )
 
-        # Check: syntax valid?
         try:
             ast.parse(text)
         except SyntaxError as e:
@@ -90,7 +87,6 @@ class PyBaMMLDriver:
                 Diagnostic(level="error", message=f"Syntax error: {e}", line=e.lineno)
             )
 
-        # Check: .solve() called? (AST-based, ignores comments)
         if has_import:
             try:
                 tree = ast.parse(text)
@@ -108,7 +104,7 @@ class PyBaMMLDriver:
                         )
                     )
             except SyntaxError:
-                pass  # Already caught above
+                pass
 
         ok = not any(d.level == "error" for d in diagnostics)
         return LintResult(ok=ok, diagnostics=diagnostics)

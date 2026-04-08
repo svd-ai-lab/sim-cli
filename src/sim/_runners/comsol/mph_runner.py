@@ -29,10 +29,9 @@ against COMSOL 6.4.
 EXTENDING for a new mph or COMSOL version
 ═══════════════════════════════════════════════════════════════════════════
 
-When mph 2.x ships and breaks something (or COMSOL 7.0 changes a Java API
-the runner depends on), the recipe is:
+When mph 2.x ships and breaks something:
 
-    1. Subclass ComsolMphRunner (or Mph1Runner if reuse helps):
+    1. Subclass ComsolMphRunner (or Mph1Runner if most behavior carries):
 
            class Mph2Runner(ComsolMphRunner):
                variant = "mph_2"
@@ -42,23 +41,13 @@ the runner depends on), the recipe is:
 
                def _identify_model(self, model):
                    return str(model.name())             # 2.x dropped .tag
-
                # everything else inherited
 
-    2. Register the new variant:
-
-           _RUNNER_REGISTRY["mph_2"] = Mph2Runner
-
-    3. In compatibility.yaml, add a profile pointing at this runner. You
-       have two options:
-         a) keep runner_module = sim._runners.comsol.mph_runner and add
-            `extra: {runner_variant: mph_2}` to the profile — the dispatch
-            below will pick Mph2Runner from the registry
-         b) write a new module sim._runners.comsol.mph2_runner whose main()
-            instantiates Mph2Runner directly, and point runner_module there
-
-Both paths exist on purpose: (a) is for incremental tweaks that share most
-of the code; (b) is for major rewrites where you want a clean file.
+    2. Either switch this module's main() to the new class, or (cleaner)
+       ship Mph2Runner in a sibling module sim._runners.comsol.mph2_runner.
+    3. Add a new profile in compatibility.yaml whose `runner_module` field
+       points at the new module. The validated mph 1.x code path stays
+       byte-identical.
 
 ═══════════════════════════════════════════════════════════════════════════
 """
@@ -72,7 +61,7 @@ import time
 import traceback
 import uuid
 from contextlib import redirect_stderr, redirect_stdout
-from typing import Any, Callable
+from typing import Any
 
 from sim._runners.base import RunnerError, RunnerLoop
 
@@ -100,9 +89,14 @@ class ComsolMphRunner(RunnerLoop):
         self._model: Any = None
         self._session_id: str | None = None
         self._runs: list[dict] = []
-        self._sdk_version: str = "?"
+        # Cached after first handshake — backend probe touches the registry
+        # so we don't want to re-run it on every inspect call.
         self._solver_version: str = "?"
         self._backend: dict | None = None
+
+    @property
+    def _sdk_version(self) -> str:
+        return getattr(self._mph, "__version__", "unknown") if self._mph else "?"
 
     # ── version-sensitive hooks (override in subclass) ──────────────────
 
@@ -154,8 +148,6 @@ class ComsolMphRunner(RunnerLoop):
             ) from e
 
         self._mph = mph
-        self._sdk_version = getattr(mph, "__version__", "unknown")
-
         try:
             self._solver_version, self._backend = self._query_solver_backend(mph)
         except Exception:
@@ -357,23 +349,9 @@ class Mph1Runner(ComsolMphRunner):
     # ── identification ──────────────────────────────────────────────────
 
     def _identify_model(self, model: Any) -> str | None:
-        # mph.Model has had three different identifier APIs across 1.x:
-        #   - early 1.x:  model.tag         (attribute)
-        #   - mid 1.x:    model.name()      (method)
-        #   - any:        model.java.tag()  (always-available Java escape)
-        for attr, call in (("name", True), ("tag", True), ("tag", False)):
-            try:
-                v = getattr(model, attr)
-                return str(v() if call and callable(v) else v)
-            except Exception:
-                continue
-        try:
-            java = getattr(model, "java", None)
-            if java is not None and hasattr(java, "tag"):
-                return str(java.tag())
-        except Exception:
-            pass
-        return None
+        # Validated against mph 1.2.x–1.3.x; _safe_identify above swallows
+        # any exception (e.g. stale Java handle after client.clear()).
+        return str(model.name())
 
     # ── backend probe ──────────────────────────────────────────────────
 
@@ -389,73 +367,31 @@ class Mph1Runner(ComsolMphRunner):
         return (m.group(1) if m else str(ver_field), backend)
 
 
-# ─── variant registry + dispatch ────────────────────────────────────────────
-
-
-_RUNNER_REGISTRY: dict[str, Callable[[], ComsolMphRunner]] = {
-    "mph_1": Mph1Runner,
-}
-"""Maps a `variant` name → runner constructor.
-
-To add a new variant: define a new ComsolMphRunner subclass and append
-it to this dict. Profiles can then opt in via either:
-  - extra.runner_variant in compatibility.yaml (preferred), OR
-  - a brand-new runner_module that imports the right class directly
-"""
-
-
-def _select_variant() -> str:
-    """Decide which runner subclass to instantiate.
-
-    Resolution order (first match wins):
-      1. SIM_RUNNER_VARIANT env var (set by orchestrator for ad-hoc tests)
-      2. Profile.extra['runner_variant'] from compatibility.yaml
-      3. Auto-detect from installed mph version (mph X.* → 'mph_X')
-      4. Hard fallback: 'mph_1'
-    """
-    explicit = os.environ.get("SIM_RUNNER_VARIANT")
-    if explicit:
-        return explicit
-
-    profile_name = os.environ.get("SIM_RUNNER_PROFILE")
-    if profile_name:
-        try:
-            from sim.compat import find_profile
-            found = find_profile(profile_name)
-            if found is not None:
-                _, profile = found
-                extra = getattr(profile, "extra", None) or {}
-                if extra.get("runner_variant"):
-                    return str(extra["runner_variant"])
-        except Exception:
-            pass
-
-    # Auto-detect from installed mph
-    try:
-        import mph as _mph
-        ver = getattr(_mph, "__version__", "")
-        m = re.match(r"(\d+)\.", ver)
-        if m:
-            return f"mph_{m.group(1)}"
-    except Exception:
-        pass
-
-    return "mph_1"
+# ─── entry point ────────────────────────────────────────────────────────────
+#
+# This module ships exactly one concrete runner: Mph1Runner. To add support
+# for mph 2.x or a hypothetical Comsol 7 with a divergent Java API, the
+# pattern is:
+#
+#   - Subclass ComsolMphRunner (or Mph1Runner) overriding the changed hooks
+#   - Either: ship it in this file and switch main() to instantiate it, OR
+#     ship it as a brand-new module sim._runners.comsol.<name>_runner whose
+#     main() instantiates the new class directly, then point the matching
+#     profile's `runner_module` field at the new module path
+#
+# The latter is the preferred path — it keeps each profile's code path
+# physically separated and avoids the indirection of a runtime registry.
 
 
 def main() -> int:
-    profile = os.environ.get("SIM_RUNNER_PROFILE", "comsol_64_mph_1")
-    variant = _select_variant()
-    runner_cls = _RUNNER_REGISTRY.get(variant)
-    if runner_cls is None:
-        # Unknown variant — fall back to the only one we know works.
-        # Print to stderr so the orchestrator's drainer surfaces it.
+    profile = os.environ.get("SIM_RUNNER_PROFILE")
+    if not profile:
         sys.stderr.write(
-            f"[comsol_mph_runner] unknown variant {variant!r}, "
-            f"falling back to mph_1 (registered: {sorted(_RUNNER_REGISTRY)})\n"
+            "[comsol_mph_runner] SIM_RUNNER_PROFILE not set — "
+            "this runner is meant to be spawned by sim-cli's env_manager.\n"
         )
-        runner_cls = Mph1Runner
-    runner = runner_cls()
+        return 2
+    runner = Mph1Runner()
     runner.profile_name = profile
     return runner.run()
 

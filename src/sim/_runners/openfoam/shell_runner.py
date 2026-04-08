@@ -44,15 +44,15 @@ from typing import Any
 from sim._runners.base import RunnerError, RunnerLoop
 
 
-# Profile-name → (default WM_PROJECT_VERSION substring) used as a hint when
-# multiple installs exist on the host. The runner is spawned with the
-# profile fixed at module level (one per yaml profile), so we know which
-# version we should be binding to.
-_PROFILE_VERSION_HINTS: dict[str, str] = {
-    "openfoam_v2406": "v2406",
-    "openfoam_v2312": "v2312",
-    "openfoam_v2206": "v2206",
-}
+def _profile_version_hint(profile_name: str) -> str:
+    """Extract the version substring (e.g. 'v2206') from a profile name
+    like 'openfoam_v2206'. Returns '' if the name doesn't match the
+    convention — install detection then falls back to picking any viable
+    install regardless of version.
+    """
+    import re as _re
+    m = _re.search(r"(v\d{4})", profile_name)
+    return m.group(1) if m else ""
 
 
 def _candidate_install_dirs() -> list[Path]:
@@ -99,7 +99,7 @@ def _detect_install_for_profile(profile_name: str) -> tuple[Path, Path] | None:
          out of bashrc — the resolver layer is responsible for refusing
          a mismatch upstream.
     """
-    hint = _PROFILE_VERSION_HINTS.get(profile_name, "")
+    hint = _profile_version_hint(profile_name)
 
     # 1) Already-sourced env
     env_dir = os.environ.get("WM_PROJECT_DIR")
@@ -220,7 +220,7 @@ class OpenFOAMShellRunner(RunnerLoop):
             else:
                 self._solver_version = name
         else:
-            self._solver_version = _PROFILE_VERSION_HINTS.get(self.profile_name, "?")
+            self._solver_version = _profile_version_hint(self.profile_name) or "?"
 
         return {
             "sdk_version": self._sdk_version,
@@ -358,22 +358,21 @@ class OpenFOAMShellRunner(RunnerLoop):
         raise RunnerError(f"unknown inspect target: {name}", type="UnknownInspect")
 
 
-# ── per-profile entry points ────────────────────────────────────────────────
+# ── entry point ────────────────────────────────────────────────────────────
+#
+# A single module serves all openfoam_v* profiles — version-specific
+# behavior is encoded by the profile name (passed via SIM_RUNNER_PROFILE)
+# and the install detection that follows it.
 
 
-def _make_main(profile: str):
-    def main() -> int:
-        runner = OpenFOAMShellRunner()
-        runner.profile_name = profile
-        return runner.run()
-    return main
-
-
-# Default entry point: profile is taken from $SIM_RUNNER_PROFILE so a single
-# module can serve all openfoam_v* profiles. The spawn helper sets this var
-# from the compatibility.yaml profile name.
 def main() -> int:
-    profile = os.environ.get("SIM_RUNNER_PROFILE", "openfoam_v2406")
+    profile = os.environ.get("SIM_RUNNER_PROFILE")
+    if not profile:
+        sys.stderr.write(
+            "[openfoam_shell_runner] SIM_RUNNER_PROFILE not set — "
+            "this runner is meant to be spawned by sim-cli's env_manager.\n"
+        )
+        return 2
     runner = OpenFOAMShellRunner()
     runner.profile_name = profile
     return runner.run()
