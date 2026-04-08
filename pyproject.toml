@@ -15,6 +15,7 @@ dependencies = [
     "uvicorn>=0.34",
     "pyyaml>=6.0",          # reads driver compatibility.yaml files
     "packaging>=23",         # PEP 440 specifier matching for profile resolution
+    "Pillow>=10",           # sim screenshot endpoint uses PIL.ImageGrab
 ]
 
 [project.optional-dependencies]
