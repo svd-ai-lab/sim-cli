@@ -8,7 +8,7 @@ import uuid
 from pathlib import Path
 import sys
 
-from sim.driver import ConnectionInfo, Diagnostic, LintResult
+from sim.driver import ConnectionInfo, Diagnostic, LintResult, SolverInstall
 from sim.drivers.fluent.queries import handle_query
 from sim.drivers.fluent.runtime import PyFluentRuntime
 from sim.runner import run_subprocess
@@ -29,6 +29,112 @@ def _parse_fluent_version_from_path(path: str) -> str | None:
     code = m.group(1)
     label = _VERSION_MAP.get(code, f"v{code}")
     return f"{label} (v{code})"
+
+
+def _ansys_code_to_short(code: str) -> str:
+    """Convert an Ansys release code (e.g. '252') to short form ('25.2')."""
+    if len(code) == 3 and code.isdigit():
+        return f"{code[:2]}.{code[2]}"
+    return code
+
+
+def _path_to_fluent_install(path: Path, source: str) -> "SolverInstall | None":
+    """Validate that a candidate path actually contains a Fluent install."""
+    if not path.is_dir():
+        return None
+    # Look for the v??? directory
+    m = re.search(r"v(\d{3})", str(path))
+    if not m:
+        return None
+    code = m.group(1)
+    short = _ansys_code_to_short(code)
+
+    # Check the install actually has a fluent binary (Linux & Windows)
+    candidates = [
+        path / "fluent" / "bin" / "fluent",                             # Linux
+        path / "fluent" / "ntbin" / "win64" / "fluent.exe",              # Windows
+    ]
+    has_binary = any(p.exists() for p in candidates)
+    if not has_binary:
+        return None
+
+    return SolverInstall(
+        name="fluent",
+        version=short,
+        path=str(path),
+        source=source,
+        extra={"release_code": code, "release_label": _VERSION_MAP.get(code, f"v{code}")},
+    )
+
+
+def _scan_fluent_installs() -> list[SolverInstall]:
+    """Find every Fluent installation on this host.
+
+    Pure stdlib + this module's helpers. Safe to call when nothing is
+    installed — returns [].
+    """
+    found: dict[str, SolverInstall] = {}  # path -> install (dedup by path)
+
+    # 1) AWP_ROOT* env vars
+    for k, v in os.environ.items():
+        if not re.match(r"AWP_ROOT\d{3}$", k):
+            continue
+        if not v:
+            continue
+        install = _path_to_fluent_install(Path(v), source=f"env:{k}")
+        if install and install.path not in found:
+            found[install.path] = install
+
+    # 2) Default install dirs (each platform)
+    bases: list[Path] = [
+        Path(r"C:\Program Files\ANSYS Inc"),
+        Path("/usr/ansys_inc"),
+        Path("/ansys_inc"),
+        Path("/opt/ansys_inc"),
+    ]
+    for base in bases:
+        if not base.is_dir():
+            continue
+        for vdir in sorted(base.glob("v???")):
+            install = _path_to_fluent_install(vdir, source=f"default-path:{base}")
+            if install and install.path not in found:
+                found[install.path] = install
+
+    # 3) Windows registry (best effort; never raises)
+    try:
+        import winreg  # type: ignore[import-not-found]
+        for hive in (winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER):
+            try:
+                key = winreg.OpenKey(hive, r"SOFTWARE\Ansys, Inc.\Fluent")
+            except OSError:
+                continue
+            try:
+                i = 0
+                while True:
+                    try:
+                        subname = winreg.EnumKey(key, i)
+                    except OSError:
+                        break
+                    i += 1
+                    # Subkey names look like "25.2.0"; values point at install dirs
+                    try:
+                        sub = winreg.OpenKey(key, subname)
+                        install_dir, _ = winreg.QueryValueEx(sub, "InstallDir")
+                        install = _path_to_fluent_install(
+                            Path(install_dir).parent,  # InstallDir is .../fluent — go up
+                            source="registry:HKLM" if hive == winreg.HKEY_LOCAL_MACHINE else "registry:HKCU",
+                        )
+                        if install and install.path not in found:
+                            found[install.path] = install
+                    except (OSError, FileNotFoundError):
+                        continue
+            finally:
+                winreg.CloseKey(key)
+    except ImportError:
+        pass  # not on Windows
+
+    # Stable order: highest version first
+    return sorted(found.values(), key=lambda i: i.version, reverse=True)
 
 
 class PyFluentDriver:
@@ -105,33 +211,33 @@ class PyFluentDriver:
 
     @staticmethod
     def _detect_fluent_version() -> str | None:
-        """Detect installed Fluent version from environment variables."""
-        # Check PYFLUENT_FLUENT_ROOT first (explicit override)
-        fluent_root = os.environ.get("PYFLUENT_FLUENT_ROOT", "")
-        if fluent_root:
-            return _parse_fluent_version_from_path(fluent_root)
+        """Detect ONE installed Fluent version (legacy single-result helper).
 
-        # Scan AWP_ROOT* env vars (standard Ansys installation)
-        awp_vars = sorted(
-            ((k, v) for k, v in os.environ.items() if k.startswith("AWP_ROOT")),
-            reverse=True,
-        )
-        if awp_vars:
-            _, path = awp_vars[0]  # latest version
-            return _parse_fluent_version_from_path(path)
+        Kept for backward compatibility with the existing connect() output.
+        New code should call detect_installed() and handle the full list.
+        """
+        installs = _scan_fluent_installs()
+        if not installs:
+            return None
+        # Highest version first (sorted by _scan_fluent_installs)
+        top = installs[0]
+        code = top.extra.get("release_code", top.version.replace(".", ""))
+        label = top.extra.get("release_label", top.version)
+        return f"{label} (v{code})"
 
-        # Try common install paths
-        for base in [
-            Path("C:/Program Files/ANSYS Inc"),
-            Path("/usr/ansys_inc"),
-            Path("/ansys_inc"),
-        ]:
-            if base.is_dir():
-                versions = sorted(base.glob("v*"), reverse=True)
-                if versions:
-                    return _parse_fluent_version_from_path(str(versions[0]))
+    def detect_installed(self) -> list[SolverInstall]:
+        """Enumerate all Fluent installations visible on this host.
 
-        return None
+        Strategy (in priority order; deduplicated by install path):
+          1. AWP_ROOT* environment variables (the canonical Ansys signal)
+          2. Default install dirs under C:\\Program Files\\ANSYS Inc\\v???
+             and /usr/ansys_inc/v??? (Linux)
+          3. Windows registry HKLM\\SOFTWARE\\Ansys, Inc.\\Fluent (best effort)
+
+        Pure Python. Does NOT import ansys.fluent.core. Returns [] if nothing
+        is found (e.g. on a Mac without any Fluent install).
+        """
+        return _scan_fluent_installs()
 
     def parse_output(self, stdout: str) -> dict:
         """Extract structured results from a pyfluent script's stdout.

@@ -6,6 +6,29 @@ from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 
+@dataclass(frozen=True)
+class SolverInstall:
+    """One detected solver installation on a host.
+
+    Returned in lists by ``DriverProtocol.detect_installed()``. Pure data;
+    no SDK import required to construct or serialize.
+    """
+    name: str            # driver name, e.g. "fluent"
+    version: str         # detected solver version, normalized e.g. "25.2"
+    path: str            # filesystem path to the installation root
+    source: str          # how we found it: "env:AWP_ROOT252" / "registry" / "default-path"
+    extra: dict = field(default_factory=dict)  # driver-specific metadata
+
+    def to_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "version": self.version,
+            "path": self.path,
+            "source": self.source,
+            "extra": dict(self.extra),
+        }
+
+
 @dataclass
 class Diagnostic:
     level: str  # "error", "warning", "info"
@@ -79,3 +102,16 @@ class DriverProtocol(Protocol):
     def connect(self) -> ConnectionInfo: ...
     def parse_output(self, stdout: str) -> dict: ...
     def run_file(self, script: Path) -> RunResult: ...
+
+    def detect_installed(self) -> list[SolverInstall]:
+        """Scan THIS host for installations of this driver's solver.
+
+        Pure Python. Must NOT import the SDK. Must NOT launch the solver.
+        Must be safe to call when nothing is installed (returns []).
+        Should be cheap (≤ a few hundred ms) — runs in interactive paths.
+
+        See docs/architecture/version-compat.md §7 for the contract.
+        Drivers that have not yet implemented this should return [] so the
+        protocol stays runtime_checkable for partial migrations.
+        """
+        ...
