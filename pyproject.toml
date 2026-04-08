@@ -1,5 +1,5 @@
 [project]
-name = "sim-agent"
+name = "sim-cli"
 version = "0.2.0"
 description = "Make every engineering tool agent-native — a CLI runtime that lets LLM agents launch, drive, and observe CAD/CAE software"
 readme = "README.md"
