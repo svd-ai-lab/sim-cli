@@ -120,6 +120,65 @@ def version():
     return {"version": __version__}
 
 
+@app.get("/detect/{solver}")
+def detect_solver(solver: str):
+    """On-demand detection of one named solver on this host.
+
+    Returns the same shape that local `sim check <solver>` produces, so the
+    CLI can use the same rendering code for both local and remote detection.
+
+    Per docs/architecture/version-compat.md §5.2, this endpoint runs the
+    SAME `driver.detect_installed()` code that the local path runs — it just
+    runs it on the host where sim serve is executing.
+    """
+    from pathlib import Path
+
+    from sim.compat import load_compatibility, safe_detect_installed
+    from sim.drivers import get_driver
+
+    driver = get_driver(solver)
+    if driver is None:
+        raise HTTPException(404, f"unknown solver: {solver}")
+
+    installs = safe_detect_installed(driver)
+
+    # Try to resolve each install against the driver's compatibility.yaml
+    driver_dir = Path(__file__).parent / "drivers" / solver
+    resolutions: list[dict] = []
+    compat_dict: dict | None = None
+    try:
+        compat = load_compatibility(driver_dir)
+        compat_dict = {
+            "driver": compat.driver,
+            "sdk_package": compat.sdk_package,
+            "profiles": [p.to_dict() for p in compat.profiles],
+            "deprecated": [d.to_dict() for d in compat.deprecated],
+        }
+        for inst in installs:
+            r = compat.resolve(inst.version)
+            resolutions.append({
+                "install": inst.to_dict(),
+                "resolution": r.to_dict(),
+            })
+    except FileNotFoundError:
+        # Driver hasn't been migrated to the compat schema yet
+        for inst in installs:
+            resolutions.append({
+                "install": inst.to_dict(),
+                "resolution": None,
+            })
+
+    return {
+        "ok": True,
+        "data": {
+            "solver": solver,
+            "installs": [i.to_dict() for i in installs],
+            "resolutions": resolutions,
+            "compatibility": compat_dict,
+        },
+    }
+
+
 @app.post("/connect")
 def connect(req: ConnectRequest):
     from sim.drivers import get_driver

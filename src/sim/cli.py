@@ -57,25 +57,244 @@ def serve(serve_host, serve_port):
 
 # ── check ────────────────────────────────────────────────────────────────────
 
+def _is_local_host(host: str) -> bool:
+    return host in ("localhost", "127.0.0.1", "::1", "")
+
+
+def _check_local(solver: str) -> dict:
+    """Run on-demand detection in this process. Returns the same shape
+    as the /detect/{solver} HTTP endpoint."""
+    from pathlib import Path
+
+    from sim.compat import load_compatibility, safe_detect_installed
+
+    driver = get_driver(solver)
+    if driver is None:
+        return {"ok": False, "error": f"unknown solver: {solver}"}
+
+    installs = safe_detect_installed(driver)
+    driver_dir = Path(__file__).parent / "drivers" / solver
+    resolutions: list[dict] = []
+    compat_dict: dict | None = None
+    try:
+        compat = load_compatibility(driver_dir)
+        compat_dict = {
+            "driver": compat.driver,
+            "sdk_package": compat.sdk_package,
+            "profiles": [p.to_dict() for p in compat.profiles],
+            "deprecated": [d.to_dict() for d in compat.deprecated],
+        }
+        for inst in installs:
+            r = compat.resolve(inst.version)
+            resolutions.append({"install": inst.to_dict(), "resolution": r.to_dict()})
+    except FileNotFoundError:
+        for inst in installs:
+            resolutions.append({"install": inst.to_dict(), "resolution": None})
+
+    return {
+        "ok": True,
+        "data": {
+            "solver": solver,
+            "installs": [i.to_dict() for i in installs],
+            "resolutions": resolutions,
+            "compatibility": compat_dict,
+        },
+    }
+
+
+def _check_remote(solver: str, host: str, port: int) -> dict:
+    """Hit GET /detect/{solver} on a remote sim serve."""
+    import httpx
+
+    url = f"http://{host}:{port}/detect/{solver}"
+    try:
+        r = httpx.get(url, timeout=15.0)
+    except httpx.RequestError as e:
+        return {"ok": False, "error": f"cannot reach sim serve at {host}:{port} — {e}"}
+    if r.status_code != 200:
+        return {"ok": False, "error": f"{r.status_code}: {r.text}"}
+    return r.json()
+
+
+def _render_check(data: dict) -> None:
+    """Pretty-print a /detect/{solver} response."""
+    solver = data["solver"]
+    installs = data.get("installs", [])
+    resolutions = data.get("resolutions", [])
+    compat = data.get("compatibility")
+
+    click.echo(f"[sim] check: {solver}")
+    if not installs:
+        click.echo(f"  no {solver} installations detected on this host")
+        click.echo(f"  ensure the solver is installed and re-run `sim check {solver}`")
+        return
+
+    click.echo(f"  detected {len(installs)} installation(s):\n")
+    for entry in resolutions:
+        inst = entry["install"]
+        res = entry.get("resolution")
+        click.echo(f"  - {solver} {inst['version']}")
+        click.echo(f"      path:    {inst['path']}")
+        click.echo(f"      source:  {inst['source']}")
+        if res is None:
+            click.echo("      profile: (driver has no compatibility.yaml yet)")
+        elif res["status"] == "ok":
+            p = res["preferred"]
+            click.echo(f"      profile: {p['name']}  (skill rev {p['skill_revision']})")
+            click.echo(f"      sdk pin: {p['sdk']}")
+            if p.get("extras_alias"):
+                click.echo(f"      install: sim env install {p['name']}")
+                click.echo(f"               (or: pip install 'sim-cli[{p['extras_alias']}]')")
+            if res.get("also_matching"):
+                others = ", ".join(p2["name"] for p2 in res["also_matching"])
+                click.echo(f"      also OK: {others}")
+        else:
+            click.echo("      profile: [X] unsupported by any current profile")
+            for d in res.get("deprecated_hits", []):
+                click.echo(f"               deprecated: {d['profile']} (migrate to {d.get('migrate_to', '?')})")
+        click.echo()
+
+    if compat:
+        click.echo(f"  driver compatibility.yaml: {compat['driver']} → {compat['sdk_package']}")
+        click.echo(f"  available profiles: {', '.join(p['name'] for p in compat['profiles'])}")
+
+
 @main.command()
 @click.argument("solver")
 @click.pass_context
 def check(ctx, solver):
-    """Check solver availability and report version."""
-    driver = get_driver(solver)
-    if driver is None:
-        click.echo(f"[sim] error: no driver for '{solver}'", err=True)
+    """Detect installed versions of a solver and resolve their profile.
+
+    By default scans THIS host. With `--host <ip>` (top-level option),
+    asks the remote sim serve to scan its own host.
+    """
+    host = ctx.obj["host"]
+    port = ctx.obj["port"]
+    is_local = _is_local_host(host)
+
+    if is_local:
+        resp = _check_local(solver)
+    else:
+        resp = _check_remote(solver, host, port)
+
+    if ctx.obj["json"]:
+        click.echo(json_mod.dumps(resp, indent=2, default=str))
+        sys.exit(0 if resp.get("ok") else 1)
+
+    if not resp.get("ok"):
+        click.echo(f"[sim] check: {resp.get('error', 'unknown error')}", err=True)
         sys.exit(1)
 
-    info = driver.connect()
+    _render_check(resp["data"])
+
+
+# ── env (per-profile venv management) ────────────────────────────────────────
+
+
+@main.group(name="env")
+def env_group():
+    """Manage isolated profile environments under .sim/envs/."""
+
+
+@env_group.command("install")
+@click.argument("profile")
+@click.option("--upgrade", is_flag=True, help="Reinstall even if the env exists.")
+@click.option("--quiet", is_flag=True, help="Suppress subprocess output.")
+@click.pass_context
+def env_install(ctx, profile, upgrade, quiet):
+    """Bootstrap a profile env: create venv + install pinned SDK + sim-cli."""
+    from sim import env_manager
+
+    try:
+        state = env_manager.install(profile, upgrade=upgrade, quiet=quiet)
+    except ValueError as e:
+        click.echo(f"[sim] env install: {e}", err=True)
+        sys.exit(2)
+    except RuntimeError as e:
+        click.echo(f"[sim] env install failed: {e}", err=True)
+        sys.exit(1)
+
     if ctx.obj["json"]:
-        click.echo(json_mod.dumps(info.to_dict(), indent=2))
+        click.echo(json_mod.dumps(state, indent=2, default=str))
     else:
-        if info.status == "ok":
-            click.echo(f"[sim] check: {info.message}")
-        else:
-            click.echo(f"[sim] check: {info.message}", err=True)
-            sys.exit(1)
+        click.echo(f"[sim] env ready: {state['profile']}")
+        click.echo(f"        driver:        {state['driver']}")
+        click.echo(f"        sdk:           {state['sdk_package']} {state['sdk_spec']}")
+        click.echo(f"        runner module: {state['runner_module']}")
+        click.echo(f"        env path:      {state['env_path']}")
+        click.echo(f"        backend:       {state['backend']} ({state['install_seconds']}s)")
+
+
+@env_group.command("list")
+@click.option("--catalogue", is_flag=True,
+              help="Also show every profile defined in any compatibility.yaml.")
+@click.pass_context
+def env_list(ctx, catalogue):
+    """List bootstrapped profile envs (and optionally the full catalogue)."""
+    from sim import env_manager
+    from sim.compat import all_known_profiles
+
+    envs = env_manager.list_envs()
+
+    if ctx.obj["json"]:
+        out = {"installed": envs}
+        if catalogue:
+            out["catalogue"] = [
+                {
+                    "driver": d,
+                    **p.to_dict(),
+                }
+                for d, p in all_known_profiles()
+            ]
+        click.echo(json_mod.dumps(out, indent=2, default=str))
+        return
+
+    if not envs:
+        click.echo("[sim] no profile envs bootstrapped yet")
+        click.echo("        run `sim env install <profile>` to create one")
+    else:
+        click.echo(f"[sim] {len(envs)} profile env(s) installed:")
+        for st in envs:
+            line = f"  - {st.get('profile', '?'):<32} {st.get('status', '?')}"
+            if st.get("driver"):
+                line += f"  driver={st['driver']}"
+            if st.get("sdk_spec"):
+                line += f"  sdk={st['sdk_spec']}"
+            click.echo(line)
+            if st.get("env_path"):
+                click.echo(f"      {st['env_path']}")
+
+    if catalogue:
+        click.echo()
+        click.echo("[sim] available profiles in compatibility.yaml files:")
+        installed_names = {st.get("profile") for st in envs}
+        for driver_name, prof in all_known_profiles():
+            mark = "  installed" if prof.name in installed_names else "             "
+            click.echo(f"  - {prof.name:<32} ({driver_name}) {mark}")
+            click.echo(f"      sdk: {prof.sdk}   solver: {', '.join(prof.solver_versions)}")
+
+
+@env_group.command("remove")
+@click.argument("profile")
+@click.option("--yes", is_flag=True, help="Skip confirmation prompt.")
+@click.pass_context
+def env_remove(ctx, profile, yes):
+    """Tear down a profile env."""
+    from sim import env_manager
+
+    target = env_manager.env_path(profile)
+    if not target.exists():
+        click.echo(f"[sim] env remove: {profile} is not installed", err=True)
+        sys.exit(1)
+
+    if not yes:
+        click.confirm(f"[sim] remove {target}?", abort=True)
+
+    ok = env_manager.remove(profile, force=True)
+    if ctx.obj["json"]:
+        click.echo(json_mod.dumps({"ok": ok, "profile": profile}))
+    else:
+        click.echo(f"[sim] env removed: {profile}")
 
 
 # ── lint ─────────────────────────────────────────────────────────────────────

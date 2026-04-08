@@ -202,6 +202,52 @@ def _normalize_solver_version(v: str) -> str:
     return s
 
 
+def find_profile(profile_name: str) -> tuple[str, "Profile"] | None:
+    """Walk every driver under sim/drivers/ to find a profile by name.
+
+    Returns (driver_name, profile) on hit, None on miss. Used by
+    `sim env install <profile>` to figure out which driver the profile
+    belongs to without making the user spell out --solver.
+    """
+    drivers_root = Path(__file__).parent / "drivers"
+    if not drivers_root.is_dir():
+        return None
+    for child in sorted(drivers_root.iterdir()):
+        compat_file = child / "compatibility.yaml"
+        if not compat_file.is_file():
+            continue
+        try:
+            compat = load_compatibility(child)
+        except Exception:
+            continue
+        prof = compat.profile_by_name(profile_name)
+        if prof is not None:
+            return compat.driver, prof
+    return None
+
+
+def all_known_profiles() -> list[tuple[str, "Profile"]]:
+    """Enumerate every profile across every driver that has a compatibility.yaml.
+
+    Used by `sim env list` to compare bootstrapped envs against the catalogue.
+    """
+    out: list[tuple[str, Profile]] = []
+    drivers_root = Path(__file__).parent / "drivers"
+    if not drivers_root.is_dir():
+        return out
+    for child in sorted(drivers_root.iterdir()):
+        compat_file = child / "compatibility.yaml"
+        if not compat_file.is_file():
+            continue
+        try:
+            compat = load_compatibility(child)
+        except Exception:
+            continue
+        for p in compat.profiles:
+            out.append((compat.driver, p))
+    return out
+
+
 def safe_detect_installed(driver) -> list:
     """Call driver.detect_installed() defensively.
 
