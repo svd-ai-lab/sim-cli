@@ -32,12 +32,31 @@ from pathlib import Path
 
 import httpx
 
-from sim.driver import ConnectionInfo, Diagnostic, LintResult, RunResult
+from sim.driver import ConnectionInfo, Diagnostic, LintResult, RunResult, SolverInstall
 
 
 # ---------------------------------------------------------------------------
 # Detection helpers (for local OpenFOAM, if present)
 # ---------------------------------------------------------------------------
+
+def _openfoam_version_from_path(install_dir: Path) -> str | None:
+    """Extract a normalized OpenFOAM version from an install dir name.
+
+    Examples:
+        /opt/openfoam-v2406         -> "v2406"
+        /opt/openfoam2312           -> "v2312"
+        /usr/lib/openfoam/openfoam-v2206 -> "v2206"
+        ~/OpenFOAM/OpenFOAM-11      -> "11"
+    """
+    name = install_dir.name.lower()
+    m = re.search(r"v?(\d{4})", name)
+    if m:
+        return f"v{m.group(1)}"
+    m = re.search(r"openfoam-(\d+)$", name)
+    if m:
+        return m.group(1)
+    return None
+
 
 _OPENFOAM_PATTERNS = re.compile(
     r"(#\s*openfoam|#!openfoam|blockMesh|simpleFoam|icoFoam|pisoFoam"
@@ -158,6 +177,87 @@ class OpenFOAMDriver:
             status="not_configured",
             message="OpenFOAM runs remotely. Call launch(host, port) to connect to sim-server.",
         )
+
+    def detect_installed(self) -> list[SolverInstall]:
+        """Enumerate OpenFOAM installations on this host.
+
+        Strategy (deduplicated by install path; ordered with the highest
+        version first):
+          1. WM_PROJECT_DIR / WM_PROJECT_VERSION env vars (the canonical
+             signal — set after the user has sourced etc/bashrc)
+          2. /opt/openfoam-v* and /opt/openfoam* (ESI Ubuntu / RHEL packages)
+          3. /usr/lib/openfoam/openfoam-v* (Foundation deb defaults)
+          4. ~/OpenFOAM/OpenFOAM-v* (manual user installs)
+          5. `which simpleFoam` PATH probe — last resort, used to surface a
+             usable install whose location doesn't match any default
+
+        Pure stdlib. Does NOT source bashrc — that happens later in the
+        runner's op_connect. Returns [] when nothing is found.
+        """
+        import os
+        import shutil
+
+        found: dict[str, SolverInstall] = {}
+
+        def _record(install_dir: Path, source: str, version_hint: str | None = None) -> None:
+            if not install_dir.is_dir():
+                return
+            version = version_hint or _openfoam_version_from_path(install_dir)
+            if version is None:
+                return
+            key = str(install_dir.resolve())
+            if key in found:
+                return
+            found[key] = SolverInstall(
+                name="openfoam",
+                version=version,
+                path=key,
+                source=source,
+                extra={"raw_version": version},
+            )
+
+        # 1) Inherited env vars
+        env_dir = os.environ.get("WM_PROJECT_DIR")
+        env_ver = os.environ.get("WM_PROJECT_VERSION")
+        if env_dir:
+            _record(Path(env_dir), source="env:WM_PROJECT_DIR", version_hint=env_ver)
+
+        # 2,3,4) Default install dirs
+        scan_roots = [
+            Path("/opt"),
+            Path("/usr/lib"),
+            Path("/usr/lib/openfoam"),
+            Path.home() / "OpenFOAM",
+        ]
+        for root in scan_roots:
+            if not root.is_dir():
+                continue
+            for child in sorted(root.iterdir()):
+                n = child.name.lower()
+                if "openfoam" not in n:
+                    continue
+                # ESI sometimes nests as openfoam-v2406/ → has etc/bashrc directly,
+                # sometimes as openfoam/openfoam-v2406/ — handle both layers.
+                if (child / "etc" / "bashrc").is_file():
+                    _record(child, source=f"default-path:{root}")
+                else:
+                    for sub in child.iterdir() if child.is_dir() else []:
+                        if (sub / "etc" / "bashrc").is_file():
+                            _record(sub, source=f"default-path:{root}")
+
+        # 5) PATH probe
+        sfoam = shutil.which("simpleFoam")
+        if sfoam:
+            # simpleFoam typically lives at <install>/platforms/linux64GccDPInt32Opt/bin/
+            # walk up to find the install root (the dir that contains etc/bashrc)
+            p = Path(sfoam).resolve()
+            for parent in p.parents:
+                if (parent / "etc" / "bashrc").is_file():
+                    _record(parent, source="which:simpleFoam")
+                    break
+
+        # Highest version first (string sort works for "v2406" > "v2312" > "v2206")
+        return sorted(found.values(), key=lambda i: i.version, reverse=True)
 
     def parse_output(self, stdout: str) -> dict:
         """Extract last JSON object from stdout."""

@@ -31,12 +31,18 @@ from packaging.version import InvalidVersion, Version
 
 @dataclass(frozen=True)
 class Profile:
-    """A named (SDK range, solver version list) tuple from compatibility.yaml."""
+    """A named (SDK range, solver version list) tuple from compatibility.yaml.
+
+    ``sdk`` is optional: solvers like OpenFOAM have no Python SDK to pin
+    (the solver IS its own scripting environment). When ``sdk`` is None,
+    ``sim env install`` skips the SDK install step and only puts sim-cli
+    into the profile env.
+    """
     name: str
-    sdk: str                       # PEP 440 specifier, e.g. ">=0.38,<0.39"
     solver_versions: tuple[str, ...]
     skill_revision: str
     runner_module: str
+    sdk: str | None = None                # PEP 440 specifier, e.g. ">=0.38,<0.39"
     extras_alias: str | None = None
     notes: str = ""
 
@@ -49,7 +55,13 @@ class Profile:
         return _normalize_solver_version(solver_version) in self.solver_versions
 
     def matches_sdk(self, sdk_version: str) -> bool:
-        """True if this profile's SDK specifier accepts the given SDK version."""
+        """True if this profile's SDK specifier accepts the given SDK version.
+
+        Returns False for SDK-less profiles (sdk is None) — those profiles
+        are matched only by solver_versions.
+        """
+        if self.sdk is None:
+            return False
         try:
             spec = SpecifierSet(self.sdk)
             return Version(sdk_version) in spec
@@ -86,10 +98,15 @@ class DeprecatedProfile:
 
 @dataclass(frozen=True)
 class Compatibility:
-    """Parsed compatibility.yaml for one driver."""
+    """Parsed compatibility.yaml for one driver.
+
+    ``sdk_package`` is optional: solvers without a Python binding (e.g.
+    OpenFOAM) leave it None and ``sim env install`` skips the SDK install
+    step entirely.
+    """
     driver: str
-    sdk_package: str
     profiles: tuple[Profile, ...]
+    sdk_package: str | None = None
     deprecated: tuple[DeprecatedProfile, ...] = field(default_factory=tuple)
 
     def profile_by_name(self, name: str) -> Profile | None:
@@ -318,10 +335,11 @@ def load_compatibility(driver_dir: str | Path) -> Compatibility:
 
     try:
         driver = raw["driver"]
-        sdk_package = raw["sdk_package"]
         raw_profiles = raw.get("profiles") or []
     except KeyError as e:
         raise ValueError(f"{path} missing required field: {e}") from e
+
+    sdk_package = raw.get("sdk_package")  # optional — None for SDK-less drivers
 
     profiles: list[Profile] = []
     for i, p in enumerate(raw_profiles):
@@ -329,7 +347,7 @@ def load_compatibility(driver_dir: str | Path) -> Compatibility:
             profiles.append(
                 Profile(
                     name=p["name"],
-                    sdk=p["sdk"],
+                    sdk=p.get("sdk"),  # optional
                     solver_versions=tuple(
                         _normalize_solver_version(v) for v in p["solver_versions"]
                     ),

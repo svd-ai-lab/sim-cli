@@ -263,6 +263,13 @@ def spawn_runner_for_profile(profile_name: str) -> RunnerClient:
     _, profile = found
 
     py = env_manager.env_python(profile_name)
-    client = RunnerClient(env_python=py, runner_module=profile.runner_module)
+    # Pass the profile name through so single-module runners (e.g.
+    # sim._runners.openfoam.shell_runner serving every openfoam_v* profile)
+    # can self-bind without needing one module per profile.
+    client = RunnerClient(
+        env_python=py,
+        runner_module=profile.runner_module,
+        extra_env={"SIM_RUNNER_PROFILE": profile_name},
+    )
     client.start()
     return client

@@ -178,10 +178,16 @@ def install(
         _run_subprocess(install_argv, quiet=quiet, step="upgrade pip")
         install_argv = [str(py), "-m", "pip", "install"]
 
-    # 3) Install the SDK pinned by the profile
-    sdk_spec = _spec_to_pip_arg(profile.sdk)
-    sdk_pkg = _sdk_package_for_profile(driver_name, profile)
-    sdk_arg = f"{sdk_pkg}{sdk_spec}"
+    # 3) Install the SDK pinned by the profile (if any).
+    # SDK-less drivers (e.g. OpenFOAM — the solver IS its own scripting env)
+    # leave profile.sdk as None and we skip the SDK install entirely.
+    if profile.sdk is not None:
+        sdk_spec = _spec_to_pip_arg(profile.sdk)
+        sdk_pkg = _sdk_package_for_profile(driver_name, profile)
+        sdk_arg: str | None = f"{sdk_pkg}{sdk_spec}"
+    else:
+        sdk_pkg = None
+        sdk_arg = None
 
     # 4) Install sim-cli into the env so the runner module is importable.
     # We install from the local checkout in editable mode if running from a
@@ -201,8 +207,12 @@ def install(
         sim_pkgs = [sim_source]
 
     # Install SDK in one call, sim-cli (editable) in a separate call so an
-    # SDK install failure doesn't take sim-cli down with it.
-    _run_subprocess(install_argv + [sdk_arg, *extra_packages], quiet=quiet, step="install SDK")
+    # SDK install failure doesn't take sim-cli down with it. SDK-less drivers
+    # skip the first call entirely.
+    if sdk_arg is not None:
+        _run_subprocess(install_argv + [sdk_arg, *extra_packages], quiet=quiet, step="install SDK")
+    elif extra_packages:
+        _run_subprocess(install_argv + list(extra_packages), quiet=quiet, step="install extras")
     _run_subprocess(install_argv + sim_pkgs, quiet=quiet, step="install sim-cli (editable)")
 
     elapsed = round(time.time() - started, 2)
@@ -270,7 +280,7 @@ def _spec_to_pip_arg(spec: str) -> str:
     return spec
 
 
-def _sdk_package_for_profile(driver_name: str, profile: Profile) -> str:
+def _sdk_package_for_profile(driver_name: str, profile: Profile) -> str | None:
     """Resolve the PyPI distribution name for a given profile.
 
     For now we look it up via the driver's full compatibility.yaml; in the

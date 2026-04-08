@@ -195,6 +195,27 @@ def _have_active_session() -> bool:
     return _state.runner is not None or _state.session is not None
 
 
+def _driver_has_compat(solver: str) -> bool:
+    """True if drivers/<solver>/compatibility.yaml exists."""
+    from pathlib import Path
+    return (Path(__file__).parent / "drivers" / solver / "compatibility.yaml").is_file()
+
+
+def _sdk_package_for_solver(solver: str) -> str | None:
+    """Look up the SDK package name from a driver's compatibility.yaml.
+
+    Returns None for SDK-less drivers (e.g. openfoam) or drivers without
+    a compatibility.yaml.
+    """
+    from pathlib import Path
+    from sim.compat import load_compatibility
+    try:
+        compat = load_compatibility(Path(__file__).parent / "drivers" / solver)
+    except (FileNotFoundError, ValueError):
+        return None
+    return compat.sdk_package
+
+
 @app.post("/connect")
 def connect(req: ConnectRequest):
     """Open a solver session.
@@ -216,8 +237,11 @@ def connect(req: ConnectRequest):
     if driver is None:
         raise HTTPException(400, f"unknown solver: {req.solver}")
 
-    # ── runner path (M1 default for fluent) ─────────────────────────────
-    if req.solver == "fluent" and not req.inline:
+    # ── runner path: any driver that ships a compatibility.yaml ─────────
+    # The runner path is now the default for every solver that has been
+    # migrated to the M1 architecture. Drivers without a compatibility.yaml
+    # (matlab, comsol, …) fall through to the legacy inline path below.
+    if not req.inline and _driver_has_compat(req.solver):
         return _connect_via_runner(driver, req)
 
     # ── legacy inline path ──────────────────────────────────────────────
@@ -352,10 +376,14 @@ def _connect_via_runner(driver, req: ConnectRequest):
             "transport": "runner",
             "profile": profile_name,
             "env_path": _state.env_path,
-            "sdk": {
-                "name": "ansys-fluent-core",
-                "version": client.handshake.sdk_version if client.handshake else "?",
-            },
+            "sdk": (
+                {
+                    "name": _sdk_package_for_solver(req.solver),
+                    "version": client.handshake.sdk_version if client.handshake else "?",
+                }
+                if _sdk_package_for_solver(req.solver) is not None
+                else None
+            ),
             "solver_detected": {
                 "name": req.solver,
                 "version": client.handshake.solver_version if client.handshake else "?",
@@ -472,13 +500,15 @@ def inspect(name: str):
     if name == "session.versions":
         if _state.runner is not None and _state.runner.handshake is not None:
             hs = _state.runner.handshake
+            sdk_pkg = _sdk_package_for_solver(_state.solver or "")
             return {
                 "ok": True,
                 "data": {
-                    "sdk": {
-                        "name": "ansys-fluent-core" if _state.solver == "fluent" else _state.solver,
-                        "version": hs.sdk_version,
-                    },
+                    "sdk": (
+                        {"name": sdk_pkg, "version": hs.sdk_version}
+                        if sdk_pkg is not None
+                        else None
+                    ),
                     "solver": {
                         "name": _state.solver,
                         "version": hs.solver_version,

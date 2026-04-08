@@ -1,0 +1,50 @@
+# sim-cli — OpenFOAM driver compatibility matrix.
+#
+# OpenFOAM is the canonical SDK-less driver: there is no Python wrapper to
+# pin. The "SDK" is the OpenFOAM bashrc itself — sim sources it inside the
+# runner subprocess and shells out to solver binaries (blockMesh, simpleFoam,
+# pisoFoam, …).
+#
+# Profile env semantics for SDK-less drivers:
+#   - sim env install <profile>  ->  creates .sim/envs/<profile>/ with sim-cli
+#                                    editable inside, NO SDK install step
+#   - the runner subprocess uses that env's python only as an exec host;
+#     OpenFOAM itself is invoked via subprocess.run() with WM_PROJECT_DIR
+#     sourced from the host's OpenFOAM install
+#
+# Detection inputs (see driver.py detect_installed):
+#   - WM_PROJECT_DIR / WM_PROJECT_VERSION env vars (set by etc/bashrc)
+#   - /opt/openfoam*  /usr/lib/openfoam*  ~/OpenFOAM/OpenFOAM-*  defaults
+#   - which simpleFoam (PATH probe as last resort)
+#
+# Version normalization: ESI releases are "v2312" / "v2406" — we strip the
+# leading "v" and use the YYMM short form ("23.12", "24.06") so the same
+# resolver helper that handles Ansys "25.2" can match these too.
+
+driver: openfoam
+# (no sdk_package — OpenFOAM has no Python binding)
+
+profiles:
+
+  - name: openfoam_v2406
+    solver_versions: ["24.06", "v2406"]
+    skill_revision: v1
+    runner_module: sim._runners.openfoam.shell_runner
+    notes: |
+      ESI OpenFOAM v2406 (June 2024). Latest stable at time of writing.
+
+  - name: openfoam_v2312
+    solver_versions: ["23.12", "v2312"]
+    skill_revision: v1
+    runner_module: sim._runners.openfoam.shell_runner
+    notes: |
+      ESI OpenFOAM v2312 (December 2023).
+
+  - name: openfoam_v2206
+    solver_versions: ["22.06", "v2206"]
+    skill_revision: v1
+    runner_module: sim._runners.openfoam.shell_runner
+    notes: |
+      ESI OpenFOAM v2206. Older but still common in production.
+
+deprecated: []
