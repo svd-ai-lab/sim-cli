@@ -17,6 +17,7 @@ Endpoints:
 from __future__ import annotations
 
 import io
+import os
 import time
 import traceback
 import uuid
@@ -26,7 +27,7 @@ from typing import Any
 
 import math
 
-from fastapi import FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -677,27 +678,30 @@ def screenshot():
     }
 
 
-@app.post("/disconnect")
-def disconnect():
+def _teardown_active_session() -> str | None:
+    """Best-effort: tear down whatever session is currently held.
+
+    Reused by /disconnect and /shutdown. Returns the session id that was
+    torn down, or None if there was no active session. Never raises —
+    every cleanup step is wrapped because the caller (especially
+    /shutdown) needs to keep going regardless.
+    """
     if not _have_active_session():
-        raise HTTPException(400, "no active session")
+        return None
 
     sid = _state.session_id
 
-    # Runner path: ask runner to op=disconnect, then op=shutdown
     if _state.runner is not None:
         from sim._runner_client import RunnerCallError, RunnerClientError
         try:
             _state.runner.call("disconnect", {})
         except (RunnerCallError, RunnerClientError):
-            pass  # tear down even if disconnect rpc fails
+            pass
         try:
             _state.runner.stop()
         except Exception:
             pass
         _state.runner = None
-
-    # Legacy inline path
     elif _state.solver in ("matlab", "comsol") and _state.driver:
         try:
             _state.driver.disconnect()
@@ -720,5 +724,48 @@ def disconnect():
     _state.runs = []
     _state.profile = None
     _state.env_path = None
+    return sid
 
+
+@app.post("/disconnect")
+def disconnect():
+    if not _have_active_session():
+        raise HTTPException(400, "no active session")
+    sid = _teardown_active_session()
     return {"ok": True, "data": {"session_id": sid, "disconnected": True}}
+
+
+@app.post("/shutdown")
+def shutdown(request: Request, background_tasks: BackgroundTasks):
+    """Stop the sim-server process cleanly.
+
+    Disconnects any active session, then schedules the process to exit
+    once the response has been flushed. Localhost-only — when sim serve
+    is exposed via --host 0.0.0.0 we don't want a LAN peer to be able
+    to take it down.
+    """
+    client_host = request.client.host if request.client else None
+    if client_host not in ("127.0.0.1", "::1", "localhost"):
+        raise HTTPException(
+            403,
+            f"/shutdown is localhost-only (request from {client_host})",
+        )
+
+    sid = _teardown_active_session()
+
+    def _exit_after_flush() -> None:
+        # BackgroundTasks runs after Starlette has finished writing the
+        # response body. A tiny sleep gives the TCP buffer a moment to
+        # drain on the client side before the process is gone.
+        import time as _t
+        _t.sleep(0.1)
+        os._exit(0)
+
+    background_tasks.add_task(_exit_after_flush)
+    return {
+        "ok": True,
+        "data": {
+            "shutting_down": True,
+            "disconnected_session": sid,
+        },
+    }

@@ -565,19 +565,79 @@ def ps(ctx):
 # ── disconnect ───────────────────────────────────────────────────────────────
 
 @main.command()
+@click.option(
+    "--stop-server",
+    is_flag=True,
+    help="Also stop the sim-server process after disconnecting (use this when "
+         "the server was auto-spawned by `sim connect` and you're done with it).",
+)
 @click.pass_context
-def disconnect(ctx):
-    """Tear down the active session."""
+def disconnect(ctx, stop_server):
+    """Tear down the active session.
+
+    By default this only ends the solver session inside sim-server. The
+    server process keeps running so subsequent `sim connect` calls are
+    instant. Pass --stop-server to also kill the server (or use `sim stop`
+    on its own).
+    """
     from sim.session import SessionClient
     client = SessionClient(host=ctx.obj["host"], port=ctx.obj["port"])
     result = client.disconnect()
+
+    if stop_server:
+        # Try to stop the server even if the disconnect failed (e.g. there
+        # was no active session) — the user explicitly asked for cleanup.
+        stop_result = client.stop()
+        # Merge for json output; for human output we just print both lines
+        result = {
+            "ok": result.get("ok", False) or stop_result.get("ok", False),
+            "data": {
+                "disconnect": result.get("data") or {"error": result.get("error")},
+                "stop": stop_result.get("data") or {"error": stop_result.get("error")},
+            },
+        }
+
+    if ctx.obj["json"]:
+        click.echo(json_mod.dumps(result, indent=2, default=str))
+    else:
+        if stop_server:
+            click.echo("[sim] disconnected and stopped sim-server")
+        elif result.get("ok"):
+            sid = result.get("data", {}).get("session_id", "?")
+            click.echo(f"[sim] disconnected (session_id={sid})")
+        else:
+            click.echo(f"[sim] error: {result.get('error')}", err=True)
+            sys.exit(1)
+
+
+# ── stop ─────────────────────────────────────────────────────────────────────
+
+@main.command()
+@click.pass_context
+def stop(ctx):
+    """Stop the sim-server process.
+
+    This is the counterpart to the auto-spawn that `sim connect` does:
+    after `sim connect`/`exec`/`disconnect`, run `sim stop` to fully tear
+    down the background uvicorn process and free port 7600.
+
+    Disconnects any active session as part of shutdown — there's no need
+    to call `sim disconnect` first.
+    """
+    from sim.session import SessionClient
+    client = SessionClient(host=ctx.obj["host"], port=ctx.obj["port"])
+    result = client.stop()
 
     if ctx.obj["json"]:
         click.echo(json_mod.dumps(result, indent=2, default=str))
     else:
         if result.get("ok"):
-            sid = result.get("data", {}).get("session_id", "?")
-            click.echo(f"[sim] disconnected (session_id={sid})")
+            data = result.get("data", {})
+            sid = data.get("disconnected_session")
+            if sid:
+                click.echo(f"[sim] stopped sim-server (also disconnected session {sid})")
+            else:
+                click.echo("[sim] stopped sim-server")
         else:
             click.echo(f"[sim] error: {result.get('error')}", err=True)
             sys.exit(1)

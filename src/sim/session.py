@@ -149,6 +149,30 @@ class SessionClient:
     def disconnect(self) -> dict:
         return self._request("post", "/disconnect", timeout=30)
 
+    def stop(self) -> dict:
+        """Stop the sim-server process itself (not just the session).
+
+        POSTs /shutdown. The server tears down the active session if any,
+        flushes the response, then exits cleanly via os._exit(0). Because
+        the process dies mid-stream, the connection often closes before
+        we read the body — that's expected, treat it as success.
+        """
+        try:
+            with _httpx_client(self._host, timeout=10) as c:
+                r = c.post(f"{self._base}/shutdown")
+                # Race: process may already be dead before .json() returns.
+                try:
+                    return r.json()
+                except Exception:
+                    return {"ok": True, "data": {"shutting_down": True}}
+        except (httpx.ConnectError, httpx.RemoteProtocolError, httpx.ReadError):
+            # Server vanished mid-response — that IS the success path.
+            return {"ok": True, "data": {"shutting_down": True}}
+        except httpx.TimeoutException:
+            return {"ok": False, "error": "timed out waiting for /shutdown"}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
     def status(self) -> dict:
         return self._request("get", "/ps", timeout=10)
 
