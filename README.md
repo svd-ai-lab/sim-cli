@@ -80,19 +80,36 @@ For the full driver protocol, server endpoints, and execution pipeline see [CLAU
 ## 🚀 Quick Start
 
 ```bash
-# 1. On the box that has the solver (e.g. a Fluent workstation):
+# 1. On the box that has the solver (e.g. a Fluent workstation), install
+#    sim core only — no SDK choices yet:
 uv pip install "git+https://github.com/svd-ai-lab/sim-cli.git"
-sim serve --host 0.0.0.0          # FastAPI server on :7600
 
-# 2. From the agent / your laptop / anywhere on the network:
+# 2. Tell sim to look at this machine and pick the right SDK profile:
+sim check fluent
+# → reports detected Fluent installs and the profile they resolve to
+
+# 3. Bootstrap that profile env (creates .sim/envs/<profile>/ with the
+#    pinned SDK; or pass --auto-install to step 4 to do it inline):
+sim env install pyfluent_0_38_modern
+
+# 4. Start the server (only needed for remote / cross-machine workflows):
+sim serve --host 0.0.0.0          # FastAPI on :7600
+
+# 5. From the agent / your laptop / anywhere on the network:
 sim --host <server-ip> connect --solver fluent --mode solver --ui-mode gui
+sim --host <server-ip> inspect session.versions   # ← always do this first
 sim --host <server-ip> exec "solver.settings.mesh.check()"
-sim --host <server-ip> inspect session.summary
 sim --host <server-ip> screenshot -o shot.png
 sim --host <server-ip> disconnect
 ```
 
-That's the full loop: **launch → drive → observe → tear down** — with the engineer optionally watching the solver GUI in real time.
+That's the full loop: **detect → bootstrap → launch → drive → observe → tear down** — with the engineer optionally watching the solver GUI in real time.
+
+> **Why the bootstrap step?** Each (Solver, SDK, driver, skill) combo is its own
+> compatibility universe — Fluent 24R1 needs PyFluent 0.37.x; Fluent 25R2 wants
+> 0.38.x. sim treats each as an isolated "profile env" so you can have both
+> versions on one machine without dependency conflicts. The full design is in
+> [`docs/architecture/version-compat.md`](docs/architecture/version-compat.md).
 
 ---
 
@@ -102,7 +119,8 @@ That's the full loop: **launch → drive → observe → tear down** — with th
 >
 > ```bash
 > sim serve --host 0.0.0.0
-> sim --host <ip> connect --solver fluent --mode solver --ui-mode gui
+> sim --host <ip> connect --solver fluent --mode solver --ui-mode gui --auto-install
+> sim --host <ip> inspect session.versions    # ← step 0: which profile am I in?
 > sim --host <ip> exec "solver.settings.file.read_case(file_name='mixing_elbow.cas.h5')"
 > sim --host <ip> exec "solver.settings.solution.initialization.hybrid_initialize()"
 > sim --host <ip> exec "solver.settings.solution.run_calculation.iterate(iter_count=20)"
@@ -139,19 +157,34 @@ That's the full loop: **launch → drive → observe → tear down** — with th
 
 | Command | What it does | Analogy |
 |---|---|---|
-| `sim serve` | Start the HTTP server, hold one solver session | `ollama serve` |
+| `sim check <solver>` | Detect installations + resolve a profile | `docker info` |
+| `sim env install <profile>` | Bootstrap a profile env (venv + pinned SDK) | `pyenv install` |
+| `sim env list [--catalogue]` | Show bootstrapped envs (and the full catalogue) | `pyenv versions` |
+| `sim env remove <profile>` | Tear down a profile env | `pyenv uninstall` |
+| `sim serve` | Start the HTTP server (for cross-machine use) | `ollama serve` |
 | `sim connect` | Launch a solver, open a session | `docker start` |
 | `sim exec` | Run a Python snippet inside the live session | `docker exec` |
-| `sim inspect` | Query live session state | `docker inspect` |
-| `sim ps` | Show the active session | `docker ps` |
+| `sim inspect` | Query live session state (incl. `session.versions`) | `docker inspect` |
+| `sim ps` | Show the active session and its profile | `docker ps` |
 | `sim screenshot` | Grab a PNG of the solver GUI | — |
 | `sim disconnect` | Tear down the session | `docker stop` |
 | `sim run` | One-shot script execution | `docker run` |
-| `sim check` | Verify a solver / driver is installed | `docker info` |
 | `sim lint` | Pre-flight static check on a script | `ruff check` |
 | `sim logs` | Browse stored run history | `docker logs` |
 
-Environment: `SIM_HOST`, `SIM_PORT` for the client; `SIM_DIR` (default `.sim/`) for run storage.
+Every command that touches a host (`check`, `env`, `connect`, `exec`, `inspect`, `disconnect`) accepts `--host <ip>` and runs against a remote `sim serve` instead of the local machine.
+
+Environment: `SIM_HOST`, `SIM_PORT` for the client; `SIM_DIR` (default `.sim/`) for run storage and profile envs.
+
+### Choosing a profile
+
+You don't usually have to. `sim check <solver>` tells you which profile your installed solver maps to, and `sim connect ... --auto-install` will bootstrap it for you on first use. The escape hatches:
+
+- **Pin a specific profile:** `sim connect --solver fluent --profile pyfluent_0_37_legacy`
+- **Skip the profile env entirely (legacy / tests):** `sim connect --solver fluent --inline`
+- **Power-user single-env install:** `pip install 'sim-cli[fluent-pyfluent-0-38]'` puts the SDK directly into your current venv. Skips `sim env` entirely; OK when you only need one Fluent version on this machine.
+
+The full design is in [`docs/architecture/version-compat.md`](docs/architecture/version-compat.md).
 
 ---
 

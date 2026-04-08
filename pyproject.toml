@@ -5,16 +5,32 @@ description = "Make every engineering tool agent-native — a CLI runtime that l
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10,<3.13"
+# Core sim is intentionally SDK-free. Solver SDKs (PyFluent, mph, matlabengine,
+# ...) live in per-profile envs under .sim/envs/<profile>/ managed by `sim env
+# install`. See docs/architecture/version-compat.md for the rationale.
 dependencies = [
     "click>=8.0",
     "httpx>=0.28",
     "fastapi>=0.115",
     "uvicorn>=0.34",
-    "ansys-fluent-core>=0.20",
+    "pyyaml>=6.0",          # reads driver compatibility.yaml files
+    "packaging>=23",         # PEP 440 specifier matching for profile resolution
 ]
 
 [project.optional-dependencies]
-matlab = ["matlabengine"]
+# === Solver SDK profiles ===
+# Each row mirrors a profile in some driver's compatibility.yaml. The recommended
+# install path for end users is `sim env install <profile>` which creates an
+# isolated env under .sim/envs/. These extras are the power-user / CI fallback
+# for installing the same SDK pin into the *current* environment.
+fluent-pyfluent-0-38 = ["ansys-fluent-core>=0.38,<0.39"]
+fluent-pyfluent-0-37 = ["ansys-fluent-core>=0.37,<0.38"]
+matlab               = ["matlabengine"]
+
+# === Convenience aliases ===
+fluent = ["sim-cli[fluent-pyfluent-0-38]"]  # latest tested
+
+# === Dev ===
 dev = ["pytest>=8.0", "ruff>=0.4"]
 
 [project.scripts]

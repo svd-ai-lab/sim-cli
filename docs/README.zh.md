@@ -80,19 +80,35 @@ LLM 智能体早已知道怎么写 PyFluent、MATLAB、COMSOL、OpenFOAM 脚本 
 ## 🚀 快速开始
 
 ```bash
-# 1. 在装有求解器的机器上（如一台 Fluent 工作站）：
+# 1. 在装有求解器的机器上（如一台 Fluent 工作站），先装 sim 核心 ——
+#    此时不用选 SDK：
 uv pip install "git+https://github.com/svd-ai-lab/sim-cli.git"
-sim serve --host 0.0.0.0          # FastAPI 服务，默认端口 7600
 
-# 2. 从智能体 / 你的笔记本 / 网络任意位置：
+# 2. 让 sim 看一眼你的机器，自动选出合适的 SDK profile：
+sim check fluent
+# → 报告本机检测到的 Fluent 安装，以及它们对应的 profile
+
+# 3. 把那个 profile 的 env 启动起来（在 .sim/envs/<profile>/ 创建带固定
+#    SDK 的隔离 venv；或者跳过这一步，第 5 步用 --auto-install 让它自动跑）：
+sim env install pyfluent_0_38_modern
+
+# 4. 启动 server（仅当需要跨机访问时才需要）：
+sim serve --host 0.0.0.0          # FastAPI，默认端口 7600
+
+# 5. 从智能体 / 你的笔记本 / 网络任意位置：
 sim --host <server-ip> connect --solver fluent --mode solver --ui-mode gui
+sim --host <server-ip> inspect session.versions   # ← 总是先做这一步
 sim --host <server-ip> exec "solver.settings.mesh.check()"
-sim --host <server-ip> inspect session.summary
 sim --host <server-ip> screenshot -o shot.png
 sim --host <server-ip> disconnect
 ```
 
-完整闭环：**启动 → 驱动 → 观察 → 收尾** —— 工程师还可以同时盯着求解器 GUI 实时监控。
+完整闭环：**检测 → 启动 env → 启动 → 驱动 → 观察 → 收尾** —— 工程师还可以同时盯着求解器 GUI 实时监控。
+
+> **为什么要先 bootstrap？** 每个 (Solver, SDK, driver, skill) 组合都是独立的兼容性宇宙
+> —— Fluent 24R1 需要 PyFluent 0.37.x；Fluent 25R2 要 0.38.x。sim 把每种组合当成一个隔离
+> 的 "profile env"，于是同一台机器可以同时拥有两个版本而不冲突。完整设计在
+> [`docs/architecture/version-compat.md`](architecture/version-compat.md)。
 
 ---
 
@@ -102,7 +118,8 @@ sim --host <server-ip> disconnect
 >
 > ```bash
 > sim serve --host 0.0.0.0
-> sim --host <ip> connect --solver fluent --mode solver --ui-mode gui
+> sim --host <ip> connect --solver fluent --mode solver --ui-mode gui --auto-install
+> sim --host <ip> inspect session.versions    # ← step 0: 当前在哪个 profile？
 > sim --host <ip> exec "solver.settings.file.read_case(file_name='mixing_elbow.cas.h5')"
 > sim --host <ip> exec "solver.settings.solution.initialization.hybrid_initialize()"
 > sim --host <ip> exec "solver.settings.solution.run_calculation.iterate(iter_count=20)"
@@ -139,19 +156,34 @@ sim --host <server-ip> disconnect
 
 | 命令 | 功能 | 类比 |
 |---|---|---|
-| `sim serve` | 启动 HTTP 服务器，持有一个求解器会话 | `ollama serve` |
+| `sim check <solver>` | 检测安装版本并解析 profile | `docker info` |
+| `sim env install <profile>` | 启动 profile env（venv + 固定 SDK） | `pyenv install` |
+| `sim env list [--catalogue]` | 列出已启动的 env（或全部目录） | `pyenv versions` |
+| `sim env remove <profile>` | 销毁一个 profile env | `pyenv uninstall` |
+| `sim serve` | 启动 HTTP 服务器（跨机使用时需要） | `ollama serve` |
 | `sim connect` | 启动求解器，建立会话 | `docker start` |
 | `sim exec` | 在活跃会话中执行 Python 片段 | `docker exec` |
-| `sim inspect` | 查询实时会话状态 | `docker inspect` |
-| `sim ps` | 显示当前活跃会话 | `docker ps` |
+| `sim inspect` | 查询实时会话状态（含 `session.versions`） | `docker inspect` |
+| `sim ps` | 显示当前活跃会话与其 profile | `docker ps` |
 | `sim screenshot` | 抓取求解器 GUI 截图 | — |
 | `sim disconnect` | 关闭会话 | `docker stop` |
 | `sim run` | 一次性脚本执行 | `docker run` |
-| `sim check` | 检查 driver 是否可用 | `docker info` |
 | `sim lint` | 执行前的静态检查 | `ruff check` |
 | `sim logs` | 浏览运行历史 | `docker logs` |
 
-环境变量：客户端用 `SIM_HOST`、`SIM_PORT`；运行存储用 `SIM_DIR`（默认 `.sim/`）。
+所有涉及主机的命令（`check`、`env`、`connect`、`exec`、`inspect`、`disconnect`）都接受 `--host <ip>`，会改为对远程 `sim serve` 执行而不是本机。
+
+环境变量：客户端用 `SIM_HOST`、`SIM_PORT`；运行存储与 profile env 都放在 `SIM_DIR`（默认 `.sim/`）。
+
+### 怎么选 profile
+
+通常不用自己选。`sim check <solver>` 会告诉你已装的 solver 对应哪个 profile，`sim connect ... --auto-install` 会在第一次使用时帮你 bootstrap。逃生口：
+
+- **指定 profile：** `sim connect --solver fluent --profile pyfluent_0_37_legacy`
+- **完全跳过 profile env（旧路径 / 测试）：** `sim connect --solver fluent --inline`
+- **进阶：单 env 直接装：** `pip install 'sim-cli[fluent-pyfluent-0-38]'` 把 SDK 直接装到当前 venv，跳过 `sim env`。同一台机器只需要一个 Fluent 版本时合适。
+
+完整设计：[`docs/architecture/version-compat.md`](architecture/version-compat.md)。
 
 ---
 
