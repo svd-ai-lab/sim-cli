@@ -106,11 +106,14 @@ def _check_remote(solver: str, host: str, port: int) -> dict:
     """Hit GET /detect/{solver} on a remote sim serve."""
     import httpx
 
+    from sim.session import _httpx_client
+
     url = f"http://{host}:{port}/detect/{solver}"
     try:
-        r = httpx.get(url, timeout=15.0)
+        with _httpx_client(host, timeout=15.0) as c:
+            r = c.get(url)
     except httpx.RequestError as e:
-        return {"ok": False, "error": f"cannot reach sim serve at {host}:{port} — {e}"}
+        return {"ok": False, "error": f"cannot reach sim serve at {host}:{port} - {e}"}
     if r.status_code != 200:
         return {"ok": False, "error": f"{r.status_code}: {r.text}"}
     return r.json()
@@ -447,12 +450,12 @@ def connect(ctx, solver, mode, ui_mode, processors, profile, inline, auto_instal
                 click.echo(f"[sim] auto-install failed: {e}", err=True)
                 sys.exit(1)
         else:
-            import httpx
-            r = httpx.post(
-                f"http://{host}:{port}/env/install",
-                json={"profile": target_profile, "upgrade": False},
-                timeout=600.0,
-            )
+            from sim.session import _httpx_client
+            with _httpx_client(host, timeout=600.0) as c:
+                r = c.post(
+                    f"http://{host}:{port}/env/install",
+                    json={"profile": target_profile, "upgrade": False},
+                )
             if r.status_code != 200:
                 click.echo(f"[sim] auto-install failed: {r.status_code} {r.text}", err=True)
                 sys.exit(1)
