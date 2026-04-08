@@ -142,6 +142,14 @@ def install(
         )
     driver_name, profile = found
 
+    if profile.is_metadata_only:
+        raise ValueError(
+            f"profile {profile_name!r} is metadata-only (no SDK to install, "
+            f"no runner subprocess). The driver lives entirely in its "
+            f"PATH-installed binaries — `sim env install` is a no-op for it. "
+            f"Use `sim check {driver_name}` to verify the binary install instead."
+        )
+
     target = env_path(profile_name)
     state_file = _env_state_file(profile_name)
 

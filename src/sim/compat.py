@@ -50,11 +50,24 @@ class Profile:
     name: str
     solver_versions: tuple[str, ...]
     skill_revision: str
-    runner_module: str
+    runner_module: str | None = None      # None = "metadata-only" profile
     sdk: str | None = None                # PEP 440 specifier, e.g. ">=0.38,<0.39"
     extras_alias: str | None = None
     notes: str = ""
     extra: dict = field(default_factory=dict)
+
+    @property
+    def is_metadata_only(self) -> bool:
+        """True if this profile has no runner and no SDK to install.
+
+        Some drivers (flotherm, ansa) live entirely in their PATH-installed
+        binaries with no Python wrapper. Their compatibility.yaml exists
+        only to declare version support + skill_revision; there is nothing
+        for ``sim env install`` to bootstrap and no runner subprocess to
+        spawn. Server falls through to the legacy inline driver path for
+        these profiles.
+        """
+        return self.runner_module is None and self.sdk is None
 
     def matches_solver(self, solver_version: str) -> bool:
         """True if this profile lists the given solver version."""
@@ -374,7 +387,7 @@ def load_compatibility(driver_dir: str | Path) -> Compatibility:
                         _normalize_solver_version(v) for v in p["solver_versions"]
                     ),
                     skill_revision=p["skill_revision"],
-                    runner_module=p["runner_module"],
+                    runner_module=p.get("runner_module"),  # optional
                     extras_alias=p.get("extras_alias"),
                     notes=p.get("notes", "") or "",
                     extra=extra,

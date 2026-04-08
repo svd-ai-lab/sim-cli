@@ -232,6 +232,24 @@ def _driver_has_compat(solver: str) -> bool:
     return (Path(__file__).parent / "drivers" / solver / "compatibility.yaml").is_file()
 
 
+def _driver_has_runner_profile(solver: str) -> bool:
+    """True if any profile in this driver's compatibility.yaml has a runner_module.
+
+    Used by /connect to decide between the runner subprocess path and the
+    legacy inline driver path. Metadata-only drivers (flotherm, ansa) ship
+    a yaml for detection/skill_revision but no runner — those go inline.
+    """
+    if not _driver_has_compat(solver):
+        return False
+    from pathlib import Path
+    from sim.compat import load_compatibility
+    try:
+        compat = load_compatibility(Path(__file__).parent / "drivers" / solver)
+    except (FileNotFoundError, ValueError):
+        return False
+    return any(p.runner_module for p in compat.profiles)
+
+
 def _sdk_package_for_solver(solver: str) -> str | None:
     """Look up the SDK package name from a driver's compatibility.yaml.
 
@@ -268,11 +286,13 @@ def connect(req: ConnectRequest):
     if driver is None:
         raise HTTPException(400, f"unknown solver: {req.solver}")
 
-    # ── runner path: any driver that ships a compatibility.yaml ─────────
-    # The runner path is now the default for every solver that has been
-    # migrated to the M1 architecture. Drivers without a compatibility.yaml
-    # (matlab, comsol, …) fall through to the legacy inline path below.
-    if not req.inline and _driver_has_compat(req.solver):
+    # ── runner path: any driver whose resolved profile has a runner ─────
+    # The runner path is the default for every solver that has been
+    # migrated to the M1 architecture AND ships a runner_module. Drivers
+    # whose compatibility.yaml is metadata-only (no SDK, no runner — e.g.
+    # flotherm, ansa) fall through to the legacy inline path below; sim
+    # still gets to attach the resolved profile metadata via _state.profile.
+    if not req.inline and _driver_has_runner_profile(req.solver):
         return _connect_via_runner(driver, req)
 
     # ── legacy inline path ──────────────────────────────────────────────

@@ -3,13 +3,162 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import re
 import shutil
 import uuid
 from pathlib import Path
+from typing import Callable
 
-from sim.driver import ConnectionInfo, Diagnostic, LintResult
+from sim.driver import ConnectionInfo, Diagnostic, LintResult, SolverInstall
 from sim.runner import run_subprocess
+
+
+# ─── extension points ─────────────────────────────────────────────────────
+#
+# Detection follows the same strategy-chain pattern used by the COMSOL
+# driver: a list of "where to look" finders + a list of "how to read the
+# version out of an install dir" probes. To support a new MATLAB layout
+# (e.g. macOS .app bundles, a custom enterprise install path) you append
+# one function to the relevant list. Existing functions stay validated.
+
+# Map MATLAB release labels (R2024a) to matlabengine pkg versions. This is
+# the canonical MathWorks-published table; extend as new releases ship.
+# Source: https://pypi.org/project/matlabengine/
+_MATLAB_RELEASE_TO_ENGINE: dict[str, str] = {
+    "R2025a": "25.1",
+    "R2024b": "24.2",
+    "R2024a": "24.1",
+    "R2023b": "23.2",
+    "R2023a": "9.14",
+    "R2022b": "9.13",
+    "R2022a": "9.12",
+}
+
+
+def _release_from_path(path: Path) -> str | None:
+    """Extract a MATLAB release label (e.g. 'R2024a') from a filesystem path.
+
+    Examples:
+        C:\\Program Files\\MATLAB\\R2024a\\bin\\matlab.exe → R2024a
+        /usr/local/MATLAB/R2023b/bin/matlab               → R2023b
+    """
+    for part in (str(path), str(path.parent), str(path.parent.parent)):
+        m = re.search(r"R(\d{4})([ab])", part, re.IGNORECASE)
+        if m:
+            return f"R{m.group(1)}{m.group(2).lower()}"
+    return None
+
+
+def _engine_version_for(release: str) -> str | None:
+    """Look up matlabengine pip version for a release label."""
+    return _MATLAB_RELEASE_TO_ENGINE.get(release)
+
+
+def _make_install(matlab_bin: Path, source: str) -> SolverInstall | None:
+    if not matlab_bin.is_file():
+        return None
+    release = _release_from_path(matlab_bin)
+    if release is None:
+        return None
+    engine = _engine_version_for(release) or "?"
+    return SolverInstall(
+        name="matlab",
+        version=release,
+        path=str(matlab_bin.parent.parent),  # the R20XXa root
+        source=source,
+        extra={
+            "release_label": release,
+            "matlab_bin": str(matlab_bin),
+            "engine_version": engine,
+        },
+    )
+
+
+def _candidates_from_env() -> list[tuple[Path, str]]:
+    out: list[tuple[Path, str]] = []
+    for var in ("MATLAB_ROOT", "MATLABROOT"):
+        v = os.environ.get(var)
+        if not v:
+            continue
+        for sub in ("bin/matlab.exe", "bin/matlab"):
+            p = Path(v) / sub
+            if p.is_file():
+                out.append((p, f"env:{var}"))
+                break
+    return out
+
+
+def _candidates_from_path() -> list[tuple[Path, str]]:
+    out: list[tuple[Path, str]] = []
+    p = shutil.which("matlab")
+    if p:
+        # `matlab` on PATH is often a launcher script; resolve to the real binary
+        out.append((Path(p).resolve(), "which:matlab"))
+    return out
+
+
+def _candidates_from_windows_defaults() -> list[tuple[Path, str]]:
+    """C:\\Program Files\\MATLAB\\R20XXa\\bin\\matlab.exe and friends."""
+    bases = [
+        Path(r"C:\Program Files\MATLAB"),
+        Path(r"C:\Program Files (x86)\MATLAB"),
+        Path(r"D:\Program Files\MATLAB"),
+        Path(r"E:\Program Files\MATLAB"),
+    ]
+    out: list[tuple[Path, str]] = []
+    for base in bases:
+        if not base.is_dir():
+            continue
+        for child in sorted(base.iterdir(), reverse=True):
+            if not re.match(r"R\d{4}[ab]$", child.name):
+                continue
+            mexe = child / "bin" / "matlab.exe"
+            if mexe.is_file():
+                out.append((mexe, f"default-path:{base}"))
+    return out
+
+
+def _candidates_from_linux_defaults() -> list[tuple[Path, str]]:
+    bases = [Path("/usr/local/MATLAB"), Path("/opt/MATLAB"), Path("/Applications")]
+    out: list[tuple[Path, str]] = []
+    for base in bases:
+        if not base.is_dir():
+            continue
+        for child in sorted(base.iterdir(), reverse=True):
+            if not re.match(r"R\d{4}[ab]$", child.name, re.IGNORECASE):
+                continue
+            for sub in ("bin/matlab", "bin/glnxa64/matlab", "bin/maci64/matlab"):
+                p = child / sub
+                if p.is_file():
+                    out.append((p, f"default-path:{base}"))
+                    break
+    return out
+
+
+_INSTALL_FINDERS: list[Callable[[], list[tuple[Path, str]]]] = [
+    _candidates_from_env,
+    _candidates_from_path,
+    _candidates_from_windows_defaults,
+    _candidates_from_linux_defaults,
+]
+"""Strategy chain. APPEND new finders for new MATLAB layouts; do not edit."""
+
+
+def _scan_matlab_installs() -> list[SolverInstall]:
+    found: dict[str, SolverInstall] = {}
+    for finder in _INSTALL_FINDERS:
+        try:
+            cands = finder()
+        except Exception:
+            continue
+        for path, source in cands:
+            inst = _make_install(path, source=source)
+            if inst is None:
+                continue
+            key = str(Path(inst.path).resolve())
+            found.setdefault(key, inst)
+    return sorted(found.values(), key=lambda i: i.version, reverse=True)
 
 
 class MatlabDriver:
@@ -81,22 +230,39 @@ class MatlabDriver:
         return LintResult(ok=payload.get("ok", not diagnostics), diagnostics=diagnostics)
 
     def connect(self) -> ConnectionInfo:
-        """Check if MATLAB is available on PATH."""
-        matlab = shutil.which("matlab")
-        if matlab is None:
+        """Report MATLAB availability via detect_installed."""
+        installs = self.detect_installed()
+        if not installs:
             return ConnectionInfo(
                 solver="matlab",
                 version=None,
                 status="not_installed",
-                message="matlab is not available on PATH",
+                message="No MATLAB installation detected on this host",
             )
-
+        top = installs[0]
         return ConnectionInfo(
             solver="matlab",
-            version=None,
+            version=top.version,
             status="ok",
-            message=f"matlab available at {matlab}",
+            message=f"MATLAB {top.version} at {top.path}",
+            solver_version=top.version,
         )
+
+    def detect_installed(self) -> list[SolverInstall]:
+        """Enumerate MATLAB installations visible on this host.
+
+        Strategy chain (deduped by resolved install root):
+          1. MATLAB_ROOT / MATLABROOT env vars
+          2. PATH probe via `which matlab`
+          3. C:\\Program Files\\MATLAB\\R20XXa\\bin\\matlab.exe (Windows)
+          4. /usr/local/MATLAB/R20XXa/bin/matlab (Linux/macOS)
+
+        Pure stdlib. Does NOT import matlabengine. Returns highest
+        release first. Each install reports the matched matlabengine
+        pkg version in extra.engine_version so the resolver can map
+        binary release → SDK pin.
+        """
+        return _scan_matlab_installs()
 
     def parse_output(self, stdout: str) -> dict:
         """Parse the last JSON object printed by a MATLAB script."""

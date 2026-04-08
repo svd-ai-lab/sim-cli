@@ -24,7 +24,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from sim.driver import ConnectionInfo, Diagnostic, LintResult, RunResult
+from sim.driver import ConnectionInfo, Diagnostic, LintResult, RunResult, SolverInstall
 
 # Pattern to detect ANSA Python scripts
 _ANSA_IMPORT_RE = re.compile(
@@ -281,6 +281,37 @@ class AnsaDriver:
             message=f"ANSA {version} found at {bat_path}",
             solver_version=version,
         )
+
+    def detect_installed(self) -> list[SolverInstall]:
+        """Enumerate BETA CAE ANSA installations on this host.
+
+        Thin wrapper around the existing _find_installation() helper which
+        already walks ANSA_EXEC_DIR / ANSA_EXEC_PATH → PATH → glob of
+        common install dirs across drives. Returns at most one entry —
+        ANSA has a single canonical bat_path per host.
+
+        Pure stdlib. Returns [] when nothing is found.
+        """
+        result = _find_installation()
+        if result is None:
+            return []
+        bat_path, exe_path, version = result
+        # Normalize "25.0.0" → "25.0" for the resolver short form
+        short = ".".join(version.split(".")[:2]) if version != "unknown" else "unknown"
+        return [
+            SolverInstall(
+                name="ansa",
+                version=short,
+                path=str(Path(bat_path).parent),
+                source="_find_installation",
+                extra={
+                    "raw_version": version,
+                    "bat_path": bat_path,
+                    "exe_path": exe_path,
+                    "release_label": f"ansa_v{version}" if version != "unknown" else "ansa_v?",
+                },
+            )
+        ]
 
     def parse_output(self, stdout: str) -> dict:
         """Extract structured results from ANSA stdout.

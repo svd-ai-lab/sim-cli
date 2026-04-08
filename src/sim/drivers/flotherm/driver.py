@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Protocol
 
-from sim.driver import ConnectionInfo, Diagnostic, LintResult, RunResult
+from sim.driver import ConnectionInfo, Diagnostic, LintResult, RunResult, SolverInstall
 from sim.drivers.flotherm._helpers import (
     build_solve_and_save,
     collect_artifacts,
@@ -156,6 +156,31 @@ class FlothermDriver:
                 except json.JSONDecodeError:
                     continue
         return {}
+
+    def detect_installed(self) -> list[SolverInstall]:
+        """Enumerate Simcenter Flotherm installations on this host.
+
+        Thin wrapper around the existing _helpers.find_installation()
+        which already walks FLOTHERM_ROOT → PATH → glob of common
+        install dirs (Siemens 2504/2412/2406/...). Returns at most one
+        install — Flotherm has a single canonical bat_path per host.
+        """
+        info = find_installation()
+        if info is None:
+            return []
+        return [
+            SolverInstall(
+                name="flotherm",
+                version=info.get("version", "?"),
+                path=info.get("install_root", ""),
+                source="find_installation",
+                extra={
+                    "bat_path": info.get("bat_path", ""),
+                    "floserv_path": info.get("floserv_path", ""),
+                    "raw_version": info.get("version", "?"),
+                },
+            )
+        ]
 
     def run_file(self, script: Path, **kwargs) -> RunResult:
         """Execute a Flotherm project or script via the session lifecycle.

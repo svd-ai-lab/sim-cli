@@ -1,0 +1,55 @@
+# sim-cli — Simcenter Flotherm driver compatibility matrix.
+#
+# Flotherm has NO Python binding. Execution happens via flotherm.bat /
+# floserv.exe + GUI automation that "plays" FloSCRIPT XML macros. There
+# is nothing to pip-install for this driver, so all profiles are
+# *metadata-only*: they declare which Flotherm versions are supported
+# and which skill_revision the agent should load, but
+# `sim env install` is a no-op for them and the server falls through
+# to the legacy inline FlothermDriver path on /connect.
+#
+# This is the same shape OpenFOAM uses for SDK-less drivers, except
+# Flotherm doesn't even need a runner subprocess (it has no Python
+# context to host) — the driver's existing GUI-automation backend
+# does all the work directly from the server process.
+#
+# Detection inputs (see driver.py detect_installed):
+#   - FLOTHERM_ROOT env var
+#   - shutil.which("flotherm")
+#   - C:\Program Files (x86)\Siemens\SimcenterFlotherm\<YYMM>\WinXP\bin\
+#
+# Version normalization: Siemens uses YYMM release codes (2504 = 2025
+# April). We use them as-is in solver_versions.
+
+driver: flotherm
+# (no sdk_package — Flotherm has no Python wrapper)
+
+profiles:
+
+  - name: flotherm_2504
+    solver_versions: ["2504"]
+    skill_revision: v1
+    extra:
+      release_label: "2025.1"
+    notes: |
+      Simcenter Flotherm 2504 (2025.1). Latest tested.
+      Metadata-only profile — uses the inline FlothermDriver GUI-automation
+      backend. No env to bootstrap.
+
+  - name: flotherm_2412
+    solver_versions: ["2412"]
+    skill_revision: v1
+    extra:
+      release_label: "2024.4"
+    notes: |
+      Simcenter Flotherm 2412 (2024.4).
+
+  - name: flotherm_2406
+    solver_versions: ["2406"]
+    skill_revision: v1
+    extra:
+      release_label: "2024.2"
+    notes: |
+      Simcenter Flotherm 2406 (2024.2).
+
+deprecated: []
