@@ -188,10 +188,22 @@ def install(
     # source tree; otherwise we install the same version published wherever
     # this sim-cli came from. For M1 the source-tree path is the one that
     # matters (every dev runs out of a checkout).
+    #
+    # Editable install matters: a runner module added to the checkout AFTER
+    # the env was bootstrapped should still be importable next session
+    # without `sim env install --upgrade`. Editable mode achieves that by
+    # putting the checkout's site-packages directly on the env's sys.path.
     sim_source = _resolve_sim_source()
+    sim_pkgs: list[str]
+    if Path(sim_source).is_dir():
+        sim_pkgs = ["-e", sim_source]
+    else:
+        sim_pkgs = [sim_source]
 
-    pkgs_to_install = [sdk_arg, sim_source, *extra_packages]
-    _run_subprocess(install_argv + pkgs_to_install, quiet=quiet, step="install SDK + sim-cli")
+    # Install SDK in one call, sim-cli (editable) in a separate call so an
+    # SDK install failure doesn't take sim-cli down with it.
+    _run_subprocess(install_argv + [sdk_arg, *extra_packages], quiet=quiet, step="install SDK")
+    _run_subprocess(install_argv + sim_pkgs, quiet=quiet, step="install sim-cli (editable)")
 
     elapsed = round(time.time() - started, 2)
 

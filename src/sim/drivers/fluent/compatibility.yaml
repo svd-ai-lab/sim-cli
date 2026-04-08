@@ -19,7 +19,7 @@ profiles:
     sdk: ">=0.38,<0.39"
     solver_versions: ["24.2", "25.1", "25.2"]
     skill_revision: v2
-    runner_module: sim_runners.fluent.pyfluent_038
+    runner_module: sim._runners.fluent.pyfluent_038
     extras_alias: fluent-pyfluent-0-38
     notes: |
       Uses .general.material accessor (PyFluent 0.38+).
@@ -29,7 +29,7 @@ profiles:
     sdk: ">=0.37,<0.38"
     solver_versions: ["24.1", "24.2", "25.1"]
     skill_revision: v1
-    runner_module: sim_runners.fluent.pyfluent_037
+    runner_module: sim._runners.fluent.pyfluent_037
     extras_alias: fluent-pyfluent-0-37
     notes: |
       Direct cell_zone.<zone>.material accessor.

@@ -248,6 +248,35 @@ def all_known_profiles() -> list[tuple[str, "Profile"]]:
     return out
 
 
+def resolve_profile_for_driver(driver) -> "tuple[Profile, dict] | None":
+    """Detect → resolve → return the winning (profile, install_dict).
+
+    Strategy: take the highest-version install reported by detect_installed()
+    that maps to a known profile. Returns None if either nothing is detected
+    or no detected install resolves to a current profile.
+
+    Used by server `/connect` to figure out which profile env to spawn the
+    runner from when the CLI did not pass an explicit profile name.
+    """
+    installs = safe_detect_installed(driver)
+    if not installs:
+        return None
+    # Sort highest version first (string sort works because we normalize)
+    installs = sorted(installs, key=lambda i: i.version, reverse=True)
+
+    driver_dir = Path(__file__).parent / "drivers" / driver.name
+    try:
+        compat = load_compatibility(driver_dir)
+    except FileNotFoundError:
+        return None
+
+    for inst in installs:
+        r = compat.resolve(inst.version)
+        if r.preferred:
+            return (r.preferred, inst.to_dict())
+    return None
+
+
 def safe_detect_installed(driver) -> list:
     """Call driver.detect_installed() defensively.
 

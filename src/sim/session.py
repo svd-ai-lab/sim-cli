@@ -83,16 +83,22 @@ class SessionClient:
             return {"ok": False, "error": str(e)}
 
     def connect(self, solver: str, mode: str = "meshing",
-                ui_mode: str = "no_gui", processors: int = 1) -> dict:
+                ui_mode: str = "no_gui", processors: int = 1,
+                profile: str | None = None, inline: bool = False) -> dict:
         # Auto-start local server if needed
         if self._is_local() and not self._server_reachable():
             if not self._auto_start_server():
                 return {"ok": False, "error": "failed to auto-start sim-server locally"}
 
-        return self._request("post", "/connect", timeout=CONNECT_TIMEOUT_S, json={
+        body: dict = {
             "solver": solver, "mode": mode,
             "ui_mode": ui_mode, "processors": processors,
-        })
+        }
+        if profile:
+            body["profile"] = profile
+        if inline:
+            body["inline"] = True
+        return self._request("post", "/connect", timeout=CONNECT_TIMEOUT_S, json=body)
 
     def run(self, code: str, label: str = "cli-snippet") -> dict:
         return self._request("post", "/exec", json={"code": code, "label": label})

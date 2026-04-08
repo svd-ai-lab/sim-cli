@@ -367,16 +367,98 @@ def run(ctx, script, solver):
 # ── connect (persistent session) ────────────────────────────────────────────
 
 @main.command()
-@click.option("--solver", required=True, help="Solver name (e.g. pyfluent).")
+@click.option("--solver", required=True, help="Solver name (e.g. fluent).")
 @click.option("--mode", default="meshing", type=click.Choice(["meshing", "solver"]))
 @click.option("--ui-mode", default="no_gui", type=click.Choice(["no_gui", "gui"]))
 @click.option("--processors", default=1, type=int)
+@click.option("--profile", default=None,
+              help="Override the profile auto-resolution (e.g. pyfluent_0_38_modern).")
+@click.option("--inline", is_flag=True,
+              help="Use the legacy in-process driver path (no profile env). Tests/debug.")
+@click.option("--auto-install", is_flag=True,
+              help="If the resolved profile env is missing, bootstrap it before connecting.")
 @click.pass_context
-def connect(ctx, solver, mode, ui_mode, processors):
-    """Launch a solver and hold a persistent session."""
+def connect(ctx, solver, mode, ui_mode, processors, profile, inline, auto_install):
+    """Launch a solver and hold a persistent session.
+
+    Default flow uses the runner architecture: detects solver installs on
+    the target host, resolves a compatibility profile, and (if needed)
+    bootstraps an isolated env via `sim env install` before opening the
+    session. With --inline, falls back to the legacy in-process path.
+    """
     from sim.session import SessionClient
+
     client = SessionClient(host=ctx.obj["host"], port=ctx.obj["port"])
-    result = client.connect(solver=solver, mode=mode, ui_mode=ui_mode, processors=processors)
+    payload = {
+        "solver": solver,
+        "mode": mode,
+        "ui_mode": ui_mode,
+        "processors": processors,
+    }
+    if profile:
+        payload["profile"] = profile
+    if inline:
+        payload["inline"] = True
+
+    result = client.connect(**payload)
+
+    # Auto-bootstrap retry on 409 (env not bootstrapped)
+    if (
+        not result.get("ok")
+        and "not bootstrapped" in str(result.get("error", "")).lower()
+        and not inline
+    ):
+        # Try to derive profile name from the error message or run a check
+        click.echo(f"[sim] connect: {result.get('error')}", err=True)
+        if not auto_install:
+            click.echo(
+                "  re-run with --auto-install to bootstrap the profile env automatically",
+                err=True,
+            )
+            sys.exit(2)
+
+        # Use sim check (locally or remotely) to find the profile name
+        host = ctx.obj["host"]
+        port = ctx.obj["port"]
+        check_resp = (
+            _check_remote(solver, host, port) if not _is_local_host(host) else _check_local(solver)
+        )
+        if not check_resp.get("ok"):
+            click.echo(f"[sim] connect: cannot resolve profile — {check_resp.get('error')}", err=True)
+            sys.exit(1)
+        resolutions = check_resp["data"].get("resolutions", [])
+        target_profile = None
+        for entry in resolutions:
+            res = entry.get("resolution") or {}
+            if res.get("status") == "ok" and res.get("preferred"):
+                target_profile = res["preferred"]["name"]
+                break
+        if target_profile is None:
+            click.echo("[sim] connect: no profile resolved for any detected install", err=True)
+            sys.exit(1)
+
+        click.echo(f"[sim] auto-install: bootstrapping {target_profile}...")
+        # Bootstrap via the right host
+        if _is_local_host(host):
+            from sim import env_manager
+            try:
+                env_manager.install(target_profile, quiet=False)
+            except (ValueError, RuntimeError) as e:
+                click.echo(f"[sim] auto-install failed: {e}", err=True)
+                sys.exit(1)
+        else:
+            import httpx
+            r = httpx.post(
+                f"http://{host}:{port}/env/install",
+                json={"profile": target_profile, "upgrade": False},
+                timeout=600.0,
+            )
+            if r.status_code != 200:
+                click.echo(f"[sim] auto-install failed: {r.status_code} {r.text}", err=True)
+                sys.exit(1)
+
+        # Retry the connect
+        result = client.connect(**payload)
 
     if ctx.obj["json"]:
         click.echo(json_mod.dumps(result, indent=2, default=str))
@@ -386,7 +468,7 @@ def connect(ctx, solver, mode, ui_mode, processors):
             if result.get("data"):
                 click.echo(json_mod.dumps(result["data"], indent=4, default=str))
         else:
-            click.echo(f"[sim] connect: failed — {result.get('error', 'unknown')}", err=True)
+            click.echo(f"[sim] connect: failed - {result.get('error', 'unknown')}", err=True)
             sys.exit(1)
 
 
@@ -434,7 +516,13 @@ def exec_cmd(ctx, code, code_file, label):
 
 @main.command()
 @click.argument("name", default="session.summary",
-                type=click.Choice(["session.summary", "session.mode", "last.result", "workflow.summary"]))
+                type=click.Choice([
+                    "session.summary",
+                    "session.versions",
+                    "session.mode",
+                    "last.result",
+                    "workflow.summary",
+                ]))
 @click.pass_context
 def inspect(ctx, name):
     """Query live session state."""
