@@ -37,6 +37,15 @@ class Profile:
     (the solver IS its own scripting environment). When ``sdk`` is None,
     ``sim env install`` skips the SDK install step and only puts sim-cli
     into the profile env.
+
+    ``extra`` is a catch-all for yaml fields the loader does not recognize.
+    Drivers and runners can stash arbitrary per-profile metadata here
+    (e.g. ``runner_variant: mph_2``, ``backend_hint: linux64GccDPInt32Opt``,
+    ``license_server: 1718@licsrv``) without changing the schema or the
+    loader. The runner reads these via ``find_profile()`` at startup. This
+    is the primary mechanism for extending compatibility.yaml with new
+    knobs without sim-cli core changes — see docs/architecture/version-compat.md
+    §11 for the convention.
     """
     name: str
     solver_versions: tuple[str, ...]
@@ -45,6 +54,7 @@ class Profile:
     sdk: str | None = None                # PEP 440 specifier, e.g. ">=0.38,<0.39"
     extras_alias: str | None = None
     notes: str = ""
+    extra: dict = field(default_factory=dict)
 
     def matches_solver(self, solver_version: str) -> bool:
         """True if this profile lists the given solver version."""
@@ -77,6 +87,7 @@ class Profile:
             "runner_module": self.runner_module,
             "extras_alias": self.extras_alias,
             "notes": self.notes.strip(),
+            "extra": dict(self.extra),
         }
 
 
@@ -341,9 +352,20 @@ def load_compatibility(driver_dir: str | Path) -> Compatibility:
 
     sdk_package = raw.get("sdk_package")  # optional — None for SDK-less drivers
 
+    # Reserved yaml keys that map to dedicated Profile fields. Anything
+    # else gets stashed into Profile.extra so future yaml authors can add
+    # custom knobs without touching the loader.
+    _RESERVED = {
+        "name", "sdk", "solver_versions", "skill_revision",
+        "runner_module", "extras_alias", "notes",
+    }
+
     profiles: list[Profile] = []
     for i, p in enumerate(raw_profiles):
+        if not isinstance(p, dict):
+            raise ValueError(f"{path} profile #{i} must be a mapping, not {type(p).__name__}")
         try:
+            extra = {k: v for k, v in p.items() if k not in _RESERVED}
             profiles.append(
                 Profile(
                     name=p["name"],
@@ -355,6 +377,7 @@ def load_compatibility(driver_dir: str | Path) -> Compatibility:
                     runner_module=p["runner_module"],
                     extras_alias=p.get("extras_alias"),
                     notes=p.get("notes", "") or "",
+                    extra=extra,
                 )
             )
         except KeyError as e:

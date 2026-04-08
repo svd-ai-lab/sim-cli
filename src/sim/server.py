@@ -419,6 +419,7 @@ def _connect_via_runner(driver, req: ConnectRequest):
                 "name": req.solver,
                 "version": client.handshake.solver_version if client.handshake else "?",
             },
+            "variant": connect_result.get("variant"),
             "install_origin": install_info,
         },
     }

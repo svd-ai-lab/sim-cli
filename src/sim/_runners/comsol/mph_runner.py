@@ -6,71 +6,143 @@ Lives inside .sim/envs/comsol_<version>_mph_<X>/. Spawned via:
 
 with SIM_RUNNER_PROFILE in the env so the runner self-binds to a yaml profile.
 
-Wire protocol:
-  handshake -> import mph, report mph version + COMSOL backend version
-  connect   -> mph.start() (or mph.Client()) — launches comsolmphserver
-               under the hood and creates an empty model
-  exec      -> exec(code) with `client`, `model`, `mph` in namespace
-  inspect   -> session.summary, session.versions, last.result
-  disconnect-> client.disconnect() / client.exit()
+═══════════════════════════════════════════════════════════════════════════
+ARCHITECTURE — base class + per-version subclasses + registry dispatch
+═══════════════════════════════════════════════════════════════════════════
 
-The COMSOL backend is discovered by `mph` itself (it walks the registry on
-Windows and the standard /usr/local prefix on Linux). When the user has
-multiple COMSOL versions installed and wants a specific one, set
-COMSOL_ROOT in the runner's env before connect; mph respects it.
+`ComsolMphRunner` is an *abstract* RunnerLoop subclass. Every operation that
+might change between mph / COMSOL versions is exposed as a clearly named
+hook method:
+
+    _start_client(mph, cores)        → mph.Client
+    _create_default_model(client)    → mph.Model | None
+    _identify_model(model)           → str | None     (model tag/name/id)
+    _refresh_model(client, current)  → mph.Model | None
+    _disconnect_client(client)       → None           (lifecycle teardown)
+    _query_solver_backend(mph)       → (version_str, backend_dict)
+
+The default implementations for mph 1.x ship as ``Mph1Runner`` below. They
+match the API surface mph exposed throughout 1.2.x–1.3.x and are validated
+against COMSOL 6.4.
+
+═══════════════════════════════════════════════════════════════════════════
+EXTENDING for a new mph or COMSOL version
+═══════════════════════════════════════════════════════════════════════════
+
+When mph 2.x ships and breaks something (or COMSOL 7.0 changes a Java API
+the runner depends on), the recipe is:
+
+    1. Subclass ComsolMphRunner (or Mph1Runner if reuse helps):
+
+           class Mph2Runner(ComsolMphRunner):
+               variant = "mph_2"
+
+               def _start_client(self, mph, cores):
+                   return mph.start(processors=cores)   # renamed in 2.x
+
+               def _identify_model(self, model):
+                   return str(model.name())             # 2.x dropped .tag
+
+               # everything else inherited
+
+    2. Register the new variant:
+
+           _RUNNER_REGISTRY["mph_2"] = Mph2Runner
+
+    3. In compatibility.yaml, add a profile pointing at this runner. You
+       have two options:
+         a) keep runner_module = sim._runners.comsol.mph_runner and add
+            `extra: {runner_variant: mph_2}` to the profile — the dispatch
+            below will pick Mph2Runner from the registry
+         b) write a new module sim._runners.comsol.mph2_runner whose main()
+            instantiates Mph2Runner directly, and point runner_module there
+
+Both paths exist on purpose: (a) is for incremental tweaks that share most
+of the code; (b) is for major rewrites where you want a clean file.
+
+═══════════════════════════════════════════════════════════════════════════
 """
 from __future__ import annotations
 
 import io
 import os
+import re
 import sys
 import time
 import traceback
 import uuid
 from contextlib import redirect_stderr, redirect_stdout
-from typing import Any
+from typing import Any, Callable
 
 from sim._runners.base import RunnerError, RunnerLoop
 
 
-def _safe_model_id(model: Any) -> str | None:
-    """Best-effort identifier for an mph.Model. Different mph versions
-    expose `.name()`, `.tag` (attribute), or only the underlying Java
-    object — try each before giving up."""
-    if model is None:
-        return None
-    for attr, call in (("name", True), ("tag", True), ("tag", False)):
-        try:
-            v = getattr(model, attr)
-            return str(v() if call and callable(v) else v)
-        except Exception:
-            continue
-    try:
-        java = getattr(model, "java", None)
-        if java is not None and hasattr(java, "tag"):
-            return str(java.tag())
-    except Exception:
-        pass
-    return repr(model)
+# ─── abstract base ──────────────────────────────────────────────────────────
 
 
 class ComsolMphRunner(RunnerLoop):
-    """SDK-bound COMSOL runner. profile_name is set from SIM_RUNNER_PROFILE."""
+    """Abstract COMSOL runner. Subclasses set ``variant`` and override hooks.
+
+    The base class implements the JSON-over-stdio protocol and the
+    op_handshake / op_connect / op_exec / op_inspect / op_disconnect
+    handlers. The version-sensitive bits are delegated to instance methods
+    starting with ``_`` (the "hooks") so subclasses can override them
+    without re-implementing the protocol layer.
+    """
 
     profile_name = "<unset>"
+    variant: str = "abstract"   # subclasses set this
 
     def __init__(self) -> None:
         super().__init__()
-        self._mph: Any = None              # the imported `mph` module
-        self._client: Any = None            # mph.Client
-        self._model: Any = None             # active mph.Model
+        self._mph: Any = None
+        self._client: Any = None
+        self._model: Any = None
         self._session_id: str | None = None
         self._runs: list[dict] = []
         self._sdk_version: str = "?"
         self._solver_version: str = "?"
         self._backend: dict | None = None
 
-    # ── handshake ────────────────────────────────────────────────────────
+    # ── version-sensitive hooks (override in subclass) ──────────────────
+
+    def _start_client(self, mph: Any, cores: int) -> Any:
+        """Launch the mph Client. Override per mph major version."""
+        raise NotImplementedError
+
+    def _create_default_model(self, client: Any) -> Any:
+        """Create the empty default model after connect. May return None."""
+        raise NotImplementedError
+
+    def _identify_model(self, model: Any) -> str | None:
+        """Return a string identifier for an mph.Model (tag/name/id)."""
+        raise NotImplementedError
+
+    def _refresh_model(self, client: Any, current: Any) -> Any:
+        """Re-pick the active model after a snippet (load/clear/etc).
+
+        Default: take the first model in client.models() if any. Override
+        if mph changes how models are enumerated.
+        """
+        try:
+            models = list(client.models())
+        except Exception:
+            return current
+        return models[0] if models else None
+
+    def _disconnect_client(self, client: Any) -> None:
+        """Tear down the client. Best-effort; exceptions swallowed."""
+        raise NotImplementedError
+
+    def _query_solver_backend(self, mph: Any) -> tuple[str, dict | None]:
+        """Probe the COMSOL backend WITHOUT launching it. Cheap, optional.
+
+        Returns (solver_version_short, backend_dict_or_none). On failure
+        return ("?", None) — handshake will still succeed.
+        """
+        return ("?", None)
+
+    # ── op_handshake ────────────────────────────────────────────────────
 
     def op_handshake(self, args: dict) -> dict:
         try:
@@ -84,58 +156,39 @@ class ComsolMphRunner(RunnerLoop):
         self._mph = mph
         self._sdk_version = getattr(mph, "__version__", "unknown")
 
-        # Best-effort COMSOL backend discovery without launching anything.
-        # mph.discovery.backend() returns a dict with keys including 'name'
-        # and 'version'. It walks the registry / install dirs only — does
-        # NOT spawn comsolmphserver — so it's cheap to call.
         try:
-            backend = mph.discovery.backend()
-            if isinstance(backend, dict):
-                self._backend = backend
-                ver = backend.get("name") or backend.get("version") or "?"
-                # 'name' looks like 'COMSOL Multiphysics 6.4'; pull X.Y out
-                import re as _re
-                m = _re.search(r"(\d+\.\d+)", str(ver))
-                self._solver_version = m.group(1) if m else str(ver)
+            self._solver_version, self._backend = self._query_solver_backend(mph)
         except Exception:
-            # Fall back to nothing; op_connect will surface a clearer error
-            self._backend = None
-            self._solver_version = "?"
+            self._solver_version, self._backend = ("?", None)
 
         return {
             "sdk_version": self._sdk_version,
             "solver_version": self._solver_version,
             "profile": self.profile_name,
+            "variant": self.variant,
             "backend": self._backend,
         }
 
-    # ── connect / disconnect ────────────────────────────────────────────
+    # ── op_connect / op_disconnect ──────────────────────────────────────
 
     def op_connect(self, args: dict) -> dict:
         if self._client is not None:
             raise RunnerError("session already active")
 
         ui_mode = args.get("ui_mode", "no_gui")
-        # mph.start(...) starts a stand-alone client (no separate server).
-        # `cores` controls multithreading; default to 1 for predictability.
         cores = int(args.get("processors") or 1)
 
         try:
-            # mph 1.x: mph.start(cores=N) → returns a Client
-            self._client = self._mph.start(cores=cores)
+            self._client = self._start_client(self._mph, cores)
         except Exception as e:
             raise RunnerError(
-                f"mph.start failed: {type(e).__name__}: {e}",
+                f"start_client failed: {type(e).__name__}: {e}",
                 type="LaunchFailure",
             ) from e
 
-        # Create an empty model so the snippet namespace has something
-        # meaningful by default. Snippets are free to .clear() or load
-        # their own .mph file.
         try:
-            self._model = self._client.create("Model1")
+            self._model = self._create_default_model(self._client)
         except Exception:
-            # Some mph versions return None until first model — that's OK
             self._model = None
 
         self._session_id = str(uuid.uuid4())
@@ -146,9 +199,10 @@ class ComsolMphRunner(RunnerLoop):
             "source": "mph.start",
             "ui_mode": ui_mode,
             "profile": self.profile_name,
+            "variant": self.variant,
             "sdk_version": self._sdk_version,
             "solver_version": self._solver_version,
-            "model_tag": _safe_model_id(self._model),
+            "model_tag": self._safe_identify(self._model),
         }
 
     def op_disconnect(self, args: dict) -> dict:
@@ -156,16 +210,7 @@ class ComsolMphRunner(RunnerLoop):
             return {"already_disconnected": True}
         sid = self._session_id
         try:
-            # mph.Client has .clear() to drop models then .disconnect() to
-            # release the JVM-side server. Some versions only expose
-            # .disconnect() — try in order.
-            if hasattr(self._client, "clear"):
-                try:
-                    self._client.clear()
-                except Exception:
-                    pass
-            if hasattr(self._client, "disconnect"):
-                self._client.disconnect()
+            self._disconnect_client(self._client)
         except Exception:
             pass
         self._client = None
@@ -173,7 +218,7 @@ class ComsolMphRunner(RunnerLoop):
         self._session_id = None
         return {"session_id": sid, "disconnected": True}
 
-    # ── exec / inspect ──────────────────────────────────────────────────
+    # ── op_exec / op_inspect ────────────────────────────────────────────
 
     def op_exec(self, args: dict) -> dict:
         if self._client is None:
@@ -202,19 +247,14 @@ class ComsolMphRunner(RunnerLoop):
             ok = False
             error = traceback.format_exc()
 
-        # If the snippet swapped in a different model, track it. Also
-        # refresh from client.models() — snippets that call client.clear()
-        # + client.load(...) put the new model in the client's list but
-        # leave the local `model` reference stale.
-        if namespace.get("model") is not None and namespace.get("model") is not self._model:
-            self._model = namespace["model"]
+        # Track snippet model swaps; otherwise refresh from the client
+        # (load/clear leave self._model dangling).
+        ns_model = namespace.get("model")
+        if ns_model is not None and ns_model is not self._model:
+            self._model = ns_model
         else:
             try:
-                models = list(self._client.models())
-                if models and models[0] is not self._model:
-                    self._model = models[0]
-                elif not models:
-                    self._model = None
+                self._model = self._refresh_model(self._client, self._model)
             except Exception:
                 pass
 
@@ -241,23 +281,18 @@ class ComsolMphRunner(RunnerLoop):
                 "sdk": {"name": "mph", "version": self._sdk_version},
                 "solver": {"name": "comsol", "version": self._solver_version},
                 "profile": self.profile_name,
+                "variant": self.variant,
                 "backend": self._backend,
             }
         if name == "session.summary":
-            # Recompute model id defensively — _safe_model_id may touch a
-            # stale Java handle if a snippet replaced the model since the
-            # last exec; fall back to None on any error.
-            try:
-                model_id = _safe_model_id(self._model)
-            except Exception:
-                model_id = None
             return {
                 "session_id": self._session_id,
                 "mode": "client",
                 "profile": self.profile_name,
+                "variant": self.variant,
                 "run_count": len(self._runs),
                 "connected": self._client is not None,
-                "model_tag": model_id,
+                "model_tag": self._safe_identify(self._model),
             }
         if name == "last.result":
             if not self._runs:
@@ -265,10 +300,162 @@ class ComsolMphRunner(RunnerLoop):
             return {"has_last_run": True, **self._runs[-1]}
         raise RunnerError(f"unknown inspect target: {name}", type="UnknownInspect")
 
+    # ── helpers ─────────────────────────────────────────────────────────
+
+    def _safe_identify(self, model: Any) -> str | None:
+        """Wrap _identify_model so any Java exception degrades to None.
+
+        Subclass hooks may touch a stale Java handle (e.g. after the
+        snippet called client.clear()); we want inspect endpoints to
+        return a clean None instead of crashing the whole RPC.
+        """
+        if model is None:
+            return None
+        try:
+            return self._identify_model(model)
+        except Exception:
+            return None
+
+
+# ─── default implementation: mph 1.x ────────────────────────────────────────
+
+
+class Mph1Runner(ComsolMphRunner):
+    """Concrete runner for mph 1.2.x–1.3.x. Validated against COMSOL 6.4.
+
+    Override individual hooks here if a 1.x point release introduces a
+    backward-incompatible change you want to absorb without bumping the
+    profile to a new variant.
+    """
+
+    variant = "mph_1"
+
+    # ── lifecycle hooks ────────────────────────────────────────────────
+
+    def _start_client(self, mph: Any, cores: int) -> Any:
+        # mph 1.x: mph.start(cores=N) → returns a Client; under the hood
+        # this boots the JVM and connects to comsolmphserver.
+        return mph.start(cores=cores)
+
+    def _create_default_model(self, client: Any) -> Any:
+        try:
+            return client.create("Model1")
+        except Exception:
+            return None
+
+    def _disconnect_client(self, client: Any) -> None:
+        # mph 1.x: clear() drops models, disconnect() releases the JVM-side
+        # server. Some sub-versions only expose one of the two.
+        if hasattr(client, "clear"):
+            try:
+                client.clear()
+            except Exception:
+                pass
+        if hasattr(client, "disconnect"):
+            client.disconnect()
+
+    # ── identification ──────────────────────────────────────────────────
+
+    def _identify_model(self, model: Any) -> str | None:
+        # mph.Model has had three different identifier APIs across 1.x:
+        #   - early 1.x:  model.tag         (attribute)
+        #   - mid 1.x:    model.name()      (method)
+        #   - any:        model.java.tag()  (always-available Java escape)
+        for attr, call in (("name", True), ("tag", True), ("tag", False)):
+            try:
+                v = getattr(model, attr)
+                return str(v() if call and callable(v) else v)
+            except Exception:
+                continue
+        try:
+            java = getattr(model, "java", None)
+            if java is not None and hasattr(java, "tag"):
+                return str(java.tag())
+        except Exception:
+            pass
+        return None
+
+    # ── backend probe ──────────────────────────────────────────────────
+
+    def _query_solver_backend(self, mph: Any) -> tuple[str, dict | None]:
+        try:
+            backend = mph.discovery.backend()
+        except Exception:
+            return ("?", None)
+        if not isinstance(backend, dict):
+            return ("?", None)
+        ver_field = backend.get("name") or backend.get("version") or "?"
+        m = re.search(r"(\d+\.\d+)", str(ver_field))
+        return (m.group(1) if m else str(ver_field), backend)
+
+
+# ─── variant registry + dispatch ────────────────────────────────────────────
+
+
+_RUNNER_REGISTRY: dict[str, Callable[[], ComsolMphRunner]] = {
+    "mph_1": Mph1Runner,
+}
+"""Maps a `variant` name → runner constructor.
+
+To add a new variant: define a new ComsolMphRunner subclass and append
+it to this dict. Profiles can then opt in via either:
+  - extra.runner_variant in compatibility.yaml (preferred), OR
+  - a brand-new runner_module that imports the right class directly
+"""
+
+
+def _select_variant() -> str:
+    """Decide which runner subclass to instantiate.
+
+    Resolution order (first match wins):
+      1. SIM_RUNNER_VARIANT env var (set by orchestrator for ad-hoc tests)
+      2. Profile.extra['runner_variant'] from compatibility.yaml
+      3. Auto-detect from installed mph version (mph X.* → 'mph_X')
+      4. Hard fallback: 'mph_1'
+    """
+    explicit = os.environ.get("SIM_RUNNER_VARIANT")
+    if explicit:
+        return explicit
+
+    profile_name = os.environ.get("SIM_RUNNER_PROFILE")
+    if profile_name:
+        try:
+            from sim.compat import find_profile
+            found = find_profile(profile_name)
+            if found is not None:
+                _, profile = found
+                extra = getattr(profile, "extra", None) or {}
+                if extra.get("runner_variant"):
+                    return str(extra["runner_variant"])
+        except Exception:
+            pass
+
+    # Auto-detect from installed mph
+    try:
+        import mph as _mph
+        ver = getattr(_mph, "__version__", "")
+        m = re.match(r"(\d+)\.", ver)
+        if m:
+            return f"mph_{m.group(1)}"
+    except Exception:
+        pass
+
+    return "mph_1"
+
 
 def main() -> int:
     profile = os.environ.get("SIM_RUNNER_PROFILE", "comsol_64_mph_1")
-    runner = ComsolMphRunner()
+    variant = _select_variant()
+    runner_cls = _RUNNER_REGISTRY.get(variant)
+    if runner_cls is None:
+        # Unknown variant — fall back to the only one we know works.
+        # Print to stderr so the orchestrator's drainer surfaces it.
+        sys.stderr.write(
+            f"[comsol_mph_runner] unknown variant {variant!r}, "
+            f"falling back to mph_1 (registered: {sorted(_RUNNER_REGISTRY)})\n"
+        )
+        runner_cls = Mph1Runner
+    runner = runner_cls()
     runner.profile_name = profile
     return runner.run()
 

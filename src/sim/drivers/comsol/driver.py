@@ -18,25 +18,28 @@ import os
 import re
 import shutil
 from pathlib import Path
+from typing import Callable
 
 from sim.driver import ConnectionInfo, Diagnostic, LintResult, SolverInstall
 
 
-# Default install paths probed in order. The driver dedupes by resolved path.
-_WINDOWS_DEFAULT_DIRS: tuple[Path, ...] = (
-    Path(r"C:\Program Files\COMSOL"),
-    Path(r"C:\Program Files (x86)\COMSOL64\Multiphysics"),
-    Path(r"E:\Program Files (x86)\COMSOL64\Multiphysics"),
-    Path(r"D:\Program Files\COMSOL"),
-)
-_LINUX_DEFAULT_DIRS: tuple[Path, ...] = (
-    Path("/usr/local"),
-    Path("/opt"),
-)
+# ─── extension points (open for additions, closed for modifications) ──────
+#
+# Both detection layers — *where* to look for COMSOL installs and *how* to
+# read a version string out of one — are strategy chains. To add support
+# for a new layout (e.g. COMSOL 7.0 ships with version.json instead of
+# readme.txt, or a Linux package manager drops files at /usr/share/comsol*)
+# you append one function to the relevant list. The scanner walks the
+# chain in order; first hit wins.
+#
+# Do NOT modify existing functions for new layouts — add a new one. The
+# whole point of this design is that the existing path stays validated.
+
+# ─── version probes ───────────────────────────────────────────────────────
 
 
-def _read_version_from_readme(install_dir: Path) -> str | None:
-    """COMSOL ships a readme.txt whose first line is 'COMSOL X.Y.Z.BBB README'."""
+def _version_from_readme(install_dir: Path) -> str | None:
+    """COMSOL 5.x – 6.x: readme.txt first line = 'COMSOL X.Y.Z.BBB README'."""
     readme = install_dir / "readme.txt"
     if not readme.is_file():
         return None
@@ -47,26 +50,168 @@ def _read_version_from_readme(install_dir: Path) -> str | None:
     if not first:
         return None
     m = re.search(r"COMSOL\s+(\d+\.\d+(?:\.\d+(?:\.\d+)?)?)", first[0])
-    if not m:
+    return m.group(1) if m else None
+
+
+def _version_from_about_txt(install_dir: Path) -> str | None:
+    """COMSOL 6.x: about.txt first line = 'SOFTWARE COMPONENTS IN COMSOL X.Y'.
+
+    Used as a fallback when readme.txt is missing (some custom installers
+    only ship about.txt).
+    """
+    about = install_dir / "about.txt"
+    if not about.is_file():
         return None
-    return m.group(1)
+    try:
+        first = about.read_text(encoding="utf-8", errors="replace").splitlines()[:1]
+    except OSError:
+        return None
+    if not first:
+        return None
+    m = re.search(r"COMSOL\s+(\d+\.\d+(?:\.\d+)?)", first[0])
+    return m.group(1) if m else None
 
 
-def _has_comsol_binary(install_dir: Path) -> bool:
-    """Verify a candidate dir actually contains a comsol binary."""
-    candidates = [
+def _version_from_dir_name(install_dir: Path) -> str | None:
+    """Last-resort: parse the install dir name itself.
+
+    Examples this catches:
+        comsol62/multiphysics  → 6.2
+        COMSOL61/Multiphysics  → 6.1
+        comsol-7.0             → 7.0
+    """
+    for part in (install_dir.name, install_dir.parent.name):
+        m = re.search(r"comsol[-_]?(\d)(\d)", part, re.IGNORECASE)
+        if m:
+            return f"{m.group(1)}.{m.group(2)}"
+        m = re.search(r"comsol[-_](\d+\.\d+)", part, re.IGNORECASE)
+        if m:
+            return m.group(1)
+    return None
+
+
+_VERSION_PROBES: list[Callable[[Path], str | None]] = [
+    _version_from_readme,
+    _version_from_about_txt,
+    _version_from_dir_name,
+]
+"""Strategy chain. APPEND new probes for new COMSOL layouts; do not edit."""
+
+
+def _read_install_version(install_dir: Path) -> str | None:
+    for probe in _VERSION_PROBES:
+        try:
+            v = probe(install_dir)
+        except Exception:
+            v = None
+        if v:
+            return v
+    return None
+
+
+# ─── install-dir finders ──────────────────────────────────────────────────
+
+
+def _comsol_binary_paths(install_dir: Path) -> list[Path]:
+    """Where the comsol launcher binary is expected to live (per platform)."""
+    return [
         install_dir / "bin" / "win64" / "comsol.exe",
         install_dir / "bin" / "win64" / "comsolmphserver.exe",
         install_dir / "bin" / "comsol",
         install_dir / "bin" / "glnxa64" / "comsol",
+        install_dir / "bin" / "maci64" / "comsol",
     ]
-    return any(p.exists() for p in candidates)
+
+
+def _has_comsol_binary(install_dir: Path) -> bool:
+    return any(p.exists() for p in _comsol_binary_paths(install_dir))
+
+
+def _candidates_from_env() -> list[tuple[Path, str]]:
+    """COMSOL_ROOT env var — the canonical user-set signal."""
+    out: list[tuple[Path, str]] = []
+    root = os.environ.get("COMSOL_ROOT")
+    if root:
+        out.append((Path(root), "env:COMSOL_ROOT"))
+    return out
+
+
+def _candidates_from_windows_defaults() -> list[tuple[Path, str]]:
+    """Windows: C:\\Program Files\\COMSOL\\COMSOL{XX}\\Multiphysics\\ etc."""
+    bases = [
+        Path(r"C:\Program Files\COMSOL"),
+        Path(r"C:\Program Files (x86)\COMSOL"),
+        Path(r"C:\Program Files (x86)\COMSOL64\Multiphysics"),
+        Path(r"D:\Program Files\COMSOL"),
+        Path(r"D:\Program Files (x86)\COMSOL64\Multiphysics"),
+        Path(r"E:\Program Files (x86)\COMSOL64\Multiphysics"),
+    ]
+    out: list[tuple[Path, str]] = []
+    for base in bases:
+        if not base.is_dir():
+            continue
+        # Direct hit — base IS a Multiphysics dir
+        if _has_comsol_binary(base):
+            out.append((base, f"default-path:{base}"))
+            continue
+        # Otherwise scan one level: COMSOL{XX}/Multiphysics
+        for child in sorted(base.iterdir()):
+            mp = child / "Multiphysics"
+            if mp.is_dir():
+                out.append((mp, f"default-path:{base}"))
+            elif _has_comsol_binary(child):
+                out.append((child, f"default-path:{base}"))
+    return out
+
+
+def _candidates_from_linux_defaults() -> list[tuple[Path, str]]:
+    """Linux: /usr/local/comsol*/multiphysics, /opt/comsol*/multiphysics."""
+    bases = [Path("/usr/local"), Path("/opt"), Path("/usr/lib")]
+    out: list[tuple[Path, str]] = []
+    for base in bases:
+        if not base.is_dir():
+            continue
+        for child in sorted(base.iterdir()):
+            if "comsol" not in child.name.lower():
+                continue
+            mp = child / "multiphysics"
+            if mp.is_dir():
+                out.append((mp, f"default-path:{base}"))
+            elif _has_comsol_binary(child):
+                out.append((child, f"default-path:{base}"))
+    return out
+
+
+def _candidates_from_path() -> list[tuple[Path, str]]:
+    """`which comsol` — last-resort PATH probe."""
+    out: list[tuple[Path, str]] = []
+    comsol_bin = shutil.which("comsol")
+    if not comsol_bin:
+        return out
+    p = Path(comsol_bin).resolve()
+    for parent in p.parents:
+        if _has_comsol_binary(parent):
+            out.append((parent, "which:comsol"))
+            break
+    return out
+
+
+_INSTALL_DIR_FINDERS: list[Callable[[], list[tuple[Path, str]]]] = [
+    _candidates_from_env,
+    _candidates_from_windows_defaults,
+    _candidates_from_linux_defaults,
+    _candidates_from_path,
+]
+"""Strategy chain. APPEND new finders for new install layouts; do not edit."""
+
+
+# ─── core scan ────────────────────────────────────────────────────────────
 
 
 def _make_install(install_dir: Path, source: str) -> SolverInstall | None:
     if not install_dir.is_dir() or not _has_comsol_binary(install_dir):
         return None
-    raw_version = _read_version_from_readme(install_dir) or "?"
+    raw_version = _read_install_version(install_dir) or "?"
     short = ".".join(raw_version.split(".")[:2]) if raw_version != "?" else "?"
     return SolverInstall(
         name="comsol",
@@ -78,60 +223,24 @@ def _make_install(install_dir: Path, source: str) -> SolverInstall | None:
 
 
 def _scan_comsol_installs() -> list[SolverInstall]:
-    """Find every COMSOL installation on this host. Pure stdlib."""
+    """Find every COMSOL installation on this host. Pure stdlib.
+
+    Walks _INSTALL_DIR_FINDERS in order, dedupes by resolved path, then
+    extracts each install's version via _VERSION_PROBES. Both lists are
+    open for extension — see the comment block above.
+    """
     found: dict[str, SolverInstall] = {}
-
-    def _record(p: Path, source: str) -> None:
-        inst = _make_install(p, source=source)
-        if inst is None:
-            return
-        key = str(Path(inst.path).resolve())
-        found.setdefault(key, inst)
-
-    # 1) COMSOL_ROOT env var (canonical signal)
-    root = os.environ.get("COMSOL_ROOT")
-    if root:
-        _record(Path(root), source="env:COMSOL_ROOT")
-
-    # 2) Default install dirs
-    for base in _WINDOWS_DEFAULT_DIRS:
-        if not base.is_dir():
+    for finder in _INSTALL_DIR_FINDERS:
+        try:
+            candidates = finder()
+        except Exception:
             continue
-        # If `base` itself contains bin/win64/comsol.exe, it's already a Multiphysics dir.
-        if _has_comsol_binary(base):
-            _record(base, source=f"default-path:{base}")
-            continue
-        # Otherwise look for COMSOL{XX}/Multiphysics/ children.
-        for child in sorted(base.iterdir()):
-            mp = child / "Multiphysics"
-            if mp.is_dir():
-                _record(mp, source=f"default-path:{base}")
-            elif _has_comsol_binary(child):
-                _record(child, source=f"default-path:{base}")
-
-    for base in _LINUX_DEFAULT_DIRS:
-        if not base.is_dir():
-            continue
-        for child in sorted(base.iterdir()):
-            n = child.name.lower()
-            if "comsol" not in n:
+        for path, source in candidates:
+            inst = _make_install(path, source=source)
+            if inst is None:
                 continue
-            mp = child / "multiphysics"
-            if mp.is_dir():
-                _record(mp, source=f"default-path:{base}")
-            elif _has_comsol_binary(child):
-                _record(child, source=f"default-path:{base}")
-
-    # 3) PATH probe — last resort
-    comsol_bin = shutil.which("comsol")
-    if comsol_bin:
-        # comsol typically lives at <install>/bin/<arch>/comsol — walk up to install root
-        p = Path(comsol_bin).resolve()
-        for parent in p.parents:
-            if _has_comsol_binary(parent):
-                _record(parent, source="which:comsol")
-                break
-
+            key = str(Path(inst.path).resolve())
+            found.setdefault(key, inst)
     return sorted(found.values(), key=lambda i: i.version, reverse=True)
 
 
