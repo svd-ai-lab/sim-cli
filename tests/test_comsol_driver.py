@@ -50,10 +50,11 @@ class TestLint:
 
 class TestConnect:
     def test_connect_not_installed(self, monkeypatch):
-        monkeypatch.setattr(
-            "builtins.__import__",
-            _make_import_blocker("mph"),
-        )
+        # M1: connect() no longer imports mph; it reports based on
+        # _scan_comsol_installs(). Force the scan to return [] to simulate
+        # a host with no COMSOL install.
+        from sim.drivers.comsol import driver as comsol_driver_mod
+        monkeypatch.setattr(comsol_driver_mod, "_scan_comsol_installs", lambda: [])
         driver = ComsolDriver()
         info = driver.connect()
         assert info.status == "not_installed"

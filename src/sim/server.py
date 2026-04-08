@@ -24,10 +24,41 @@ from contextlib import redirect_stdout, redirect_stderr
 from dataclasses import dataclass, field
 from typing import Any
 
+import math
+
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-app = FastAPI(title="sim", version="0.1.0")
+
+def _sanitize_for_json(obj):
+    """Recursively replace NaN/+Inf/-Inf floats with None.
+
+    FastAPI's default JSONResponse encoder rejects out-of-range floats,
+    which crashes /exec and /inspect when a runner returns numeric results
+    that include NaN (e.g. an unsolved COMSOL evaluation). Replacing them
+    with None keeps the wire format strict-JSON-compliant without losing
+    the surrounding payload.
+    """
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+        return obj
+    if isinstance(obj, dict):
+        return {k: _sanitize_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_sanitize_for_json(v) for v in obj]
+    return obj
+
+
+class _NaNSafeJSONResponse(JSONResponse):
+    """JSONResponse subclass that sanitizes NaN/Inf before encoding."""
+
+    def render(self, content) -> bytes:
+        return super().render(_sanitize_for_json(content))
+
+
+app = FastAPI(title="sim", version="0.1.0", default_response_class=_NaNSafeJSONResponse)
 
 
 # ── Request models ───────────────────────────────────────────────────────────

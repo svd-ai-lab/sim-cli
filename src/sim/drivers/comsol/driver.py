@@ -1,44 +1,158 @@
 """COMSOL Multiphysics driver for sim.
 
-Phase 1: one-shot script execution via subprocess.
-Phase 2: persistent GUI sessions via JPype + COMSOL Java API.
+Architecture (M1):
+- detect_installed() scans the host for COMSOL installs
+- compatibility.yaml maps detected versions → profile envs with `mph` pinned
+- The actual COMSOL session lives in a runner subprocess
+  (sim._runners.comsol.mph_runner) inside the profile env
 
-The JPype bridge loads COMSOL's bundled JRE and plugin jars, then calls
-ModelUtil.initStandalone(true) for GUI or (false) for headless.
+This module is therefore SDK-free: it does NOT import `mph` or `jpype`
+at module load time, so `sim check comsol` works on a host without any
+Python COMSOL bindings installed.
 """
 from __future__ import annotations
 
 import ast
-import glob
-import io
 import json
 import os
 import re
 import shutil
-import time
-import traceback
-import uuid
-from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
-from sim.driver import ConnectionInfo, Diagnostic, LintResult
+from sim.driver import ConnectionInfo, Diagnostic, LintResult, SolverInstall
 
-# Default COMSOL install path (Windows)
-_DEFAULT_COMSOL_ROOT = r"C:\Program Files\COMSOL\COMSOL64\Multiphysics"
+
+# Default install paths probed in order. The driver dedupes by resolved path.
+_WINDOWS_DEFAULT_DIRS: tuple[Path, ...] = (
+    Path(r"C:\Program Files\COMSOL"),
+    Path(r"C:\Program Files (x86)\COMSOL64\Multiphysics"),
+    Path(r"E:\Program Files (x86)\COMSOL64\Multiphysics"),
+    Path(r"D:\Program Files\COMSOL"),
+)
+_LINUX_DEFAULT_DIRS: tuple[Path, ...] = (
+    Path("/usr/local"),
+    Path("/opt"),
+)
+
+
+def _read_version_from_readme(install_dir: Path) -> str | None:
+    """COMSOL ships a readme.txt whose first line is 'COMSOL X.Y.Z.BBB README'."""
+    readme = install_dir / "readme.txt"
+    if not readme.is_file():
+        return None
+    try:
+        first = readme.read_text(encoding="utf-8", errors="replace").splitlines()[:1]
+    except OSError:
+        return None
+    if not first:
+        return None
+    m = re.search(r"COMSOL\s+(\d+\.\d+(?:\.\d+(?:\.\d+)?)?)", first[0])
+    if not m:
+        return None
+    return m.group(1)
+
+
+def _has_comsol_binary(install_dir: Path) -> bool:
+    """Verify a candidate dir actually contains a comsol binary."""
+    candidates = [
+        install_dir / "bin" / "win64" / "comsol.exe",
+        install_dir / "bin" / "win64" / "comsolmphserver.exe",
+        install_dir / "bin" / "comsol",
+        install_dir / "bin" / "glnxa64" / "comsol",
+    ]
+    return any(p.exists() for p in candidates)
+
+
+def _make_install(install_dir: Path, source: str) -> SolverInstall | None:
+    if not install_dir.is_dir() or not _has_comsol_binary(install_dir):
+        return None
+    raw_version = _read_version_from_readme(install_dir) or "?"
+    short = ".".join(raw_version.split(".")[:2]) if raw_version != "?" else "?"
+    return SolverInstall(
+        name="comsol",
+        version=short,
+        path=str(install_dir),
+        source=source,
+        extra={"raw_version": raw_version},
+    )
+
+
+def _scan_comsol_installs() -> list[SolverInstall]:
+    """Find every COMSOL installation on this host. Pure stdlib."""
+    found: dict[str, SolverInstall] = {}
+
+    def _record(p: Path, source: str) -> None:
+        inst = _make_install(p, source=source)
+        if inst is None:
+            return
+        key = str(Path(inst.path).resolve())
+        found.setdefault(key, inst)
+
+    # 1) COMSOL_ROOT env var (canonical signal)
+    root = os.environ.get("COMSOL_ROOT")
+    if root:
+        _record(Path(root), source="env:COMSOL_ROOT")
+
+    # 2) Default install dirs
+    for base in _WINDOWS_DEFAULT_DIRS:
+        if not base.is_dir():
+            continue
+        # If `base` itself contains bin/win64/comsol.exe, it's already a Multiphysics dir.
+        if _has_comsol_binary(base):
+            _record(base, source=f"default-path:{base}")
+            continue
+        # Otherwise look for COMSOL{XX}/Multiphysics/ children.
+        for child in sorted(base.iterdir()):
+            mp = child / "Multiphysics"
+            if mp.is_dir():
+                _record(mp, source=f"default-path:{base}")
+            elif _has_comsol_binary(child):
+                _record(child, source=f"default-path:{base}")
+
+    for base in _LINUX_DEFAULT_DIRS:
+        if not base.is_dir():
+            continue
+        for child in sorted(base.iterdir()):
+            n = child.name.lower()
+            if "comsol" not in n:
+                continue
+            mp = child / "multiphysics"
+            if mp.is_dir():
+                _record(mp, source=f"default-path:{base}")
+            elif _has_comsol_binary(child):
+                _record(child, source=f"default-path:{base}")
+
+    # 3) PATH probe — last resort
+    comsol_bin = shutil.which("comsol")
+    if comsol_bin:
+        # comsol typically lives at <install>/bin/<arch>/comsol — walk up to install root
+        p = Path(comsol_bin).resolve()
+        for parent in p.parents:
+            if _has_comsol_binary(parent):
+                _record(parent, source="which:comsol")
+                break
+
+    return sorted(found.values(), key=lambda i: i.version, reverse=True)
 
 
 class ComsolDriver:
+    """Sim driver for COMSOL Multiphysics (via the `mph` Python binding).
+
+    DriverProtocol surface:
+        name, detect, lint, connect, parse_output, detect_installed
+    """
+
     @property
     def name(self) -> str:
         return "comsol"
 
     def detect(self, script: Path) -> bool:
-        """Check if script imports mph (Python COMSOL interface)."""
+        """Detect COMSOL/MPh scripts via `import mph`."""
         text = script.read_text()
         return bool(re.search(r"^\s*(import mph|from mph\b)", text, re.MULTILINE))
 
     def lint(self, script: Path) -> LintResult:
-        """Validate a COMSOL/MPh script."""
+        """Validate a COMSOL/MPh script (syntax + import + Client/start hint)."""
         text = script.read_text()
         diagnostics: list[Diagnostic] = []
 
@@ -68,14 +182,12 @@ class ComsolDriver:
         if has_import:
             try:
                 tree = ast.parse(text)
-                # Check for Client() call — needed to connect to COMSOL server
                 has_client = any(
                     isinstance(node, ast.Call)
                     and isinstance(node.func, ast.Attribute)
                     and node.func.attr == "Client"
                     for node in ast.walk(tree)
                 )
-                # Also check for mph.start() which is the convenience launcher
                 has_start = any(
                     isinstance(node, ast.Call)
                     and isinstance(node.func, ast.Attribute)
@@ -97,51 +209,46 @@ class ComsolDriver:
         return LintResult(ok=ok, diagnostics=diagnostics)
 
     def connect(self) -> ConnectionInfo:
-        """Check if mph is importable and COMSOL is available."""
-        try:
-            import mph
+        """Lightweight availability check.
 
-            version = mph.__version__
-        except ImportError:
+        We avoid importing `mph` from the core process (it pulls in JPype +
+        the JVM). Instead we report whichever installs detect_installed()
+        finds and let `sim env install <profile>` handle the SDK side.
+        """
+        installs = _scan_comsol_installs()
+        if not installs:
             return ConnectionInfo(
                 solver="comsol",
                 version=None,
                 status="not_installed",
-                message="mph is not installed in the current environment",
+                message="No COMSOL installation detected on this host",
             )
-
-        # Check if COMSOL executable is on PATH or discoverable by mph
-        comsol_bin = shutil.which("comsol")
-        if comsol_bin:
-            return ConnectionInfo(
-                solver="comsol",
-                version=version,
-                status="ok",
-                message=f"mph {version} available, COMSOL found at {comsol_bin}",
-            )
-
-        # mph can still discover COMSOL via its own logic
-        try:
-            backends = mph.discovery.backend()
-            if backends:
-                return ConnectionInfo(
-                    solver="comsol",
-                    version=version,
-                    status="ok",
-                    message=f"mph {version} available, COMSOL discovered by mph",
-                )
-        except Exception:
-            pass
-
+        top = installs[0]
         return ConnectionInfo(
             solver="comsol",
-            version=version,
-            status="not_installed",
-            message=f"mph {version} installed but COMSOL not found on this machine",
+            version=top.extra.get("raw_version", top.version),
+            status="ok",
+            message=f"COMSOL {top.version} at {top.path}",
+            solver_version=top.version,
         )
 
+    def detect_installed(self) -> list[SolverInstall]:
+        """Enumerate every COMSOL installation visible on this host.
+
+        Strategy (in priority order; deduped by resolved install path):
+          1. COMSOL_ROOT env var
+          2. Default install dirs under C:\\Program Files\\COMSOL\\COMSOL{XX}\\,
+             C:\\Program Files (x86)\\COMSOL64\\, /usr/local/comsol*, /opt/comsol*
+          3. PATH probe via `which comsol`
+
+        Pure Python. Does NOT import mph/jpype. Returns [] when nothing
+        is found. Version is read from readme.txt's first line and
+        normalized to "X.Y" form.
+        """
+        return _scan_comsol_installs()
+
     def parse_output(self, stdout: str) -> dict:
-        """Parse structured JSON output from a COMSOL/MPh script."""
+        """Extract last JSON object from stdout (driver convention)."""
         for line in reversed(stdout.strip().splitlines()):
             line = line.strip()
             if line.startswith("{"):
@@ -150,214 +257,3 @@ class ComsolDriver:
                 except json.JSONDecodeError:
                     continue
         return {}
-
-    # ── Phase 2: Persistent session via JPype ───────────────────────────────────
-
-    def __init__(self):
-        self._jvm_started = False
-        self._model_util = None  # com.comsol.model.util.ModelUtil
-        self._model = None       # active COMSOL model
-        self._session_id: str | None = None
-        self._ui_mode: str | None = None
-        self._connected_at: float | None = None
-        self._run_count: int = 0
-        self._last_run: dict | None = None
-        self._server_proc = None  # comsolmphserver subprocess
-        self._client_proc = None  # comsolmphclient subprocess (GUI)
-        self._port: int = 2036
-
-    def _start_jvm(self, comsol_root: str | None = None) -> None:
-        """Start JVM with COMSOL jars on the classpath."""
-        if self._jvm_started:
-            return
-
-        import jpype
-        import jpype.imports
-
-        root = comsol_root or os.environ.get("COMSOL_ROOT", _DEFAULT_COMSOL_ROOT)
-        jre_path = os.path.join(root, "java", "win64", "jre")
-        plugins_dir = os.path.join(root, "plugins")
-        lib_dir = os.path.join(root, "lib", "win64")
-
-        jars = glob.glob(os.path.join(plugins_dir, "*.jar"))
-        if not jars:
-            raise RuntimeError(f"No COMSOL jars found in {plugins_dir}")
-
-        classpath = os.pathsep.join(jars)
-        jvm_dll = os.path.join(jre_path, "bin", "server", "jvm.dll")
-
-        if not os.path.isfile(jvm_dll):
-            raise RuntimeError(f"JVM not found at {jvm_dll}")
-
-        jpype.startJVM(
-            jvm_dll,
-            f"-Djava.class.path={classpath}",
-            f"-Dcs.root={root}",
-            f"-Djava.library.path={lib_dir}",
-            convertStrings=True,
-        )
-        self._jvm_started = True
-
-    def _wait_for_port(self, port: int, timeout: float = 60) -> bool:
-        """Wait until a TCP port is accepting connections."""
-        import socket
-        deadline = time.time() + timeout
-        while time.time() < deadline:
-            try:
-                with socket.create_connection(("127.0.0.1", port), timeout=2):
-                    return True
-            except OSError:
-                time.sleep(2)
-        return False
-
-    def launch(self, ui_mode: str = "gui", comsol_root: str | None = None,
-               user: str | None = None, password: str | None = None) -> dict:
-        """Launch COMSOL server + optional GUI client, connect via JPype.
-
-        1. Starts comsolmphserver.exe (headless compute backend)
-        2. Waits for it to listen on the port
-        3. Connects via ModelUtil.connect() from JPype
-        4. If ui_mode='gui', also launches comsolmphclient.exe (visual GUI)
-        """
-        import subprocess
-
-        root = comsol_root or os.environ.get("COMSOL_ROOT", _DEFAULT_COMSOL_ROOT)
-        user = user or os.environ.get("COMSOL_USER", "")
-        password = password or os.environ.get("COMSOL_PASSWORD", "")
-        bin_dir = os.path.join(root, "bin", "win64")
-        server_exe = os.path.join(bin_dir, "comsolmphserver.exe")
-        client_exe = os.path.join(bin_dir, "comsolmphclient.exe")
-
-        if not os.path.isfile(server_exe):
-            raise RuntimeError(f"comsolmphserver not found at {server_exe}")
-
-        # Step 1: Launch COMSOL server
-        # -multi on: keep models in memory, allow multiple clients
-        # -login auto: use stored credentials, don't prompt
-        # -silent: don't listen to stdin
-        # -graphics: enable graphics (needed for plot/image export)
-        # -3drend sw: software rendering (no GPU needed)
-        self._server_proc = subprocess.Popen(
-            [server_exe, "-port", str(self._port), "-multi", "on",
-             "-login", "auto", "-silent", "-graphics", "-3drend", "sw"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-
-        # Step 2: Wait for server to start listening
-        if not self._wait_for_port(self._port, timeout=90):
-            self._server_proc.kill()
-            self._server_proc = None
-            raise RuntimeError(
-                f"comsolmphserver did not start listening on port {self._port} "
-                "within 90s — check COMSOL license"
-            )
-
-        # Step 3: Connect via JPype
-        self._start_jvm(root)
-        from com.comsol.model.util import ModelUtil  # type: ignore
-
-        if user and password:
-            ModelUtil.connect("localhost", self._port, user, password)
-        else:
-            ModelUtil.connect("localhost", self._port)
-
-        # Handle concurrent access: wait up to 30s if server is busy
-        from com.comsol.model.util import ServerBusyHandler  # type: ignore
-        ModelUtil.setServerBusyHandler(ServerBusyHandler(30000))
-        self._model_util = ModelUtil
-        self._model = ModelUtil.create("Model1")
-
-        # Step 4: Launch GUI client if requested
-        if ui_mode in ("gui", "desktop") and os.path.isfile(client_exe):
-            self._client_proc = subprocess.Popen(
-                [client_exe, "-port", str(self._port)],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-
-        self._session_id = str(uuid.uuid4())
-        self._ui_mode = ui_mode
-        self._connected_at = time.time()
-        self._run_count = 0
-        self._last_run = None
-
-        return {
-            "ok": True,
-            "session_id": self._session_id,
-            "mode": "client-server",
-            "source": "launch",
-            "ui_mode": ui_mode,
-            "port": self._port,
-            "model_tag": str(self._model.tag()),
-        }
-
-    def run(self, code: str, label: str = "comsol-snippet") -> dict:
-        """Execute a Python snippet with `model` and `ModelUtil` in scope."""
-        if self._model is None:
-            raise RuntimeError("No active COMSOL session — call launch() first")
-
-        namespace: dict = {
-            "model": self._model,
-            "ModelUtil": self._model_util,
-            "_result": None,
-        }
-
-        stdout_buf = io.StringIO()
-        stderr_buf = io.StringIO()
-        error: str | None = None
-        ok = True
-        started_at = time.time()
-
-        try:
-            with redirect_stdout(stdout_buf), redirect_stderr(stderr_buf):
-                exec(code, namespace)  # noqa: S102
-        except Exception:
-            ok = False
-            error = traceback.format_exc()
-
-        elapsed = round(time.time() - started_at, 4)
-        self._run_count += 1
-
-        # Update model reference in case snippet loaded a new model
-        if namespace.get("model") is not self._model and namespace.get("model") is not None:
-            self._model = namespace["model"]
-
-        record = {
-            "run_id": str(uuid.uuid4()),
-            "ok": ok,
-            "label": label,
-            "stdout": stdout_buf.getvalue(),
-            "stderr": stderr_buf.getvalue(),
-            "error": error,
-            "result": namespace.get("_result"),
-            "elapsed_s": elapsed,
-        }
-        self._last_run = record
-        return record
-
-    def disconnect(self) -> None:
-        """Disconnect from COMSOL server and kill subprocesses."""
-        if self._model_util is not None:
-            try:
-                self._model_util.disconnect()
-            except Exception:
-                pass
-        if self._client_proc is not None:
-            try:
-                self._client_proc.kill()
-            except Exception:
-                pass
-            self._client_proc = None
-        if self._server_proc is not None:
-            try:
-                self._server_proc.kill()
-            except Exception:
-                pass
-            self._server_proc = None
-        self._model = None
-        self._model_util = None
-        self._session_id = None
-        self._connected_at = None
-        self._run_count = 0
-        self._last_run = None
