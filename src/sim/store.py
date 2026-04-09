@@ -30,7 +30,7 @@ class RunStore:
             return []
         runs = []
         for f in sorted(self.runs_dir.glob("*.json")):
-            data = json.loads(f.read_text())
+            data = json.loads(f.read_text(encoding="utf-8"))
             data["id"] = f.stem
             runs.append(data)
         return runs
@@ -45,7 +45,7 @@ class RunStore:
         path = self.runs_dir / f"{run_id}.json"
         if not path.exists():
             raise FileNotFoundError(f"Run {run_id} not found")
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding="utf-8"))
         data["id"] = run_id
         return data
 

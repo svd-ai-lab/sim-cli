@@ -30,5 +30,9 @@ Thumbs.db
 tests/execution/logs/
 *.log
 
+# Solver run artifacts at repo root (Fluent trace files, ad-hoc screenshots)
+/*.trn
+/*.png
+
 # Local Claude Code skills (project-private, do not publish)
 .claude/

@@ -1,137 +1,83 @@
 """Loader for per-driver `compatibility.yaml` files.
 
-Each driver ships a `compatibility.yaml` next to its `driver.py`. This module
-parses that file into typed dataclasses and exposes the resolution rules
-defined in `docs/architecture/version-compat.md`.
+Each driver ships a `compatibility.yaml` next to its `driver.py`. This
+module parses that file into a small typed surface (`Profile`,
+`Compatibility`) and answers three questions:
 
-The loader is intentionally pure-Python and dependency-light:
-- requires only `pyyaml` and `packaging`
-- never imports the SDK (we may run before any SDK is installed)
-- safe to call repeatedly (results are cached per file path)
+  1. Given a detected solver version, which profile applies?
+  2. What profiles does sim-cli know about across all drivers?
+  3. For a given profile, which sim-skills overlay layers are active?
+
+It is intentionally a **metadata catalogue**, not a runtime. sim-cli
+runs every driver in its own process — compat.yaml exists so the CLI
+can tell users "your Fluent 25R2 is supported via the
+pyfluent_0_38_modern profile" and so the skills layer can resolve a
+profile to its (sdk, solver) overlay paths under sim-skills/.
 
 Public surface:
     load_compatibility(driver_dir)              -> Compatibility
-    Compatibility.resolve(solver_version)       -> ResolutionResult
+    Compatibility.resolve(solver_version)       -> Profile | None
     Compatibility.profile_by_name(name)         -> Profile | None
-    Compatibility.profile_for_sdk(sdk_version)  -> Profile | None
+    find_profile(name)                          -> (driver, Profile) | None
+    all_known_profiles()                        -> list[(driver, Profile)]
+    safe_detect_installed(driver)               -> list
+
+Skills layering surface:
+    find_skills_root()                          -> Path | None
+    verify_skills_layout(root, profiles=None)   -> list[str]
+    skills_block_for_profile(driver, profile)   -> dict
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import os
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
+from typing import Iterable
 
 import yaml
-from packaging.specifiers import InvalidSpecifier, SpecifierSet
-from packaging.version import InvalidVersion, Version
-
-
-# ── data model ──────────────────────────────────────────────────────────────
 
 
 @dataclass(frozen=True)
 class Profile:
-    """A named (SDK range, solver version list) tuple from compatibility.yaml.
+    """A named (SDK pin, solver version list) tuple from compatibility.yaml.
 
-    ``sdk`` is optional: solvers like OpenFOAM have no Python SDK to pin
-    (the solver IS its own scripting environment). When ``sdk`` is None,
-    ``sim env install`` skips the SDK install step and only puts sim-cli
-    into the profile env.
+    `sdk` is optional: solvers like OpenFOAM have no Python SDK to pin.
 
-    ``extra`` is a catch-all for yaml fields the loader does not recognize.
-    Drivers and runners can stash arbitrary per-profile metadata here
-    (e.g. ``runner_variant: mph_2``, ``backend_hint: linux64GccDPInt32Opt``,
-    ``license_server: 1718@licsrv``) without changing the schema or the
-    loader. The runner reads these via ``find_profile()`` at startup. This
-    is the primary mechanism for extending compatibility.yaml with new
-    knobs without sim-cli core changes — see docs/architecture/version-compat.md
-    §11 for the convention.
+    `active_sdk_layer` and `active_solver_layer` declare which sub-folders
+    under `<sim-skills>/<driver>/sdk/` and `<sim-skills>/<driver>/solver/`
+    apply to this profile. Both are optional — SDK-less drivers leave
+    `active_sdk_layer` unset, drivers with no version-sensitive solver
+    content leave `active_solver_layer` unset. The `base/` overlay is
+    always active and needs no field.
     """
     name: str
     solver_versions: tuple[str, ...]
-    skill_revision: str
-    runner_module: str | None = None      # None = "metadata-only" profile
-    sdk: str | None = None                # PEP 440 specifier, e.g. ">=0.38,<0.39"
-    extras_alias: str | None = None
+    sdk: str | None = None
     notes: str = ""
-    extra: dict = field(default_factory=dict)
-
-    @property
-    def is_metadata_only(self) -> bool:
-        """True if this profile has no runner and no SDK to install.
-
-        Some drivers (flotherm, ansa) live entirely in their PATH-installed
-        binaries with no Python wrapper. Their compatibility.yaml exists
-        only to declare version support + skill_revision; there is nothing
-        for ``sim env install`` to bootstrap and no runner subprocess to
-        spawn. Server falls through to the legacy inline driver path for
-        these profiles.
-        """
-        return self.runner_module is None and self.sdk is None
+    active_sdk_layer: str | None = None
+    active_solver_layer: str | None = None
 
     def matches_solver(self, solver_version: str) -> bool:
-        """True if this profile lists the given solver version."""
-        # Solver versions are matched as strings, not PEP 440 — vendor versioning
-        # is messy (e.g. Fluent reports "25.2.0", users say "25R2"). The yaml
-        # author writes the canonical short form ("25.2") and the loader's
-        # normalize() helper coerces detected versions before comparison.
         return _normalize_solver_version(solver_version) in self.solver_versions
-
-    def matches_sdk(self, sdk_version: str) -> bool:
-        """True if this profile's SDK specifier accepts the given SDK version.
-
-        Returns False for SDK-less profiles (sdk is None) — those profiles
-        are matched only by solver_versions.
-        """
-        if self.sdk is None:
-            return False
-        try:
-            spec = SpecifierSet(self.sdk)
-            return Version(sdk_version) in spec
-        except (InvalidSpecifier, InvalidVersion):
-            return False
 
     def to_dict(self) -> dict:
         return {
             "name": self.name,
             "sdk": self.sdk,
             "solver_versions": list(self.solver_versions),
-            "skill_revision": self.skill_revision,
-            "runner_module": self.runner_module,
-            "extras_alias": self.extras_alias,
             "notes": self.notes.strip(),
-            "extra": dict(self.extra),
-        }
-
-
-@dataclass(frozen=True)
-class DeprecatedProfile:
-    name: str
-    reason: str
-    last_supported_in_sim_cli: str
-    migrate_to: str | None = None
-
-    def to_dict(self) -> dict:
-        return {
-            "profile": self.name,
-            "reason": self.reason,
-            "last_supported_in_sim_cli": self.last_supported_in_sim_cli,
-            "migrate_to": self.migrate_to,
+            "active_sdk_layer": self.active_sdk_layer,
+            "active_solver_layer": self.active_solver_layer,
         }
 
 
 @dataclass(frozen=True)
 class Compatibility:
-    """Parsed compatibility.yaml for one driver.
-
-    ``sdk_package`` is optional: solvers without a Python binding (e.g.
-    OpenFOAM) leave it None and ``sim env install`` skips the SDK install
-    step entirely.
-    """
+    """Parsed compatibility.yaml for one driver."""
     driver: str
     profiles: tuple[Profile, ...]
     sdk_package: str | None = None
-    deprecated: tuple[DeprecatedProfile, ...] = field(default_factory=tuple)
 
     def profile_by_name(self, name: str) -> Profile | None:
         for p in self.profiles:
@@ -139,72 +85,17 @@ class Compatibility:
                 return p
         return None
 
-    def profile_for_sdk(self, sdk_version: str) -> Profile | None:
-        """First profile whose SDK specifier accepts the given installed SDK."""
-        for p in self.profiles:
-            if p.matches_sdk(sdk_version):
-                return p
-        return None
+    def resolve(self, solver_version: str) -> Profile | None:
+        """Return the first profile whose solver_versions contains V.
 
-    def resolve(self, solver_version: str) -> ResolutionResult:
-        """Pick the preferred profile for a detected solver version.
-
-        Resolution rules (from docs/architecture/version-compat.md §6.2):
-          1. Walk profiles in declaration order.
-          2. The first profile whose solver_versions contains V is the
-             preferred match.
-          3. If multiple profiles list the same V, the first wins; the
-             others are returned as `also_matching` so the caller can
-             surface them with --profile override hints.
-          4. If no profile matches, return `unsupported` with the
-             deprecated table for hints.
+        Profiles are walked in declaration order; if multiple match, the
+        first wins. Returns None when no profile matches.
         """
         normalized = _normalize_solver_version(solver_version)
-        matches = [p for p in self.profiles if normalized in p.solver_versions]
-        if matches:
-            return ResolutionResult(
-                solver_version=normalized,
-                preferred=matches[0],
-                also_matching=tuple(matches[1:]),
-                deprecated_hits=(),
-                status="ok",
-            )
-
-        deprecated_hits = tuple(
-            d for d in self.deprecated if d.name  # placeholder for future per-version dep info
-        )
-        return ResolutionResult(
-            solver_version=normalized,
-            preferred=None,
-            also_matching=(),
-            deprecated_hits=deprecated_hits,
-            status="unsupported",
-        )
-
-
-@dataclass(frozen=True)
-class ResolutionResult:
-    solver_version: str
-    preferred: Profile | None
-    also_matching: tuple[Profile, ...]
-    deprecated_hits: tuple[DeprecatedProfile, ...]
-    status: str  # "ok" or "unsupported"
-
-    @property
-    def ok(self) -> bool:
-        return self.status == "ok"
-
-    def to_dict(self) -> dict:
-        return {
-            "solver_version": self.solver_version,
-            "status": self.status,
-            "preferred": self.preferred.to_dict() if self.preferred else None,
-            "also_matching": [p.to_dict() for p in self.also_matching],
-            "deprecated_hits": [d.to_dict() for d in self.deprecated_hits],
-        }
-
-
-# ── loader ──────────────────────────────────────────────────────────────────
+        for p in self.profiles:
+            if normalized in p.solver_versions:
+                return p
+        return None
 
 
 def _normalize_solver_version(v: str) -> str:
@@ -223,19 +114,16 @@ def _normalize_solver_version(v: str) -> str:
     if not s:
         return ""
 
-    # "v252" or "252" form (Ansys release codes)
     digits = "".join(ch for ch in s if ch.isdigit())
     if len(digits) == 3 and ("v" + digits in s.lower() or s == digits):
         return f"{digits[:2]}.{digits[2]}"
 
-    # "2025 R2" / "2025R2" form
     s_compact = s.replace(" ", "").lower()
     if "r" in s_compact:
         year_part, _, rel_part = s_compact.partition("r")
         if year_part.isdigit() and rel_part.isdigit() and len(year_part) == 4:
             return f"{year_part[2:]}.{rel_part}"
 
-    # "25.2.0" -> "25.2"
     parts = s.split(".")
     if len(parts) >= 2 and parts[0].isdigit() and parts[1].isdigit():
         return f"{parts[0]}.{parts[1]}"
@@ -244,12 +132,7 @@ def _normalize_solver_version(v: str) -> str:
 
 
 def find_profile(profile_name: str) -> tuple[str, "Profile"] | None:
-    """Walk every driver under sim/drivers/ to find a profile by name.
-
-    Returns (driver_name, profile) on hit, None on miss. Used by
-    `sim env install <profile>` to figure out which driver the profile
-    belongs to without making the user spell out --solver.
-    """
+    """Walk every driver under sim/drivers/ to find a profile by name."""
     drivers_root = Path(__file__).parent / "drivers"
     if not drivers_root.is_dir():
         return None
@@ -268,10 +151,7 @@ def find_profile(profile_name: str) -> tuple[str, "Profile"] | None:
 
 
 def all_known_profiles() -> list[tuple[str, "Profile"]]:
-    """Enumerate every profile across every driver that has a compatibility.yaml.
-
-    Used by `sim env list` to compare bootstrapped envs against the catalogue.
-    """
+    """Enumerate every profile across every driver that has a compatibility.yaml."""
     out: list[tuple[str, Profile]] = []
     drivers_root = Path(__file__).parent / "drivers"
     if not drivers_root.is_dir():
@@ -289,43 +169,8 @@ def all_known_profiles() -> list[tuple[str, "Profile"]]:
     return out
 
 
-def resolve_profile_for_driver(driver) -> "tuple[Profile, dict] | None":
-    """Detect → resolve → return the winning (profile, install_dict).
-
-    Strategy: take the highest-version install reported by detect_installed()
-    that maps to a known profile. Returns None if either nothing is detected
-    or no detected install resolves to a current profile.
-
-    Used by server `/connect` to figure out which profile env to spawn the
-    runner from when the CLI did not pass an explicit profile name.
-    """
-    installs = safe_detect_installed(driver)
-    if not installs:
-        return None
-    # Sort highest version first (string sort works because we normalize)
-    installs = sorted(installs, key=lambda i: i.version, reverse=True)
-
-    driver_dir = Path(__file__).parent / "drivers" / driver.name
-    try:
-        compat = load_compatibility(driver_dir)
-    except FileNotFoundError:
-        return None
-
-    for inst in installs:
-        r = compat.resolve(inst.version)
-        if r.preferred:
-            return (r.preferred, inst.to_dict())
-    return None
-
-
 def safe_detect_installed(driver) -> list:
-    """Call driver.detect_installed() defensively.
-
-    Drivers that have not yet implemented the new protocol method return
-    an empty list instead of crashing the caller. Any exception inside the
-    detector also degrades to []. This keeps `sim check` resilient as we
-    migrate drivers one at a time.
-    """
+    """Call driver.detect_installed() defensively."""
     method = getattr(driver, "detect_installed", None)
     if method is None:
         return []
@@ -338,15 +183,7 @@ def safe_detect_installed(driver) -> list:
 
 @lru_cache(maxsize=64)
 def load_compatibility(driver_dir: str | Path) -> Compatibility:
-    """Load and cache the compatibility.yaml for one driver directory.
-
-    Args:
-        driver_dir: filesystem path to e.g. `src/sim/drivers/fluent/`.
-
-    Raises:
-        FileNotFoundError if compatibility.yaml does not exist.
-        ValueError if the file is malformed.
-    """
+    """Load and cache the compatibility.yaml for one driver directory."""
     path = Path(driver_dir) / "compatibility.yaml"
     if not path.is_file():
         raise FileNotFoundError(
@@ -363,34 +200,23 @@ def load_compatibility(driver_dir: str | Path) -> Compatibility:
     except KeyError as e:
         raise ValueError(f"{path} missing required field: {e}") from e
 
-    sdk_package = raw.get("sdk_package")  # optional — None for SDK-less drivers
-
-    # Reserved yaml keys that map to dedicated Profile fields. Anything
-    # else gets stashed into Profile.extra so future yaml authors can add
-    # custom knobs without touching the loader.
-    _RESERVED = {
-        "name", "sdk", "solver_versions", "skill_revision",
-        "runner_module", "extras_alias", "notes",
-    }
+    sdk_package = raw.get("sdk_package")
 
     profiles: list[Profile] = []
     for i, p in enumerate(raw_profiles):
         if not isinstance(p, dict):
             raise ValueError(f"{path} profile #{i} must be a mapping, not {type(p).__name__}")
         try:
-            extra = {k: v for k, v in p.items() if k not in _RESERVED}
             profiles.append(
                 Profile(
                     name=p["name"],
-                    sdk=p.get("sdk"),  # optional
+                    sdk=p.get("sdk"),
                     solver_versions=tuple(
                         _normalize_solver_version(v) for v in p["solver_versions"]
                     ),
-                    skill_revision=p["skill_revision"],
-                    runner_module=p.get("runner_module"),  # optional
-                    extras_alias=p.get("extras_alias"),
                     notes=p.get("notes", "") or "",
-                    extra=extra,
+                    active_sdk_layer=p.get("active_sdk_layer"),
+                    active_solver_layer=p.get("active_solver_layer"),
                 )
             )
         except KeyError as e:
@@ -398,20 +224,125 @@ def load_compatibility(driver_dir: str | Path) -> Compatibility:
                 f"{path} profile #{i} missing required field: {e}"
             ) from e
 
-    deprecated: list[DeprecatedProfile] = []
-    for d in raw.get("deprecated") or []:
-        deprecated.append(
-            DeprecatedProfile(
-                name=d.get("profile", "?"),
-                reason=d.get("reason", ""),
-                last_supported_in_sim_cli=str(d.get("last_supported_in_sim_cli", "")),
-                migrate_to=d.get("migrate_to"),
-            )
-        )
-
     return Compatibility(
         driver=driver,
         sdk_package=sdk_package,
         profiles=tuple(profiles),
-        deprecated=tuple(deprecated),
     )
+
+
+# ── Skills layering ─────────────────────────────────────────────────────────
+
+
+_SKILLS_HINT = (
+    "set SIM_SKILLS_ROOT or place sim-skills/ next to sim-cli/"
+)
+
+
+def find_skills_root() -> Path | None:
+    """Locate the sim-skills root.
+
+    Probe order:
+      1. ``SIM_SKILLS_ROOT`` env var (authoritative when set)
+      2. ``../sim-skills`` sibling of the sim-cli checkout
+
+    Returns None when neither succeeds. The function never raises —
+    callers degrade gracefully by returning a hint to the user.
+    """
+    raw = os.environ.get("SIM_SKILLS_ROOT")
+    if raw:
+        p = Path(raw)
+        return p.resolve() if p.is_dir() else None
+
+    # this file lives at <sim-cli>/src/sim/compat.py
+    sibling = Path(__file__).resolve().parents[2].parent / "sim-skills"
+    return sibling.resolve() if sibling.is_dir() else None
+
+
+def verify_skills_layout(
+    skills_root: Path,
+    profiles: Iterable[tuple[str, "Profile"]] | None = None,
+) -> list[str]:
+    """For every (driver, profile), verify the on-disk skills tree.
+
+    Checks per driver:
+      - ``<skills_root>/<driver>/SKILL.md`` exists
+      - ``<skills_root>/<driver>/base/`` exists
+
+    Checks per profile (only when the field is set):
+      - ``<skills_root>/<driver>/sdk/<active_sdk_layer>/`` exists
+      - ``<skills_root>/<driver>/solver/<active_solver_layer>/`` exists
+
+    Returns a list of human-readable mismatch lines. Empty list = healthy.
+    Pass `profiles=None` to walk every profile in every driver compat.yaml.
+    """
+    if profiles is None:
+        profiles = all_known_profiles()
+
+    mismatches: list[str] = []
+    seen_drivers: set[str] = set()
+
+    for driver_name, profile in profiles:
+        driver_dir = skills_root / driver_name
+
+        if driver_name not in seen_drivers:
+            seen_drivers.add(driver_name)
+            if not driver_dir.is_dir():
+                mismatches.append(
+                    f"{driver_name}: missing driver dir {driver_dir}"
+                )
+                continue
+            if not (driver_dir / "SKILL.md").is_file():
+                mismatches.append(
+                    f"{driver_name}: missing SKILL.md index at {driver_dir / 'SKILL.md'}"
+                )
+            if not (driver_dir / "base").is_dir():
+                mismatches.append(
+                    f"{driver_name}: missing base/ overlay at {driver_dir / 'base'}"
+                )
+
+        if profile.active_sdk_layer:
+            sdk_dir = driver_dir / "sdk" / profile.active_sdk_layer
+            if not sdk_dir.is_dir():
+                mismatches.append(
+                    f"{driver_name}/{profile.name}: missing sdk/{profile.active_sdk_layer}/ overlay"
+                )
+        if profile.active_solver_layer:
+            solver_dir = driver_dir / "solver" / profile.active_solver_layer
+            if not solver_dir.is_dir():
+                mismatches.append(
+                    f"{driver_name}/{profile.name}: missing solver/{profile.active_solver_layer}/ overlay"
+                )
+
+    return mismatches
+
+
+def skills_block_for_profile(driver: str, profile: "Profile | None") -> dict:
+    """Build the ``skills`` dict that ``/connect`` returns to the agent.
+
+    Always returns a dict with the four keys ``root``, ``index``,
+    ``active_sdk_layer``, ``active_solver_layer``. When the skills tree
+    can't be located, returns ``{root: None, index: None, ..., hint: str}``
+    so the LLM can produce a useful error message.
+    """
+    active_sdk = profile.active_sdk_layer if profile is not None else None
+    active_solver = profile.active_solver_layer if profile is not None else None
+
+    root = find_skills_root()
+    driver_dir = (root / driver) if root is not None else None
+
+    if driver_dir is None or not driver_dir.is_dir():
+        return {
+            "root": None,
+            "index": None,
+            "active_sdk_layer": active_sdk,
+            "active_solver_layer": active_solver,
+            "hint": _SKILLS_HINT,
+        }
+
+    return {
+        "root": str(driver_dir),
+        "index": str(driver_dir / "SKILL.md"),
+        "active_sdk_layer": active_sdk,
+        "active_solver_layer": active_solver,
+    }

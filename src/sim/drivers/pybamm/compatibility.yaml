@@ -2,9 +2,7 @@
 #
 # PyBaMM is a pure Python battery simulation library — no separate solver
 # binary, no JVM, no native bindings beyond what its own deps pull. The
-# "solver version" IS the pybamm package version. Profiles pin pybamm to
-# a major.minor range so different battery model APIs (which have
-# occasionally broken across minor releases) get isolated envs.
+# "solver version" IS the pybamm package version.
 #
 # Detection inputs (see driver.py detect_installed):
 #   - importing `pybamm` from the current python (cheap, definitive)
@@ -20,19 +18,13 @@ profiles:
   - name: pybamm_24_x
     sdk: ">=24.0,<25.0"
     solver_versions: ["24"]
-    skill_revision: v1
-    runner_module: sim._runners.pybamm.runner
-    extras_alias: pybamm-24
+    active_sdk_layer: "24"
     notes: |
       PyBaMM 24.x line. Stable Battery_DFN / SPMe / SPM API.
 
   - name: pybamm_25_x
     sdk: ">=25.0,<26.0"
     solver_versions: ["25"]
-    skill_revision: v1
-    runner_module: sim._runners.pybamm.runner
-    extras_alias: pybamm-25
+    active_sdk_layer: "25"
     notes: |
       PyBaMM 25.x line. Latest tested.
-
-deprecated: []
