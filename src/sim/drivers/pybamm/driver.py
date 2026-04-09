@@ -56,12 +56,12 @@ class PyBaMMLDriver:
 
     def detect(self, script: Path) -> bool:
         """Check if script imports pybamm."""
-        text = script.read_text()
+        text = script.read_text(encoding="utf-8")
         return bool(re.search(r"^\s*(import pybamm|from pybamm\b)", text, re.MULTILINE))
 
     def lint(self, script: Path) -> LintResult:
         """Validate a PyBaMM script."""
-        text = script.read_text()
+        text = script.read_text(encoding="utf-8")
         diagnostics: list[Diagnostic] = []
 
         has_import = bool(

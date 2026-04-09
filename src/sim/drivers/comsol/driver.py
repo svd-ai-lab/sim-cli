@@ -257,12 +257,12 @@ class ComsolDriver:
 
     def detect(self, script: Path) -> bool:
         """Detect COMSOL/MPh scripts via `import mph`."""
-        text = script.read_text()
+        text = script.read_text(encoding="utf-8")
         return bool(re.search(r"^\s*(import mph|from mph\b)", text, re.MULTILINE))
 
     def lint(self, script: Path) -> LintResult:
         """Validate a COMSOL/MPh script (syntax + import + Client/start hint)."""
-        text = script.read_text()
+        text = script.read_text(encoding="utf-8")
         diagnostics: list[Diagnostic] = []
 
         has_import = bool(

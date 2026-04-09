@@ -160,7 +160,7 @@ class PyFluentDriver:
 
     def detect(self, script: Path) -> bool:
         """Return True if the script imports ansys.fluent or pyfluent."""
-        text = script.read_text()
+        text = script.read_text(encoding="utf-8")
         return bool(
             re.search(
                 r"^\s*(import ansys\.fluent|from ansys\.fluent\b"
@@ -172,7 +172,7 @@ class PyFluentDriver:
 
     def lint(self, script: Path) -> LintResult:
         """Syntax-only lint (thin adapter — no deep semantic checks)."""
-        text = script.read_text()
+        text = script.read_text(encoding="utf-8")
         try:
             ast.parse(text)
         except SyntaxError as e:
