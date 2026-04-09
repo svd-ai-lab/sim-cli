@@ -1,12 +1,10 @@
 # sim-cli — Fluent driver compatibility matrix.
 #
-# Single source of truth for which (Fluent solver version, ansys-fluent-core SDK version)
-# combinations this driver supports. Consumed by:
-#   - sim/compat.py loader   (driver code path selection at runtime)
-#   - sim env install        (which SDK to pin in a profile env)
+# Single source of truth for which (Fluent solver version, ansys-fluent-core
+# SDK version) combinations this driver supports. Consumed by:
+#   - sim/compat.py loader   (catalogue + resolution by detected version)
 #   - sim check fluent       (printing the install/profile table)
-#   - sim-skills/fluent/     (which snippets/<rev>/ folder to load)
-#   - the CI matrix          (one job per profile per solver_version)
+#   - sim-skills/fluent/     (which skill content to surface for this profile)
 #
 # See sim-cli/docs/architecture/version-compat.md for the full schema.
 
@@ -18,9 +16,8 @@ profiles:
   - name: pyfluent_0_38_modern
     sdk: ">=0.38,<0.39"
     solver_versions: ["24.2", "25.1", "25.2"]
-    skill_revision: v2
-    runner_module: sim._runners.fluent.pyfluent_038
-    extras_alias: fluent-pyfluent-0-38
+    active_sdk_layer: "0.38"
+    active_solver_layer: "25.2"
     notes: |
       Uses .general.material accessor (PyFluent 0.38+).
       Fluent 24.1 dropped upstream — DO NOT pick this profile for 24.1.
@@ -28,15 +25,7 @@ profiles:
   - name: pyfluent_0_37_legacy
     sdk: ">=0.37,<0.38"
     solver_versions: ["24.1", "24.2", "25.1"]
-    skill_revision: v1
-    runner_module: sim._runners.fluent.pyfluent_037
-    extras_alias: fluent-pyfluent-0-37
+    active_sdk_layer: "0.37"
     notes: |
       Direct cell_zone.<zone>.material accessor.
       Last profile that supports Fluent 24.1.
-
-deprecated:
-  - profile: pyfluent_0_30_alpha
-    reason: predates DriverProtocol; no longer maintained
-    last_supported_in_sim_cli: "0.1"
-    migrate_to: pyfluent_0_37_legacy

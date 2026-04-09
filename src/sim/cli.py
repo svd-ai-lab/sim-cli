@@ -82,14 +82,16 @@ def _check_local(solver: str) -> dict:
             "driver": compat.driver,
             "sdk_package": compat.sdk_package,
             "profiles": [p.to_dict() for p in compat.profiles],
-            "deprecated": [d.to_dict() for d in compat.deprecated],
         }
         for inst in installs:
-            r = compat.resolve(inst.version)
-            resolutions.append({"install": inst.to_dict(), "resolution": r.to_dict()})
+            profile = compat.resolve(inst.version)
+            resolutions.append({
+                "install": inst.to_dict(),
+                "profile": profile.to_dict() if profile else None,
+            })
     except FileNotFoundError:
         for inst in installs:
-            resolutions.append({"install": inst.to_dict(), "resolution": None})
+            resolutions.append({"install": inst.to_dict(), "profile": None})
 
     return {
         "ok": True,
@@ -135,30 +137,24 @@ def _render_check(data: dict) -> None:
     click.echo(f"  detected {len(installs)} installation(s):\n")
     for entry in resolutions:
         inst = entry["install"]
-        res = entry.get("resolution")
+        profile = entry.get("profile")
         click.echo(f"  - {solver} {inst['version']}")
         click.echo(f"      path:    {inst['path']}")
         click.echo(f"      source:  {inst['source']}")
-        if res is None:
-            click.echo("      profile: (driver has no compatibility.yaml yet)")
-        elif res["status"] == "ok":
-            p = res["preferred"]
-            click.echo(f"      profile: {p['name']}  (skill rev {p['skill_revision']})")
-            click.echo(f"      sdk pin: {p['sdk']}")
-            if p.get("extras_alias"):
-                click.echo(f"      install: sim env install {p['name']}")
-                click.echo(f"               (or: pip install 'sim-cli[{p['extras_alias']}]')")
-            if res.get("also_matching"):
-                others = ", ".join(p2["name"] for p2 in res["also_matching"])
-                click.echo(f"      also OK: {others}")
+        if profile is None:
+            if compat is None:
+                click.echo("      profile: (driver has no compatibility.yaml yet)")
+            else:
+                click.echo("      profile: [X] unsupported by any current profile")
         else:
-            click.echo("      profile: [X] unsupported by any current profile")
-            for d in res.get("deprecated_hits", []):
-                click.echo(f"               deprecated: {d['profile']} (migrate to {d.get('migrate_to', '?')})")
+            click.echo(f"      profile: {profile['name']}")
+            if profile.get("sdk"):
+                click.echo(f"      sdk pin: {profile['sdk']}")
         click.echo()
 
     if compat:
-        click.echo(f"  driver compatibility.yaml: {compat['driver']} → {compat['sdk_package']}")
+        sdk_label = compat.get("sdk_package") or "(SDK-less)"
+        click.echo(f"  driver compatibility.yaml: {compat['driver']} → {sdk_label}")
         click.echo(f"  available profiles: {', '.join(p['name'] for p in compat['profiles'])}")
 
 
@@ -189,115 +185,6 @@ def check(ctx, solver):
         sys.exit(1)
 
     _render_check(resp["data"])
-
-
-# ── env (per-profile venv management) ────────────────────────────────────────
-
-
-@main.group(name="env")
-def env_group():
-    """Manage isolated profile environments under .sim/envs/."""
-
-
-@env_group.command("install")
-@click.argument("profile")
-@click.option("--upgrade", is_flag=True, help="Reinstall even if the env exists.")
-@click.option("--quiet", is_flag=True, help="Suppress subprocess output.")
-@click.pass_context
-def env_install(ctx, profile, upgrade, quiet):
-    """Bootstrap a profile env: create venv + install pinned SDK + sim-cli."""
-    from sim import env_manager
-
-    try:
-        state = env_manager.install(profile, upgrade=upgrade, quiet=quiet)
-    except ValueError as e:
-        click.echo(f"[sim] env install: {e}", err=True)
-        sys.exit(2)
-    except RuntimeError as e:
-        click.echo(f"[sim] env install failed: {e}", err=True)
-        sys.exit(1)
-
-    if ctx.obj["json"]:
-        click.echo(json_mod.dumps(state, indent=2, default=str))
-    else:
-        click.echo(f"[sim] env ready: {state['profile']}")
-        click.echo(f"        driver:        {state['driver']}")
-        click.echo(f"        sdk:           {state['sdk_package']} {state['sdk_spec']}")
-        click.echo(f"        runner module: {state['runner_module']}")
-        click.echo(f"        env path:      {state['env_path']}")
-        click.echo(f"        backend:       {state['backend']} ({state['install_seconds']}s)")
-
-
-@env_group.command("list")
-@click.option("--catalogue", is_flag=True,
-              help="Also show every profile defined in any compatibility.yaml.")
-@click.pass_context
-def env_list(ctx, catalogue):
-    """List bootstrapped profile envs (and optionally the full catalogue)."""
-    from sim import env_manager
-    from sim.compat import all_known_profiles
-
-    envs = env_manager.list_envs()
-
-    if ctx.obj["json"]:
-        out = {"installed": envs}
-        if catalogue:
-            out["catalogue"] = [
-                {
-                    "driver": d,
-                    **p.to_dict(),
-                }
-                for d, p in all_known_profiles()
-            ]
-        click.echo(json_mod.dumps(out, indent=2, default=str))
-        return
-
-    if not envs:
-        click.echo("[sim] no profile envs bootstrapped yet")
-        click.echo("        run `sim env install <profile>` to create one")
-    else:
-        click.echo(f"[sim] {len(envs)} profile env(s) installed:")
-        for st in envs:
-            line = f"  - {st.get('profile', '?'):<32} {st.get('status', '?')}"
-            if st.get("driver"):
-                line += f"  driver={st['driver']}"
-            if st.get("sdk_spec"):
-                line += f"  sdk={st['sdk_spec']}"
-            click.echo(line)
-            if st.get("env_path"):
-                click.echo(f"      {st['env_path']}")
-
-    if catalogue:
-        click.echo()
-        click.echo("[sim] available profiles in compatibility.yaml files:")
-        installed_names = {st.get("profile") for st in envs}
-        for driver_name, prof in all_known_profiles():
-            mark = "  installed" if prof.name in installed_names else "             "
-            click.echo(f"  - {prof.name:<32} ({driver_name}) {mark}")
-            click.echo(f"      sdk: {prof.sdk}   solver: {', '.join(prof.solver_versions)}")
-
-
-@env_group.command("remove")
-@click.argument("profile")
-@click.option("--yes", is_flag=True, help="Skip confirmation prompt.")
-@click.pass_context
-def env_remove(ctx, profile, yes):
-    """Tear down a profile env."""
-    from sim import env_manager
-
-    target = env_manager.env_path(profile)
-    if not target.exists():
-        click.echo(f"[sim] env remove: {profile} is not installed", err=True)
-        sys.exit(1)
-
-    if not yes:
-        click.confirm(f"[sim] remove {target}?", abort=True)
-
-    ok = env_manager.remove(profile, force=True)
-    if ctx.obj["json"]:
-        click.echo(json_mod.dumps({"ok": ok, "profile": profile}))
-    else:
-        click.echo(f"[sim] env removed: {profile}")
 
 
 # ── lint ─────────────────────────────────────────────────────────────────────
@@ -374,94 +261,18 @@ def run(ctx, script, solver):
 @click.option("--mode", default="meshing", type=click.Choice(["meshing", "solver"]))
 @click.option("--ui-mode", default="no_gui", type=click.Choice(["no_gui", "gui"]))
 @click.option("--processors", default=1, type=int)
-@click.option("--profile", default=None,
-              help="Override the profile auto-resolution (e.g. pyfluent_0_38_modern).")
-@click.option("--inline", is_flag=True,
-              help="Use the legacy in-process driver path (no profile env). Tests/debug.")
-@click.option("--auto-install", is_flag=True,
-              help="If the resolved profile env is missing, bootstrap it before connecting.")
 @click.pass_context
-def connect(ctx, solver, mode, ui_mode, processors, profile, inline, auto_install):
-    """Launch a solver and hold a persistent session.
-
-    Default flow uses the runner architecture: detects solver installs on
-    the target host, resolves a compatibility profile, and (if needed)
-    bootstraps an isolated env via `sim env install` before opening the
-    session. With --inline, falls back to the legacy in-process path.
-    """
+def connect(ctx, solver, mode, ui_mode, processors):
+    """Launch a solver and hold a persistent session."""
     from sim.session import SessionClient
 
     client = SessionClient(host=ctx.obj["host"], port=ctx.obj["port"])
-    payload = {
-        "solver": solver,
-        "mode": mode,
-        "ui_mode": ui_mode,
-        "processors": processors,
-    }
-    if profile:
-        payload["profile"] = profile
-    if inline:
-        payload["inline"] = True
-
-    result = client.connect(**payload)
-
-    # Auto-bootstrap retry on 409 (env not bootstrapped)
-    if (
-        not result.get("ok")
-        and "not bootstrapped" in str(result.get("error", "")).lower()
-        and not inline
-    ):
-        # Try to derive profile name from the error message or run a check
-        click.echo(f"[sim] connect: {result.get('error')}", err=True)
-        if not auto_install:
-            click.echo(
-                "  re-run with --auto-install to bootstrap the profile env automatically",
-                err=True,
-            )
-            sys.exit(2)
-
-        # Use sim check (locally or remotely) to find the profile name
-        host = ctx.obj["host"]
-        port = ctx.obj["port"]
-        check_resp = (
-            _check_remote(solver, host, port) if not _is_local_host(host) else _check_local(solver)
-        )
-        if not check_resp.get("ok"):
-            click.echo(f"[sim] connect: cannot resolve profile — {check_resp.get('error')}", err=True)
-            sys.exit(1)
-        resolutions = check_resp["data"].get("resolutions", [])
-        target_profile = None
-        for entry in resolutions:
-            res = entry.get("resolution") or {}
-            if res.get("status") == "ok" and res.get("preferred"):
-                target_profile = res["preferred"]["name"]
-                break
-        if target_profile is None:
-            click.echo("[sim] connect: no profile resolved for any detected install", err=True)
-            sys.exit(1)
-
-        click.echo(f"[sim] auto-install: bootstrapping {target_profile}...")
-        # Bootstrap via the right host
-        if _is_local_host(host):
-            from sim import env_manager
-            try:
-                env_manager.install(target_profile, quiet=False)
-            except (ValueError, RuntimeError) as e:
-                click.echo(f"[sim] auto-install failed: {e}", err=True)
-                sys.exit(1)
-        else:
-            from sim.session import _httpx_client
-            with _httpx_client(host, timeout=600.0) as c:
-                r = c.post(
-                    f"http://{host}:{port}/env/install",
-                    json={"profile": target_profile, "upgrade": False},
-                )
-            if r.status_code != 200:
-                click.echo(f"[sim] auto-install failed: {r.status_code} {r.text}", err=True)
-                sys.exit(1)
-
-        # Retry the connect
-        result = client.connect(**payload)
+    result = client.connect(
+        solver=solver,
+        mode=mode,
+        ui_mode=ui_mode,
+        processors=processors,
+    )
 
     if ctx.obj["json"]:
         click.echo(json_mod.dumps(result, indent=2, default=str))

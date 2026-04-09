@@ -7,11 +7,6 @@
 #
 #     ansa64.bat -execscript "script.py|main()" -nogui
 #
-# That makes ANSA an SDK-less driver in M1 terms: the compatibility.yaml
-# is metadata-only (no SDK to pip install, no runner subprocess to spawn
-# from a profile env). The server falls through to the legacy inline
-# AnsaDriver path on /connect; the inline driver shells out to ansa64.bat.
-#
 # Detection inputs (see driver.py detect_installed):
 #   - ANSA_EXEC_DIR / ANSA_EXEC_PATH env vars
 #   - shutil.which("ansa64.bat")
@@ -27,28 +22,19 @@ profiles:
 
   - name: ansa_v25_0
     solver_versions: ["25.0.0", "25.0"]
-    skill_revision: v1
-    extra:
-      release_label: "ansa_v25.0.0"
+    active_solver_layer: "25.0"
     notes: |
       BETA CAE ANSA 25.0. Latest tested.
-      Metadata-only profile — uses the inline AnsaDriver subprocess
-      backend (ansa64.bat -execscript -nogui). No env to bootstrap.
+      Driven via ansa64.bat -execscript -nogui by the inline AnsaDriver.
 
   - name: ansa_v24_1
     solver_versions: ["24.1.0", "24.1"]
-    skill_revision: v1
-    extra:
-      release_label: "ansa_v24.1.0"
+    active_solver_layer: "24.1"
     notes: |
       BETA CAE ANSA 24.1.
 
   - name: ansa_v23_1
     solver_versions: ["23.1.0", "23.1"]
-    skill_revision: v1
-    extra:
-      release_label: "ansa_v23.1.0"
+    active_solver_layer: "23.1"
     notes: |
       BETA CAE ANSA 23.1.
-
-deprecated: []
