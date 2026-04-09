@@ -115,6 +115,8 @@ That's the full loop: **detect → bootstrap → launch → drive → observe �
 
 ## 🎬 Demo
 
+> 📺 **Early preview:** [first walkthrough on YouTube](https://www.youtube.com/watch?v=3Fg6Oph44Ik) — rough cut, a polished recording is still wanted (see below).
+
 > **Recording in progress.** A short terminal capture of `sim connect → exec → inspect → screenshot` against a real Fluent session will land here. The exact sequence to record:
 >
 > ```bash

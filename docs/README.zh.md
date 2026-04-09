@@ -114,6 +114,8 @@ sim --host <server-ip> disconnect
 
 ## 🎬 演示
 
+> 📺 **早期预览：** [【agent驱动 ansys fluent 进行芯片热仿真】](https://www.bilibili.com/video/BV15RD7BTE21/) —— 粗剪版本（B 站），仍欢迎贡献更精致的录制（见下文）。
+
 > **录制中。** 即将放置一段终端 capture：`sim connect → exec → inspect → screenshot` 驱动一个真实的 Fluent 会话。计划录制的命令序列：
 >
 > ```bash

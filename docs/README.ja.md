@@ -115,6 +115,8 @@ sim --host <server-ip> disconnect
 
 ## 🎬 デモ
 
+> 📺 **早期プレビュー:** [YouTube の初回ウォークスルー](https://www.youtube.com/watch?v=3Fg6Oph44Ik) — 粗編集です。よりブラッシュアップした録画の投稿を歓迎します（下記参照）。
+
 > **録画準備中。** 実際の Fluent セッションに対する `sim connect → exec → inspect → screenshot` の短いターミナルキャプチャがここに入ります。録画する正確なシーケンス：
 >
 > ```bash

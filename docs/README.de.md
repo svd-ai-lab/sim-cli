@@ -116,6 +116,8 @@ Das ist die volle Schleife: **erkennen → bootstrappen → starten → steuern 
 
 ## 🎬 Demo
 
+> 📺 **Frühe Vorschau:** [erster Walkthrough auf YouTube](https://www.youtube.com/watch?v=3Fg6Oph44Ik) — Rohschnitt, eine überarbeitete Aufnahme ist weiterhin willkommen (siehe unten).
+
 > **Aufnahme in Arbeit.** Ein kurzer Terminal-Capture von `sim connect → exec → inspect → screenshot` gegen eine echte Fluent-Session landet hier. Die exakte Sequenz:
 >
 > ```bash
