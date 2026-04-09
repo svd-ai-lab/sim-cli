@@ -259,6 +259,7 @@ docs/              translated READMEs (de · ja · zh)
 ## 🔗 Related projects
 
 - **[`sim-skills`](https://github.com/svd-ai-lab/sim-skills)** — agent skills, snippets, and demo workflows for each supported solver
+- **[`sim-server`](https://github.com/svd-ai-lab/sim-server)** — lightweight HTTP bridge meant to run on the **remote** machine that has the solver installed (Fluent workstation, HPC login node, ...). Install it on the solver host, then drive it from anywhere with `sim --host <ip> connect/exec/inspect`. Wire-compatible with `sim serve`, so `sim-cli` does not care whether it is talking to a local embedded server or a remote `sim-server`.
 
 ---
 
