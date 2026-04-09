@@ -256,10 +256,31 @@ docs/              translated READMEs (de · ja · zh)
 
 ---
 
+## 🌐 Remote deployment
+
+When the solver lives on a different machine (a Fluent workstation, an HPC login node, a lab box) and you want to drive it from your laptop, a notebook, or an LLM agent — install `sim-cli` on **both** ends and run `sim serve` on the remote.
+
+```bash
+# On the solver host (the machine with Fluent / COMSOL / OpenFOAM / ... installed)
+ssh user@solver-host
+pip install git+https://github.com/svd-ai-lab/sim-cli.git
+sim serve --host 0.0.0.0 --port 7600     # bind to all interfaces
+
+# On your local control machine
+sim --host <solver-host-ip> connect --solver fluent --mode meshing
+sim --host <solver-host-ip> exec "session.settings.mesh.check()"
+sim --host <solver-host-ip> inspect session.summary
+sim --host <solver-host-ip> disconnect
+sim --host <solver-host-ip> stop          # shut down the remote server when done
+```
+
+That is the entire setup — same `sim-cli` package on both sides, same wire protocol whether it is talking to a local or a remote server. Bind `--host 0.0.0.0` only on networks you trust (Tailscale, VPN, LAN behind a firewall); there is **no auth layer** on `/connect` and `/exec` execute arbitrary Python.
+
+---
+
 ## 🔗 Related projects
 
 - **[`sim-skills`](https://github.com/svd-ai-lab/sim-skills)** — agent skills, snippets, and demo workflows for each supported solver
-- **[`sim-server`](https://github.com/svd-ai-lab/sim-server)** — lightweight HTTP bridge meant to run on the **remote** machine that has the solver installed (Fluent workstation, HPC login node, ...). Install it on the solver host, then drive it from anywhere with `sim --host <ip> connect/exec/inspect`. Wire-compatible with `sim serve`, so `sim-cli` does not care whether it is talking to a local embedded server or a remote `sim-server`.
 
 ---
 
