@@ -248,27 +248,45 @@ class FlothermDriver:
         """Execute a Flotherm command in the active session.
 
         Supported commands:
-          - A path to a .pack file → load_project()
-          - A path to a .xml FloSCRIPT → submit_job(script=...)
-          - "solve" → submit_job() with auto-generated FloSCRIPT
+          - A path to a .pack file → load_project() + play FloSCRIPT to open in GUI
+          - A path to a .xml FloSCRIPT → play it via GUI automation
+          - "solve" → generate solve FloSCRIPT and play via GUI
           - "status" → query_status()
         """
         text = code.strip()
 
-        # .pack file → load project
+        # .pack file → load project + open in GUI via FloSCRIPT
         if text.lower().endswith(".pack") and os.path.isfile(text):
             result = self.load_project(Path(text))
-            return {"ok": True, "action": "load_project", **result}
+            # Generate a FloSCRIPT to load the project in the GUI
+            from sim.drivers.flotherm._helpers import build_solve_and_save
+            project_name = result["project_name"]
+            # Just unlock + load (no solve)
+            load_script = (
+                '<?xml version="1.0" encoding="UTF-8"?>\n'
+                '<xml_log_file version="1.0">\n'
+                f'    <project_unlock project_name="{project_name}"/>\n'
+                f'    <project_load project_name="{project_name}"/>\n'
+                '</xml_log_file>'
+            )
+            script_path = self._write_script(load_script, "load_project")
+            gui_result = self._play_floscript(script_path)
+            return {"ok": True, "action": "load_project", **result, "gui": gui_result}
 
-        # .xml FloSCRIPT → submit job with script
+        # .xml FloSCRIPT → play via GUI automation
         if text.lower().endswith(".xml") and os.path.isfile(text):
-            result = self.submit_job(label=label or "xml_script", script=Path(text))
-            return {"ok": True, "action": "submit_job", **result}
+            gui_result = self._play_floscript(text)
+            return {"ok": True, "action": "play_floscript", "script": text, "gui": gui_result}
 
-        # "solve" → submit job with auto-generated script
+        # "solve" → generate solve FloSCRIPT and play via GUI
         if text.lower() == "solve":
-            result = self.submit_job(label=label or "solve")
-            return {"ok": True, "action": "submit_job", **result}
+            if self._project is None:
+                return {"ok": False, "error": "No project loaded. Load a .pack first."}
+            from sim.drivers.flotherm._helpers import build_solve_and_save
+            script_content = build_solve_and_save(self._project["project_name"])
+            script_path = self._write_script(script_content, label or "solve")
+            gui_result = self._play_floscript(script_path)
+            return {"ok": True, "action": "solve", "script": script_path, "gui": gui_result}
 
         # "status" → query status
         if text.lower() == "status":
@@ -280,6 +298,16 @@ class FlothermDriver:
             "error": f"Unknown command: {text!r}. "
                      "Use a .pack path, .xml path, 'solve', or 'status'.",
         }
+
+    def _play_floscript(self, script_path: str) -> dict:
+        """Trigger Macro > Play FloSCRIPT via Win32 GUI automation."""
+        try:
+            from sim.drivers.flotherm._win32_backend import play_floscript
+            return play_floscript(script_path)
+        except ImportError:
+            return {"ok": False, "error": "Win32 backend not available (not on Windows)"}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
 
     def load_project(self, pack_or_dir: Path) -> dict:
         """Load a project into the session."""
