@@ -89,6 +89,10 @@ class OpenFOAMDriver:
     def name(self) -> str:
         return "openfoam"
 
+    @property
+    def supports_session(self) -> bool:
+        return False
+
     # -- DriverProtocol -------------------------------------------------------
 
     def detect(self, script: Path) -> bool:

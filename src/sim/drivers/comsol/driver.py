@@ -255,6 +255,10 @@ class ComsolDriver:
     def name(self) -> str:
         return "comsol"
 
+    @property
+    def supports_session(self) -> bool:
+        return False
+
     def detect(self, script: Path) -> bool:
         """Detect COMSOL/MPh scripts via `import mph`."""
         text = script.read_text(encoding="utf-8")

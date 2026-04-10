@@ -173,6 +173,10 @@ class MatlabDriver:
     def name(self) -> str:
         return "matlab"
 
+    @property
+    def supports_session(self) -> bool:
+        return True
+
     def detect(self, script: Path) -> bool:
         """Treat `.m` files as MATLAB scripts."""
         return script.suffix.lower() == ".m"

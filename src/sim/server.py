@@ -21,9 +21,7 @@ import io
 import math
 import os
 import time
-import traceback
 import uuid
-from contextlib import redirect_stdout, redirect_stderr
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -89,58 +87,12 @@ class SessionState:
     ui_mode: str | None = None
     connected_at: float | None = None
     run_count: int = 0
-    session: Any = None
     driver: Any = None
     runs: list[dict] = field(default_factory=list)
     profile: str | None = None       # resolved profile name (label only)
 
 
 _state = SessionState()
-
-
-# ── Snippet execution (fluent inline path) ───────────────────────────────────
-
-def _execute_snippet(code: str, label: str) -> dict:
-    stdout_buf = io.StringIO()
-    stderr_buf = io.StringIO()
-    namespace: dict[str, Any] = {
-        "session": _state.session,
-        "_result": None,
-    }
-    if _state.mode == "meshing":
-        namespace["meshing"] = _state.session
-    else:
-        namespace["solver"] = _state.session
-
-    started = time.time()
-    ok = True
-    error = None
-
-    try:
-        with redirect_stdout(stdout_buf), redirect_stderr(stderr_buf):
-            exec(code, namespace)  # noqa: S102
-    except Exception:
-        ok = False
-        error = traceback.format_exc()
-
-    elapsed = round(time.time() - started, 4)
-
-    run_record = {
-        "run_id": str(uuid.uuid4()),
-        "session_id": _state.session_id,
-        "label": label,
-        "code": code,
-        "ok": ok,
-        "stdout": stdout_buf.getvalue(),
-        "stderr": stderr_buf.getvalue(),
-        "error": error,
-        "result": namespace.get("_result"),
-        "elapsed_s": elapsed,
-        "started_at": started,
-    }
-    _state.runs.append(run_record)
-    _state.run_count += 1
-    return run_record
 
 
 # ── Endpoints ────────────────────────────────────────────────────────────────
@@ -202,7 +154,7 @@ def detect_solver(solver: str):
 
 
 def _have_active_session() -> bool:
-    return _state.session is not None
+    return _state.driver is not None and _state.session_id is not None
 
 
 def _resolve_profile(driver, solver: str):
@@ -246,20 +198,19 @@ def connect(req: ConnectRequest):
     if driver is None:
         raise HTTPException(400, f"unknown solver: {req.solver}")
 
+    if not getattr(driver, "supports_session", False):
+        raise HTTPException(
+            400,
+            f"{req.solver} does not support persistent sessions. "
+            "Use POST /run for one-shot execution.",
+        )
+
     try:
-        if req.solver in ("matlab", "comsol", "flotherm"):
-            info = driver.launch(ui_mode=req.ui_mode)
-            session = driver
-        elif req.solver == "fluent":
-            import ansys.fluent.core as pyfluent
-            session = pyfluent.launch_fluent(
-                mode=req.mode,
-                ui_mode=req.ui_mode,
-                processor_count=req.processors,
-            )
-            info = {"ok": True, "session_id": str(uuid.uuid4())}
-        else:
-            raise HTTPException(400, f"no launch path for solver: {req.solver}")
+        info = driver.launch(
+            mode=req.mode,
+            ui_mode=req.ui_mode,
+            processors=req.processors,
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -274,7 +225,6 @@ def connect(req: ConnectRequest):
     _state.ui_mode = req.ui_mode
     _state.connected_at = time.time()
     _state.run_count = 0
-    _state.session = session
     _state.driver = driver
     _state.runs = []
     _state.profile = profile.name if profile else None
@@ -299,16 +249,12 @@ def exec_snippet(req: ExecRequest):
     if not _have_active_session():
         raise HTTPException(400, "no active session — POST /connect first")
 
-    if _state.solver in ("matlab", "comsol", "flotherm"):
-        result = _state.driver.run(req.code, req.label)
-        result["session_id"] = _state.session_id
-        result["started_at"] = time.time()
-        _state.runs.append(result)
-        _state.run_count += 1
-        return {"ok": result["ok"], "data": result}
-
-    record = _execute_snippet(req.code, req.label)
-    return {"ok": record["ok"], "data": record}
+    result = _state.driver.run(req.code, req.label)
+    result.setdefault("session_id", _state.session_id)
+    result.setdefault("started_at", time.time())
+    _state.runs.append(result)
+    _state.run_count += 1
+    return {"ok": result.get("ok", True), "data": result}
 
 
 @app.post("/run")
@@ -425,18 +371,12 @@ def _teardown_active_session() -> str | None:
 
     sid = _state.session_id
 
-    if _state.solver in ("matlab", "comsol", "flotherm") and _state.driver:
+    if _state.driver is not None:
         try:
             _state.driver.disconnect()
         except Exception:
             pass
-    elif _state.session is not None:
-        try:
-            _state.session.exit()
-        except Exception:
-            pass
 
-    _state.session = None
     _state.session_id = None
     _state.solver = None
     _state.mode = None

@@ -280,7 +280,9 @@ class TestConnectIncludesSkillsBlock(unittest.TestCase):
 
         # Stub the comsol driver so launch() doesn't actually spawn COMSOL
         class _StubDriver:
-            def launch(self, ui_mode=None):
+            supports_session = True
+
+            def launch(self, **kwargs):
                 return {"ok": True, "session_id": "stub-sid"}
 
         original_get_driver = None
@@ -324,7 +326,9 @@ class TestConnectIncludesSkillsBlock(unittest.TestCase):
         os.environ["SIM_SKILLS_ROOT"] = str(self.tmp / "does-not-exist")
 
         class _StubDriver:
-            def launch(self, ui_mode=None):
+            supports_session = True
+
+            def launch(self, **kwargs):
                 return {"ok": True, "session_id": "stub-sid"}
 
         from sim import drivers as drivers_mod

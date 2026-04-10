@@ -115,3 +115,35 @@ class DriverProtocol(Protocol):
         protocol stays runtime_checkable for partial migrations.
         """
         ...
+
+    # -- Session lifecycle (optional) ----------------------------------------
+    # Drivers that support persistent sessions (connect/exec/disconnect)
+    # must set supports_session = True and implement launch/run/disconnect.
+
+    @property
+    def supports_session(self) -> bool:
+        """Whether this driver supports persistent sessions."""
+        ...
+
+    def launch(self, **kwargs) -> dict:
+        """Start a persistent solver session.
+
+        Returns dict with at minimum ``{"ok": True, "session_id": "..."}``.
+        Accepts keyword arguments from the connect request; each driver
+        picks what it needs and ignores the rest.
+        """
+        ...
+
+    def run(self, code: str, label: str = "") -> dict:
+        """Execute code in the active session.
+
+        Returns dict with at minimum ``{"ok": bool}``.
+        """
+        ...
+
+    def disconnect(self) -> dict:
+        """Tear down the active session. Must be idempotent.
+
+        Returns ``{"ok": True, "disconnected": True}``.
+        """
+        ...
