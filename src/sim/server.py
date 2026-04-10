@@ -247,7 +247,7 @@ def connect(req: ConnectRequest):
         raise HTTPException(400, f"unknown solver: {req.solver}")
 
     try:
-        if req.solver in ("matlab", "comsol"):
+        if req.solver in ("matlab", "comsol", "flotherm"):
             info = driver.launch(ui_mode=req.ui_mode)
             session = driver
         elif req.solver == "fluent":
@@ -299,7 +299,7 @@ def exec_snippet(req: ExecRequest):
     if not _have_active_session():
         raise HTTPException(400, "no active session — POST /connect first")
 
-    if _state.solver in ("matlab", "comsol"):
+    if _state.solver in ("matlab", "comsol", "flotherm"):
         result = _state.driver.run(req.code, req.label)
         result["session_id"] = _state.session_id
         result["started_at"] = time.time()
@@ -425,7 +425,7 @@ def _teardown_active_session() -> str | None:
 
     sid = _state.session_id
 
-    if _state.solver in ("matlab", "comsol") and _state.driver:
+    if _state.solver in ("matlab", "comsol", "flotherm") and _state.driver:
         try:
             _state.driver.disconnect()
         except Exception:

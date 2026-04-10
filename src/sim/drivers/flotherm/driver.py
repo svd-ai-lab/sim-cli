@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import subprocess
 import time
 import uuid
@@ -440,17 +441,36 @@ class FlothermDriver:
         job["artifacts"] = artifacts
         return artifacts
 
-    def disconnect(self, *, kill_process: bool = False, keep_workspace: bool = True) -> None:
+    _PROCESS_NAMES = ("floserv", "floview", "flotherm")
+
+    def disconnect(self, *, kill_process: bool = True, keep_workspace: bool = True) -> None:
         """End the session."""
-        if kill_process and self._process is not None:
-            with suppress(Exception):
-                self._process.kill()
+        if kill_process:
+            self._kill_flotherm_processes()
             self._process = None
         if self._session:
             self._session["state"] = "disconnected"
         self._project = None
 
     # -- Internal helpers -----------------------------------------------------
+
+    def _kill_flotherm_processes(self) -> None:
+        """Kill all Flotherm-related processes (floserv, floview, flotherm)."""
+        if os.name == "nt":
+            for name in self._PROCESS_NAMES:
+                with suppress(Exception):
+                    subprocess.run(
+                        ["taskkill", "/F", "/IM", f"{name}.exe"],
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    )
+        else:
+            # Fallback: kill by stored PID + parent Popen
+            if self._session and self._session.get("process_pid"):
+                with suppress(Exception):
+                    os.kill(self._session["process_pid"], signal.SIGTERM)
+            if self._process is not None:
+                with suppress(Exception):
+                    self._process.kill()
 
     def _launch_gui(self, workspace: str) -> int | None:
         """Launch Flotherm GUI via flotherm.exe."""
