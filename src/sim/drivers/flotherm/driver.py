@@ -245,14 +245,40 @@ class FlothermDriver:
         return self._session
 
     def run(self, code: str, label: str = "") -> dict:
-        """Flotherm does not support interactive code execution.
+        """Execute a Flotherm command in the active session.
 
-        Use load_project() + submit_job() workflow instead.
+        Supported commands:
+          - A path to a .pack file → load_project()
+          - A path to a .xml FloSCRIPT → submit_job(script=...)
+          - "solve" → submit_job() with auto-generated FloSCRIPT
+          - "status" → query_status()
         """
+        text = code.strip()
+
+        # .pack file → load project
+        if text.lower().endswith(".pack") and os.path.isfile(text):
+            result = self.load_project(Path(text))
+            return {"ok": True, "action": "load_project", **result}
+
+        # .xml FloSCRIPT → submit job with script
+        if text.lower().endswith(".xml") and os.path.isfile(text):
+            result = self.submit_job(label=label or "xml_script", script=Path(text))
+            return {"ok": True, "action": "submit_job", **result}
+
+        # "solve" → submit job with auto-generated script
+        if text.lower() == "solve":
+            result = self.submit_job(label=label or "solve")
+            return {"ok": True, "action": "submit_job", **result}
+
+        # "status" → query status
+        if text.lower() == "status":
+            result = self.query_status()
+            return {"ok": True, "action": "query_status", **result}
+
         return {
             "ok": False,
-            "error": "Flotherm does not support interactive code execution. "
-                     "Use load_project() + submit_job() workflow.",
+            "error": f"Unknown command: {text!r}. "
+                     "Use a .pack path, .xml path, 'solve', or 'status'.",
         }
 
     def load_project(self, pack_or_dir: Path) -> dict:
