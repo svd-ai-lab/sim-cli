@@ -8,6 +8,7 @@ from sim.drivers.matlab import MatlabDriver
 from sim.drivers.comsol import ComsolDriver
 from sim.drivers.flotherm import FlothermDriver
 from sim.drivers.ansa import AnsaDriver
+from sim.drivers.mapdl import MapdlDriver
 from sim.drivers.openfoam import OpenFOAMDriver
 
 DRIVERS: list[DriverProtocol] = [
@@ -17,6 +18,7 @@ DRIVERS: list[DriverProtocol] = [
     ComsolDriver(),
     FlothermDriver(),
     AnsaDriver(),
+    MapdlDriver(),
     OpenFOAMDriver(),
 ]
 

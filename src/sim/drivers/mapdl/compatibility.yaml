@@ -1,0 +1,25 @@
+# sim-cli - ANSYS MAPDL driver compatibility matrix.
+#
+# Phase 1 is one-shot batch execution via the native MAPDL executable:
+#
+#     ansys242 -np 1 -b -j jobname -i input.inp -o jobname.out
+#
+# Detection inputs (see driver.py detect_installed):
+#   - AWP_ROOT242-style environment variables
+#   - PATH probe for ansys242/mapdl242
+#   - Common Windows install roots on local drives
+#
+# MAPDL does not require an external Python SDK for batch runs, so there is
+# no sdk_package and no sdk overlay. Version-sensitive skill content lives
+# under solver/<release>/.
+
+driver: mapdl
+
+profiles:
+
+  - name: mapdl_v24_2
+    solver_versions: ["24.2", "24.2.0", "242", "2024 R2"]
+    active_solver_layer: "24.2"
+    notes: |
+      ANSYS Mechanical APDL 2024 R2 (v242).
+      Driven via ANSYS242.exe / MAPDL242.exe in batch mode.
