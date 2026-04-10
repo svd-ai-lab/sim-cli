@@ -293,11 +293,50 @@ class FlothermDriver:
             result = self.query_status()
             return {"ok": True, "action": "query_status", **result}
 
+        # "debug windows" → probe Win32 window hierarchy
+        if text.lower() == "debug windows":
+            return self._debug_windows()
+
         return {
             "ok": False,
             "error": f"Unknown command: {text!r}. "
                      "Use a .pack path, .xml path, 'solve', or 'status'.",
         }
+
+    def _debug_windows(self) -> dict:
+        """Probe the Win32 window hierarchy for debugging."""
+        try:
+            import ctypes
+            import ctypes.wintypes
+            user32 = ctypes.windll.user32
+
+            results_list = []
+            @ctypes.WINFUNCTYPE(ctypes.wintypes.BOOL, ctypes.wintypes.HWND, ctypes.wintypes.LPARAM)
+            def enum_cb(hwnd, lparam):
+                results_list.append(hwnd)
+                return True
+            user32.EnumWindows(enum_cb, 0)
+
+            windows = []
+            for hwnd in results_list:
+                if not user32.IsWindowVisible(hwnd):
+                    continue
+                buf = ctypes.create_unicode_buffer(512)
+                user32.GetWindowTextW(hwnd, buf, 512)
+                cls_buf = ctypes.create_unicode_buffer(256)
+                user32.GetClassNameW(hwnd, cls_buf, 256)
+                hmenu = user32.GetMenu(hwnd)
+                title = buf.value
+                if title:
+                    windows.append({
+                        "hwnd": f"{hwnd:#x}",
+                        "class": cls_buf.value,
+                        "title": title[:80],
+                        "has_menu": hmenu != 0,
+                    })
+            return {"ok": True, "action": "debug_windows", "windows": windows}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
 
     def _play_floscript(self, script_path: str) -> dict:
         """Trigger Macro > Play FloSCRIPT via Win32 GUI automation."""
