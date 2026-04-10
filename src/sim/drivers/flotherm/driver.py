@@ -440,7 +440,7 @@ class FlothermDriver:
         job["artifacts"] = artifacts
         return artifacts
 
-    def disconnect(self, *, kill_process: bool = False, keep_workspace: bool = True) -> None:
+    def disconnect(self, *, kill_process: bool = True, keep_workspace: bool = True) -> None:
         """End the session."""
         if kill_process and self._process is not None:
             with suppress(Exception):
