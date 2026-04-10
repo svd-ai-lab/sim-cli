@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import subprocess
 import time
 import uuid
@@ -442,10 +443,16 @@ class FlothermDriver:
 
     def disconnect(self, *, kill_process: bool = True, keep_workspace: bool = True) -> None:
         """End the session."""
-        if kill_process and self._process is not None:
-            with suppress(Exception):
-                self._process.kill()
-            self._process = None
+        if kill_process:
+            # Kill floserv.exe by stored PID (child process of flotherm.exe)
+            if self._session and self._session.get("process_pid"):
+                with suppress(Exception):
+                    os.kill(self._session["process_pid"], signal.SIGTERM)
+            # Kill the flotherm.exe parent process
+            if self._process is not None:
+                with suppress(Exception):
+                    self._process.kill()
+                self._process = None
         if self._session:
             self._session["state"] = "disconnected"
         self._project = None
