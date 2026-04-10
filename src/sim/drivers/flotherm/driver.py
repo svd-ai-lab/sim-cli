@@ -111,6 +111,10 @@ class FlothermDriver:
     def name(self) -> str:
         return "flotherm"
 
+    @property
+    def supports_session(self) -> bool:
+        return True
+
     def detect(self, script: Path) -> bool:
         """Return True for Flotherm files (.pack, FloSCRIPT .xml)."""
         ext = script.suffix.lower()
@@ -202,7 +206,7 @@ class FlothermDriver:
     # -- Session lifecycle (like COMSOL's launch/run/disconnect) ---------------
 
     def launch(
-        self, *, workspace: str | None = None, ui_mode: str = "gui",
+        self, *, workspace: str | None = None, ui_mode: str = "gui", **kwargs,
     ) -> dict:
         """Start a Flotherm session.
 
@@ -239,6 +243,17 @@ class FlothermDriver:
             "active_project": None,
         }
         return self._session
+
+    def run(self, code: str, label: str = "") -> dict:
+        """Flotherm does not support interactive code execution.
+
+        Use load_project() + submit_job() workflow instead.
+        """
+        return {
+            "ok": False,
+            "error": "Flotherm does not support interactive code execution. "
+                     "Use load_project() + submit_job() workflow.",
+        }
 
     def load_project(self, pack_or_dir: Path) -> dict:
         """Load a project into the session."""
@@ -443,7 +458,7 @@ class FlothermDriver:
 
     _PROCESS_NAMES = ("floserv", "floview", "flotherm")
 
-    def disconnect(self, *, kill_process: bool = True, keep_workspace: bool = True) -> None:
+    def disconnect(self, *, kill_process: bool = True, keep_workspace: bool = True) -> dict:
         """End the session."""
         if kill_process:
             self._kill_flotherm_processes()
@@ -451,6 +466,7 @@ class FlothermDriver:
         if self._session:
             self._session["state"] = "disconnected"
         self._project = None
+        return {"ok": True, "disconnected": True}
 
     # -- Internal helpers -----------------------------------------------------
 

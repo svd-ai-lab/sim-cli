@@ -158,6 +158,10 @@ class PyFluentDriver:
     def name(self) -> str:
         return "fluent"
 
+    @property
+    def supports_session(self) -> bool:
+        return True
+
     def detect(self, script: Path) -> bool:
         """Return True if the script imports ansys.fluent or pyfluent."""
         text = script.read_text(encoding="utf-8")
@@ -274,6 +278,8 @@ class PyFluentDriver:
         port: int | None = None,
         password: str | None = None,
         ui_mode: str = "gui",
+        processors: int | None = None,
+        **kwargs,
     ) -> dict:
         """
         Launch or connect to a Fluent session. Returns a structured dict.
@@ -323,15 +329,13 @@ class PyFluentDriver:
             if not pyfluent.config.launch_fluent_ip:
                 pyfluent.config.launch_fluent_ip = "127.0.0.1"
 
+            launch_kwargs = {"ui_mode": ui_mode}
             if mode == "meshing":
-                session = pyfluent.launch_fluent(
-                    mode="meshing",
-                    ui_mode=ui_mode,
-                )
-                source = "launch"
-            else:
-                session = pyfluent.launch_fluent(ui_mode=ui_mode)
-                source = "launch"
+                launch_kwargs["mode"] = "meshing"
+            if processors is not None:
+                launch_kwargs["processor_count"] = processors
+            session = pyfluent.launch_fluent(**launch_kwargs)
+            source = "launch"
 
         session_id = str(uuid.uuid4())
         info = self._runtime.register_session(session_id, mode, source, session)
@@ -349,6 +353,17 @@ class PyFluentDriver:
         """
         record = self._runtime.exec_snippet(code=code, label=label)
         return record.to_run_result()
+
+    def disconnect(self) -> dict:
+        """Tear down the active Fluent session."""
+        session_info = self._runtime.get_active_session()
+        if session_info is not None:
+            try:
+                session_info.session.exit()
+            except Exception:
+                pass
+            self._runtime._active_id = None
+        return {"ok": True, "disconnected": True}
 
     def query(self, name: str) -> dict:
         """

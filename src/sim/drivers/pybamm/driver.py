@@ -54,6 +54,10 @@ class PyBaMMLDriver:
     def name(self) -> str:
         return "pybamm"
 
+    @property
+    def supports_session(self) -> bool:
+        return False
+
     def detect(self, script: Path) -> bool:
         """Check if script imports pybamm."""
         text = script.read_text(encoding="utf-8")

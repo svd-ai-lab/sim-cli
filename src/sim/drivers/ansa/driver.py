@@ -133,6 +133,10 @@ class AnsaDriver:
     def name(self) -> str:
         return "ansa"
 
+    @property
+    def supports_session(self) -> bool:
+        return True
+
     # -- DriverProtocol -------------------------------------------------------
 
     def detect(self, script: Path) -> bool:
@@ -463,7 +467,7 @@ class AnsaDriver:
             self._runtime = AnsaRuntime()
         return self._runtime
 
-    def launch(self, port: int | None = None, ui_mode: str = "gui") -> dict:
+    def launch(self, port: int | None = None, ui_mode: str = "gui", **kwargs) -> dict:
         """Start ANSA in listener mode and establish IAP connection.
 
         Args:
@@ -493,10 +497,11 @@ class AnsaDriver:
         record = rt.exec_file(filepath, label=label)
         return record.to_run_result()
 
-    def disconnect(self, keep_listening: bool = False) -> None:
+    def disconnect(self, keep_listening: bool = False) -> dict:
         """Terminate the IAP connection and optionally shut down ANSA."""
         if self._runtime is not None:
             self._runtime.disconnect(keep_listening=keep_listening)
+        return {"ok": True, "disconnected": True}
 
     @property
     def is_connected(self) -> bool:
