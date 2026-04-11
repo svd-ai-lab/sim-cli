@@ -16,6 +16,7 @@ dependencies = [
     "uvicorn>=0.34",
     "pyyaml>=6.0",          # reads driver compatibility.yaml files
     "Pillow>=10",           # sim screenshot endpoint uses PIL.ImageGrab
+    "lxml>=5.0",            # XSD validation for FloSCRIPT lint
 ]
 
 [project.optional-dependencies]

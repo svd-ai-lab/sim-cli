@@ -129,15 +129,60 @@ class FlothermDriver:
         return False
 
     def lint(self, script: Path) -> LintResult:
-        """Validate a .pack or FloSCRIPT .xml file. No Flotherm required."""
+        """Validate a .pack or FloSCRIPT .xml file. No Flotherm required.
+
+        When sim-skills is available, FloSCRIPT files are validated against
+        the XSD schema for the detected Flotherm version.
+        """
         ext = script.suffix.lower()
         if ext == ".xml":
-            return lint_floscript(script)
+            return lint_floscript(
+                script, schema_dir=self._find_schema_dir())
         if ext == ".pack":
             return lint_pack(script)
         return LintResult(ok=False, diagnostics=[Diagnostic(
             level="error",
             message=f"Unsupported file type '{script.suffix}'.")])
+
+    def _find_schema_dir(self) -> Path | None:
+        """Locate FloSCRIPT XSD schemas from sim-skills."""
+        from sim.compat import find_skills_root
+
+        skills_root = find_skills_root()
+        if skills_root is None:
+            return None
+
+        # Use detected version, fall back to scanning available versions
+        version = None
+        info = self._install or find_installation()
+        if info:
+            version = info.get("version")
+
+        if version:
+            schema_dir = (
+                skills_root / "flotherm" / "reference" / "flotherm"
+                / version / "examples" / "floscript" / "schema"
+            )
+            if schema_dir.is_dir():
+                return schema_dir
+            # Also try base/reference path variant
+            schema_dir = (
+                skills_root / "flotherm" / "base" / "reference" / "flotherm"
+                / version / "examples" / "floscript" / "schema"
+            )
+            if schema_dir.is_dir():
+                return schema_dir
+
+        # Fallback: find any available schema directory
+        for pattern in (
+            "flotherm/reference/flotherm/*/examples/floscript/schema",
+            "flotherm/base/reference/flotherm/*/examples/floscript/schema",
+        ):
+            matches = sorted(skills_root.glob(pattern), reverse=True)
+            if matches:
+                return matches[0]
+
+        return None
 
     def connect(self) -> ConnectionInfo:
         """Check Flotherm installation. Does not launch anything."""
