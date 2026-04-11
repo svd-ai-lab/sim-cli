@@ -255,35 +255,49 @@ class FlothermDriver:
         """
         text = code.strip()
 
-        # .pack file → load project + open in GUI via FloSCRIPT
+        # #!python → execute raw Python in server process (dev mode only)
+        # WARNING: This is exec() — arbitrary code execution. Only available
+        # when SIM_DEV_MODE=1 is set in the server environment.
+        if text.startswith("#!python"):
+            if not os.environ.get("SIM_DEV_MODE"):
+                return {"ok": False, "error": "#!python requires SIM_DEV_MODE=1 (security: arbitrary code execution)"}
+            return self._exec_python(text[len("#!python"):].strip())
+
+        # .pack file → import project into GUI via FloSCRIPT project_import
         if text.lower().endswith(".pack") and os.path.isfile(text):
             result = self.load_project(Path(text))
-            # Generate a FloSCRIPT to load the project in the GUI
-            from sim.drivers.flotherm._helpers import build_solve_and_save
-            project_name = result["project_name"]
-            # Just unlock + load (no solve)
-            load_script = (
+            # Clean up extracted dir so project_import can re-extract
+            import shutil
+            proj_path = os.path.join(result["workspace"], result["project_dir"])
+            if os.path.isdir(proj_path):
+                shutil.rmtree(proj_path)
+            # Generate import FloSCRIPT
+            import_script = (
                 '<?xml version="1.0" encoding="UTF-8"?>\n'
                 '<xml_log_file version="1.0">\n'
-                f'    <project_unlock project_name="{project_name}"/>\n'
-                f'    <project_load project_name="{project_name}"/>\n'
+                f'    <project_import filename="{text}" import_type="Pack File"/>\n'
                 '</xml_log_file>'
             )
-            script_path = self._write_script(load_script, "load_project")
+            script_path = self._write_script(import_script, "import_project")
             gui_result = self._play_floscript(script_path)
-            return {"ok": True, "action": "load_project", **result, "gui": gui_result}
+            return {"ok": True, "action": "import_project", **result, "gui": gui_result}
 
         # .xml FloSCRIPT → play via GUI automation
         if text.lower().endswith(".xml") and os.path.isfile(text):
             gui_result = self._play_floscript(text)
             return {"ok": True, "action": "play_floscript", "script": text, "gui": gui_result}
 
-        # "solve" → generate solve FloSCRIPT and play via GUI
+        # "solve" → play solve FloSCRIPT via GUI
         if text.lower() == "solve":
             if self._project is None:
                 return {"ok": False, "error": "No project loaded. Load a .pack first."}
-            from sim.drivers.flotherm._helpers import build_solve_and_save
-            script_content = build_solve_and_save(self._project["project_name"])
+            # Project is already loaded in GUI after import — just start solver
+            script_content = (
+                '<?xml version="1.0" encoding="UTF-8"?>\n'
+                '<xml_log_file version="1.0">\n'
+                '    <start start_type="solver"/>\n'
+                '</xml_log_file>'
+            )
             script_path = self._write_script(script_content, label or "solve")
             gui_result = self._play_floscript(script_path)
             return {"ok": True, "action": "solve", "script": script_path, "gui": gui_result}
@@ -293,50 +307,46 @@ class FlothermDriver:
             result = self.query_status()
             return {"ok": True, "action": "query_status", **result}
 
-        # "debug windows" → probe Win32 window hierarchy
-        if text.lower() == "debug windows":
-            return self._debug_windows()
-
         return {
             "ok": False,
             "error": f"Unknown command: {text!r}. "
-                     "Use a .pack path, .xml path, 'solve', or 'status'.",
+                     "Use a .pack path, .xml path, 'solve', 'status', or '#!python ...'.",
         }
 
-    def _debug_windows(self) -> dict:
-        """Probe the Win32 window hierarchy for debugging."""
+    def _exec_python(self, code: str) -> dict:
+        """Execute raw Python in the server process (dev mode).
+
+        WARNING: This runs arbitrary code via exec(). Only available when
+        SIM_DEV_MODE=1 is set. Never enable in production.
+        """
+        import io
+        import logging
+        import traceback
+        logging.warning("Flotherm #!python exec — dev mode, arbitrary code execution")
+        from contextlib import redirect_stdout, redirect_stderr
+
+        stdout_buf = io.StringIO()
+        stderr_buf = io.StringIO()
+        namespace = {"driver": self, "_result": None}
+
         try:
-            import ctypes
-            import ctypes.wintypes
-            user32 = ctypes.windll.user32
-
-            results_list = []
-            @ctypes.WINFUNCTYPE(ctypes.wintypes.BOOL, ctypes.wintypes.HWND, ctypes.wintypes.LPARAM)
-            def enum_cb(hwnd, lparam):
-                results_list.append(hwnd)
-                return True
-            user32.EnumWindows(enum_cb, 0)
-
-            windows = []
-            for hwnd in results_list:
-                if not user32.IsWindowVisible(hwnd):
-                    continue
-                buf = ctypes.create_unicode_buffer(512)
-                user32.GetWindowTextW(hwnd, buf, 512)
-                cls_buf = ctypes.create_unicode_buffer(256)
-                user32.GetClassNameW(hwnd, cls_buf, 256)
-                hmenu = user32.GetMenu(hwnd)
-                title = buf.value
-                if title:
-                    windows.append({
-                        "hwnd": f"{hwnd:#x}",
-                        "class": cls_buf.value,
-                        "title": title[:80],
-                        "has_menu": hmenu != 0,
-                    })
-            return {"ok": True, "action": "debug_windows", "windows": windows}
-        except Exception as e:
-            return {"ok": False, "error": str(e)}
+            with redirect_stdout(stdout_buf), redirect_stderr(stderr_buf):
+                exec(code, namespace)  # noqa: S102
+            return {
+                "ok": True,
+                "action": "python",
+                "stdout": stdout_buf.getvalue(),
+                "stderr": stderr_buf.getvalue(),
+                "result": namespace.get("_result"),
+            }
+        except Exception:
+            return {
+                "ok": False,
+                "action": "python",
+                "stdout": stdout_buf.getvalue(),
+                "stderr": stderr_buf.getvalue(),
+                "error": traceback.format_exc(),
+            }
 
     def _play_floscript(self, script_path: str) -> dict:
         """Trigger Macro > Play FloSCRIPT via Win32 GUI automation."""

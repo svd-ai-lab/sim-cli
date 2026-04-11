@@ -44,15 +44,24 @@ def main(ctx, output_json, host, port):
 @click.option("--host", "serve_host", default="127.0.0.1",
               help="Bind address. Use 0.0.0.0 for Tailscale/network access.")
 @click.option("--port", "serve_port", default=7600, type=int)
-def serve(serve_host, serve_port):
+@click.option("--reload", is_flag=True, default=False,
+              help="Auto-reload on code changes (dev mode).")
+def serve(serve_host, serve_port, reload):
     """Start the sim HTTP server (like ollama serve)."""
     import uvicorn
-    from sim.server import app
 
     click.echo(f"[sim] server starting on {serve_host}:{serve_port}")
     if serve_host == "0.0.0.0":
         click.echo("[sim] accessible on network (Tailscale)")
-    uvicorn.run(app, host=serve_host, port=serve_port, log_level="info")
+    if reload:
+        click.echo("[sim] auto-reload enabled (watching for file changes)")
+    uvicorn.run(
+        "sim.server:app",
+        host=serve_host,
+        port=serve_port,
+        log_level="info",
+        reload=reload,
+    )
 
 
 # ── check ────────────────────────────────────────────────────────────────────
