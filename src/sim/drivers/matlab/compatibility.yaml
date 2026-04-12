@@ -15,6 +15,8 @@
 # compatible. The driver maps R<YYYY><a|b> ↔ matlabengine X.Y per
 # MathWorks' published table:
 #
+#   R2025b → matlabengine 25.2
+#   R2025a → matlabengine 25.1
 #   R2024b → matlabengine 24.2
 #   R2024a → matlabengine 24.1
 #   R2023b → matlabengine 23.2
@@ -27,6 +29,21 @@ driver: matlab
 sdk_package: matlabengine
 
 profiles:
+
+  - name: matlab_R2025b_engine_25_2
+    sdk: ">=25.2,<25.3"
+    solver_versions: ["R2025b", "25.2"]
+    active_sdk_layer: "25.2"
+    notes: |
+      MATLAB R2025b + matlabengine 25.2.x. Latest tested — validated live
+      on Windows with a persistent session (launch/run/disconnect).
+
+  - name: matlab_R2025a_engine_25_1
+    sdk: ">=25.1,<25.2"
+    solver_versions: ["R2025a", "25.1"]
+    active_sdk_layer: "25.1"
+    notes: |
+      MATLAB R2025a + matlabengine 25.1.x.
 
   - name: matlab_R2024b_engine_24_2
     sdk: ">=24.2,<24.3"
