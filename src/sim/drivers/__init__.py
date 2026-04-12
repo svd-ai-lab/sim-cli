@@ -9,6 +9,8 @@ from sim.drivers.comsol import ComsolDriver
 from sim.drivers.flotherm import FlothermDriver
 from sim.drivers.ansa import AnsaDriver
 from sim.drivers.openfoam import OpenFOAMDriver
+from sim.drivers.workbench import WorkbenchDriver
+from sim.drivers.mechanical import MechanicalDriver
 
 DRIVERS: list[DriverProtocol] = [
     PyBaMMLDriver(),
@@ -18,6 +20,8 @@ DRIVERS: list[DriverProtocol] = [
     FlothermDriver(),
     AnsaDriver(),
     OpenFOAMDriver(),
+    WorkbenchDriver(),
+    MechanicalDriver(),
 ]
 
 
