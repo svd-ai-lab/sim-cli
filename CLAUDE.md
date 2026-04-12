@@ -85,8 +85,10 @@ The server keeps a single global `_state: SessionState` (one session per server 
 | `flotherm` | `FlothermDriver` | `flotherm/driver.py` + `_helpers.py` |
 | `ansa` | `AnsaDriver` | `ansa/driver.py` + `runtime.py` + `schemas.py` |
 | `openfoam` | `OpenFOAMDriver` | `openfoam/driver.py` |
+| `workbench` | `WorkbenchDriver` | `workbench/driver.py` + `compatibility.yaml` |
+| `mechanical` | `MechanicalDriver` | `mechanical/driver.py` + `compatibility.yaml` |
 
-Drivers with a separate `runtime.py` (fluent, ansa) implement persistent-session support; the rest are one-shot only at this point.
+Drivers with `supports_session = True` (fluent, ansa, flotherm, matlab, workbench, mechanical) implement persistent-session lifecycle (`launch`/`run`/`query`/`disconnect`). The rest are one-shot only.
 
 `get_driver(name)` looks up by `.name` attribute.
 
