@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="#-quick-start"><img src="https://img.shields.io/badge/Quick_Start-2_min-3b82f6?style=for-the-badge" alt="Quick Start"></a>
-  <a href="#-supported-solvers"><img src="https://img.shields.io/badge/Solvers-growing_registry-22c55e?style=for-the-badge" alt="Growing solver registry"></a>
+  <a href="#-solver-registry"><img src="https://img.shields.io/badge/Solvers-growing_registry-22c55e?style=for-the-badge" alt="Growing solver registry"></a>
   <a href="https://github.com/svd-ai-lab/sim-skills"><img src="https://img.shields.io/badge/Agent_Skills-sim--skills-8b5cf6?style=for-the-badge" alt="Companion skills"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-eab308?style=for-the-badge" alt="License"></a>
 </p>
@@ -26,16 +26,9 @@
 
 **English** · [Deutsch](docs/README.de.md) · [日本語](docs/README.ja.md) · [中文](docs/README.zh.md)
 
-[Why sim](#-why-sim) · [Quick Start](#-quick-start) · [Demo](#-demo) · [Commands](#-commands) · [Solvers](#-supported-solvers) · [Skills](https://github.com/svd-ai-lab/sim-skills)
+[Why sim](#-why-sim) · [Quick Start](#-quick-start) · [Solvers](#-solver-registry) · [Commands](#-commands) · [Demo](#-demo) · [Skills](https://github.com/svd-ai-lab/sim-skills)
 
 </div>
-
----
-
-## 📰 News
-
-- **2026-04-07** 🚀 **sim-cli v0.2.0** — first public release on GitHub. Rebrand of `svd-ai-lab/ion @ feature/openfoam-driver`. The driver registry now spans CFD, multiphysics, thermal, structural pre-processing, and battery solvers — and is designed to keep growing.
-- **2026-04-07** 🧠 Companion repo [`sim-skills`](https://github.com/svd-ai-lab/sim-skills) published — per-solver agent skills in the Anthropic skill format, so an LLM can drive each new backend without prior context.
 
 ---
 
@@ -113,6 +106,24 @@ That's the full loop: **detect → bootstrap → launch → drive → observe �
 
 ---
 
+## 🧪 Solver registry
+
+The driver registry is **open and intentionally growing** — adding a new backend is a ~200-LOC `DriverProtocol` implementation plus one line in `drivers/__init__.py`. Below is a snapshot of what currently ships in `main`:
+
+| Domain | Example backends shipping today | Sessions | Status |
+|---|---|---|---|
+| Electronics thermal | Simcenter Flotherm | persistent (GUI) | ✅ Working — model generation from natural language, XSD-validated FloSCRIPT, step-by-step build with checkpoints |
+| CFD | Ansys Fluent, OpenFOAM | persistent / one-shot | ✅ Working |
+| Multiphysics | COMSOL Multiphysics | one-shot | ✅ Working |
+| Pre-processing | BETA CAE ANSA | persistent / one-shot | ✅ Working (Phase 1) |
+| Numerical / scripting | MATLAB | one-shot | ✅ Working (v0) |
+| Battery modeling | PyBaMM | one-shot | ✅ Working |
+| **+ your solver** | open a PR — see [Adding a driver](#-development) | — | 🛠 |
+
+Per-solver protocols, snippets, and demo workflows live in [`sim-skills`](https://github.com/svd-ai-lab/sim-skills), which is **also designed to grow** alongside the driver registry — one new agent skill per new backend.
+
+---
+
 ## 🎬 Demo
 
 > 📺 **Early preview:** [first walkthrough on YouTube](https://www.youtube.com/watch?v=3Fg6Oph44Ik) — rough cut, a polished recording is still wanted (see below).
@@ -170,6 +181,7 @@ That's the full loop: **detect → bootstrap → launch → drive → observe �
 | `sim ps` | Show the active session and its profile | `docker ps` |
 | `sim screenshot` | Grab a PNG of the solver GUI | — |
 | `sim disconnect` | Tear down the session | `docker stop` |
+| `sim stop` | Stop the sim-server process | `docker rm -f` |
 | `sim run` | One-shot script execution | `docker run` |
 | `sim lint` | Pre-flight static check on a script | `ruff check` |
 | `sim logs` | Browse stored run history | `docker logs` |
@@ -203,58 +215,9 @@ The full design is in [`docs/architecture/version-compat.md`](docs/architecture/
 
 ---
 
-## 🧪 Solver registry
-
-The driver registry is **open and intentionally growing** — adding a new backend is a ~200-LOC `DriverProtocol` implementation plus one line in `drivers/__init__.py`. Below is a snapshot of what currently ships in `main`:
-
-| Domain | Example backends shipping today | Sessions | Status |
-|---|---|---|---|
-| CFD | Ansys Fluent, OpenFOAM | persistent / one-shot | ✅ Working |
-| Multiphysics | COMSOL Multiphysics | one-shot | ✅ Working |
-| Pre-processing | BETA CAE ANSA | persistent / one-shot | ✅ Working (Phase 1) |
-| Electronics thermal | Simcenter Flotherm | one-shot | ✅ Working (Phase A) |
-| Numerical / scripting | MATLAB | one-shot | ✅ Working (v0) |
-| Battery modeling | PyBaMM | one-shot | ✅ Working |
-| **+ your solver** | open a PR — see [Adding a driver](#-development) | — | 🛠 |
-
-Per-solver protocols, snippets, and demo workflows live in [`sim-skills`](https://github.com/svd-ai-lab/sim-skills), which is **also designed to grow** alongside the driver registry — one new agent skill per new backend.
-
----
-
 ## 🛠 Development
 
-```bash
-git clone https://github.com/svd-ai-lab/sim-cli.git
-cd sim-cli
-uv pip install -e ".[dev]"
-
-pytest -q                       # unit tests (no solver needed)
-pytest -q -m integration        # integration tests (need solvers + sim serve)
-ruff check src/sim tests
-```
-
-Adding a new driver? Drop a `DriverProtocol` implementation under `src/sim/drivers/<name>/driver.py`, register it in `drivers/__init__.py`, and you're done. See `pybamm/driver.py` for the smallest reference; `fluent/` for a full persistent-session example.
-
----
-
-## 📂 Project layout
-
-```
-src/sim/
-  cli.py           Click app, all subcommands
-  server.py        FastAPI server (sim serve)
-  session.py       HTTP client used by connect/exec/inspect
-  driver.py        DriverProtocol + result dataclasses
-  drivers/
-    fluent/        Reference example: persistent-session driver
-                   (driver.py + runtime.py + queries.py)
-    pybamm/        Reference example: smallest one-shot driver
-    …              and more — one folder per registered backend
-    __init__.py    DRIVERS registry — register new backends here
-tests/             unit tests + fixtures + execution snippets
-assets/            logo · banner · architecture (SVG)
-docs/              translated READMEs (de · ja · zh)
-```
+See [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) for setup, project layout, adding drivers, dev flags, and the layered skill system.
 
 ---
 
@@ -283,6 +246,14 @@ That is the entire setup — same `sim-cli` package on both sides, same wire pro
 ## 🔗 Related projects
 
 - **[`sim-skills`](https://github.com/svd-ai-lab/sim-skills)** — agent skills, snippets, and demo workflows for each supported solver
+
+---
+
+## 📰 News
+
+- **2026-04-12** 🏗 **Flotherm model generation** — Claude can now build Flotherm thermal models from natural language. FloSCRIPT XML generation with XSD validation, step-by-step execution, and checkpoint recovery. See svd-ai-lab/sim-cli#12.
+- **2026-04-07** 🚀 **sim-cli v0.2.0** — first public release on GitHub. The driver registry spans CFD, multiphysics, thermal, pre-processing, and battery solvers.
+- **2026-04-07** 🧠 Companion repo [`sim-skills`](https://github.com/svd-ai-lab/sim-skills) published — per-solver agent skills so an LLM can drive each new backend without prior context.
 
 ---
 
