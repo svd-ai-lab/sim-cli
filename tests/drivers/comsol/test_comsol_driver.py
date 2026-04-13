@@ -84,34 +84,52 @@ class TestParseOutput:
 
 
 class TestRunFile:
-    def test_run_constructs_command(self, monkeypatch, tmp_path):
-        """Verify run_file uses execute_script correctly."""
-        script = tmp_path / "test.py"
-        script.write_text("import mph\nclient = mph.start()\n")
+    def test_run_file_invokes_python_subprocess(self, monkeypatch, tmp_path):
+        """driver.run_file shells out to the running Python with the script."""
+        import sys as _sys
+        from types import SimpleNamespace
 
-        from sim import runner
-        from sim.driver import RunResult
+        from sim.drivers.comsol import driver as comsol_driver_mod
+
+        script = tmp_path / "smoke.py"
+        script.write_text("import mph\nclient = mph.start()\n")
 
         captured = {}
 
-        def fake_execute(s, python=None, solver="unknown"):
-            captured["script"] = s
-            captured["solver"] = solver
-            return RunResult(
-                exit_code=0,
-                stdout="{}",
-                stderr="",
-                duration_s=0.1,
-                script=str(s),
-                solver=solver,
-                timestamp="2026-01-01T00:00:00+00:00",
-            )
+        def fake_run(command, capture_output, text):
+            captured["command"] = command
+            return SimpleNamespace(returncode=0, stdout="{}", stderr="")
 
-        monkeypatch.setattr(runner, "execute_script", fake_execute)
+        monkeypatch.setattr("sim.runner.subprocess.run", fake_run)
 
-        result = runner.execute_script(script, solver="comsol")
-        assert captured["solver"] == "comsol"
-        assert captured["script"] == script
+        driver = ComsolDriver()
+        result = driver.run_file(script)
+
+        assert captured["command"][0] == _sys.executable
+        assert captured["command"][1] == str(script)
+        assert result.solver == "comsol"
+        assert result.exit_code == 0
+
+    def test_run_file_routes_through_execute_script(self, monkeypatch, tmp_path):
+        """The /run server path calls execute_script(driver=...), which must
+        delegate to driver.run_file — this is the integration path that
+        previously blew up with AttributeError."""
+        from types import SimpleNamespace
+
+        from sim import runner
+
+        script = tmp_path / "smoke.py"
+        script.write_text("import mph\n")
+
+        def fake_run(command, capture_output, text):
+            return SimpleNamespace(returncode=0, stdout="{}", stderr="")
+
+        monkeypatch.setattr("sim.runner.subprocess.run", fake_run)
+
+        driver = ComsolDriver()
+        result = runner.execute_script(script, solver="comsol", driver=driver)
+        assert result.exit_code == 0
+        assert result.solver == "comsol"
 
 
 def _make_import_blocker(blocked: str):

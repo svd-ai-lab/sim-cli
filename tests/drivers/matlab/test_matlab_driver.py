@@ -62,3 +62,24 @@ class TestMatlabLint:
         result = driver.lint(FIXTURES / "matlab_ok.m")
         assert result.ok is False
         assert "not available" in result.diagnostics[0].message.lower()
+
+
+class TestReleaseEngineMap:
+    """Every MATLAB release sim-cli claims to support must resolve to a
+    concrete matlabengine pip version — otherwise detect_installed()
+    reports engine_version='?', compat.yaml lookup silently fails, and
+    `sim env install matlab` emits `pip install matlabengine==?`.
+    """
+
+    def test_known_releases_resolve(self):
+        from sim.drivers.matlab.driver import _engine_version_for
+
+        assert _engine_version_for("R2025b") == "25.2"
+        assert _engine_version_for("R2025a") == "25.1"
+        assert _engine_version_for("R2024b") == "24.2"
+        assert _engine_version_for("R2024a") == "24.1"
+
+    def test_unknown_release_returns_none(self):
+        from sim.drivers.matlab.driver import _engine_version_for
+
+        assert _engine_version_for("R2099z") is None
