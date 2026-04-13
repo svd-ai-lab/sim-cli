@@ -26,6 +26,7 @@ from sim.runner import run_subprocess
 # the canonical MathWorks-published table; extend as new releases ship.
 # Source: https://pypi.org/project/matlabengine/
 _MATLAB_RELEASE_TO_ENGINE: dict[str, str] = {
+    "R2025b": "25.2",
     "R2025a": "25.1",
     "R2024b": "24.2",
     "R2024a": "24.1",

@@ -17,10 +17,12 @@ import json
 import os
 import re
 import shutil
+import sys
 from pathlib import Path
 from typing import Callable
 
 from sim.driver import ConnectionInfo, Diagnostic, LintResult, SolverInstall
+from sim.runner import run_subprocess
 
 
 # ─── extension points (open for additions, closed for modifications) ──────
@@ -370,3 +372,17 @@ class ComsolDriver:
                 except json.JSONDecodeError:
                     continue
         return {}
+
+    def run_file(self, script: Path):
+        """Execute a one-shot COMSOL/MPh Python script.
+
+        The script runs in the same interpreter sim-cli is running under.
+        `mph` and its JPype/JVM dependencies must be importable in that
+        env — sim-cli itself is SDK-free, so `sim env install comsol`
+        (or a manual `pip install mph`) provisions the runtime.
+        """
+        return run_subprocess(
+            [sys.executable, str(script)],
+            script=script,
+            solver=self.name,
+        )
