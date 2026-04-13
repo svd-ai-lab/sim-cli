@@ -90,6 +90,7 @@ The server keeps a single global `_state: SessionState` (one session per server 
 | `abaqus` | `AbaqusDriver` | `abaqus/driver.py` |
 | `starccm` | `StarccmDriver` | `starccm/driver.py` + `compatibility.yaml` |
 | `cfx` | `CfxDriver` | `cfx/driver.py` + `compatibility.yaml` |
+| `ls_dyna` | `LsDynaDriver` | `lsdyna/driver.py` + `compatibility.yaml` |
 
 Drivers with `supports_session = True` (fluent, ansa, flotherm, matlab, workbench, mechanical, cfx) implement persistent-session lifecycle (`launch`/`run`/`query`/`disconnect`). The rest are one-shot only.
 
@@ -145,6 +146,9 @@ tests/
     cfx/
       test_cfx_driver.py             unit tests (27 tests)
       test_cfx_e2e.py                VMFL015 verification E2E
+    lsdyna/
+      test_lsdyna_driver.py          unit tests (24 tests)
+      test_lsdyna_e2e.py             single hex tension E2E
     starccm/
       test_starccm_driver.py         unit tests
     workbench/
@@ -156,6 +160,7 @@ tests/
     matlab/                          .m fixtures
     pybamm/                          .py fixtures
     cfx/                             .ccl + .def fixtures
+    lsdyna/                          .k fixtures
     starccm/                         .java fixtures
     workbench/                       .wbjn + .py fixtures
     mock_solver.py                   shared mock scripts

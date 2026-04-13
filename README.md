@@ -116,6 +116,7 @@ The driver registry is **open and intentionally growing** — adding a new backe
 | CFD | Ansys Fluent, OpenFOAM, Simcenter STAR-CCM+, Ansys CFX | persistent / one-shot | ✅ Working |
 | Multiphysics | COMSOL Multiphysics | one-shot | ✅ Working |
 | CAE | Ansys Workbench, Ansys Mechanical, Abaqus | persistent / one-shot | ✅ Working |
+| Explicit FEA | Ansys LS-DYNA | one-shot | ✅ Working |
 | Pre-processing | BETA CAE ANSA | persistent / one-shot | ✅ Working (Phase 1) |
 | Numerical / scripting | MATLAB | one-shot | ✅ Working (v0) |
 | Battery modeling | PyBaMM | one-shot | ✅ Working |
@@ -252,6 +253,7 @@ That is the entire setup — same `sim-cli` package on both sides, same wire pro
 
 ## 📰 News
 
+- **2026-04-14** 💥 **LS-DYNA driver** — new Ansys LS-DYNA driver for explicit/implicit nonlinear FEA. Pure subprocess execution via `lsdyna_sp.exe i=<file.k>`, keyword file detection/linting, Intel runtime DLL auto-discovery, LS-DYNA-specific output parsing (spaced-character termination messages, exit code 0 on error). 24 unit tests + single hex tension E2E with 7129-cycle normal termination. Compatible with ANSYS 2024 R1 (R14.0).
 - **2026-04-14** 🌀 **CFX driver** — new Ansys CFX driver with persistent session support. Three-phase hybrid architecture: `cfx5solve` (one-shot solve) → `cfx5post -line` (interactive queries via Perl `evaluate()`) → `cfx5post -batch` (auto-delegated rendering with filled contours). CCL file detection/linting, CFX-specific output parsing, 27 unit tests + VMFL015 E2E with step-by-step session transcript. No Python SDK — pure CLI toolchain.
 - **2026-04-13** 🏭 **Abaqus + Star-CCM+ drivers** — two new solver drivers. Abaqus: `.inp` input decks + Python scripts, cantilever beam E2E with deformation contour evidence. Star-CCM+: Java macro batch execution, pipe flow mesh generation E2E. Both with full TDD test suites.
 - **2026-04-13** 🔍 **Output-based error detection** — `RunResult` now has `errors` list and `ok` property. All drivers scan stdout/stderr for error patterns (Traceback, Exception, ScriptingException). `exit_code == 0` alone no longer counts as success.

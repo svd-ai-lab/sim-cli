@@ -1,0 +1,25 @@
+{
+  "test_case": "single_hex_tension",
+  "solver": "LS-DYNA R14.0 smp s",
+  "exit_code": 0,
+  "duration_s": 1.547,
+  "cycles": 7129,
+  "problem_time": "1.0000E+00",
+  "termination": "normal",
+  "output_files": [
+    "d3dump01",
+    "d3hsp",
+    "d3plot",
+    "d3plot01",
+    "d3plot02",
+    "glstat",
+    "lspost.cfile",
+    "lspost.db",
+    "lspost.msg",
+    "lsprepost_screenshot.png",
+    "messag",
+    "open_and_screenshot.cfile",
+    "render.cfile",
+    "status.out"
+  ]
+}
