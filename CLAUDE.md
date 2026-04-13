@@ -89,8 +89,9 @@ The server keeps a single global `_state: SessionState` (one session per server 
 | `mechanical` | `MechanicalDriver` | `mechanical/driver.py` + `compatibility.yaml` |
 | `abaqus` | `AbaqusDriver` | `abaqus/driver.py` |
 | `starccm` | `StarccmDriver` | `starccm/driver.py` + `compatibility.yaml` |
+| `cfx` | `CfxDriver` | `cfx/driver.py` + `compatibility.yaml` |
 
-Drivers with `supports_session = True` (fluent, ansa, flotherm, matlab, workbench, mechanical) implement persistent-session lifecycle (`launch`/`run`/`query`/`disconnect`). The rest are one-shot only.
+Drivers with `supports_session = True` (fluent, ansa, flotherm, matlab, workbench, mechanical, cfx) implement persistent-session lifecycle (`launch`/`run`/`query`/`disconnect`). The rest are one-shot only.
 
 `get_driver(name)` looks up by `.name` attribute.
 
@@ -141,6 +142,9 @@ tests/
       test_fluent_mixing_elbow.py    mixing_elbow E2E
     matlab/
       test_matlab_driver.py          unit tests
+    cfx/
+      test_cfx_driver.py             unit tests (27 tests)
+      test_cfx_e2e.py                VMFL015 verification E2E
     starccm/
       test_starccm_driver.py         unit tests
     workbench/
@@ -151,6 +155,7 @@ tests/
     comsol/                          .py fixtures
     matlab/                          .m fixtures
     pybamm/                          .py fixtures
+    cfx/                             .ccl + .def fixtures
     starccm/                         .java fixtures
     workbench/                       .wbjn + .py fixtures
     mock_solver.py                   shared mock scripts

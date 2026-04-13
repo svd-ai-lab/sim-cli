@@ -13,6 +13,7 @@ from sim.drivers.workbench import WorkbenchDriver
 from sim.drivers.mechanical import MechanicalDriver
 from sim.drivers.abaqus import AbaqusDriver
 from sim.drivers.starccm import StarccmDriver
+from sim.drivers.cfx import CfxDriver
 
 DRIVERS: list[DriverProtocol] = [
     PyBaMMLDriver(),
@@ -26,6 +27,7 @@ DRIVERS: list[DriverProtocol] = [
     MechanicalDriver(),
     AbaqusDriver(),
     StarccmDriver(),
+    CfxDriver(),
 ]
 
 

@@ -1,0 +1,15 @@
+LIBRARY:
+  MATERIAL: Water
+    Option = Pure Substance
+    PROPERTIES:
+      Option = General Material
+      EQUATION OF STATE:
+        Density = 997 [kg m^-3]
+        Option = Value
+      END
+    END
+  END
+END
+COMMAND FILE:
+  Version = 24.1
+END

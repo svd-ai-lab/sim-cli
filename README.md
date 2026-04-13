@@ -251,6 +251,7 @@ That is the entire setup — same `sim-cli` package on both sides, same wire pro
 
 ## 📰 News
 
+- **2026-04-14** 🌀 **CFX driver** — new Ansys CFX driver with persistent session support. Three-phase hybrid architecture: `cfx5solve` (one-shot solve) → `cfx5post -line` (interactive queries via Perl `evaluate()`) → `cfx5post -batch` (auto-delegated rendering with filled contours). CCL file detection/linting, CFX-specific output parsing, 27 unit tests + VMFL015 E2E with step-by-step session transcript. No Python SDK — pure CLI toolchain.
 - **2026-04-13** 🏭 **Abaqus + Star-CCM+ drivers** — two new solver drivers. Abaqus: `.inp` input decks + Python scripts, cantilever beam E2E with deformation contour evidence. Star-CCM+: Java macro batch execution, pipe flow mesh generation E2E. Both with full TDD test suites.
 - **2026-04-13** 🔍 **Output-based error detection** — `RunResult` now has `errors` list and `ok` property. All drivers scan stdout/stderr for error patterns (Traceback, Exception, ScriptingException). `exit_code == 0` alone no longer counts as success.
 - **2026-04-13** 🧹 **Workbench process cleanup** — `disconnect()` and `run_file()` now kill the entire process tree (RunWB2 + AnsysFWW + ansyscl). No more orphaned Workbench windows after tests.
