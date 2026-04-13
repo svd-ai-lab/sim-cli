@@ -209,10 +209,11 @@ sim --host <server-ip> disconnect
 
 | ドメイン | 今日動く例示バックエンド | セッション | ステータス |
 |---|---|---|---|
-| CFD | Ansys Fluent、OpenFOAM | 持続 / ワンショット | ✅ Working |
+| 電子機器熱解析 | Simcenter Flotherm | 持続 (GUI) | ✅ Working ── 自然言語からのモデル生成、XSD 検証付き FloSCRIPT、チェックポイント付き段階構築 |
+| CFD | Ansys Fluent、OpenFOAM、Simcenter STAR-CCM+ | 持続 / ワンショット | ✅ Working |
 | マルチフィジックス | COMSOL Multiphysics | ワンショット | ✅ Working |
+| CAE | Ansys Workbench、Ansys Mechanical、Abaqus | 持続 / ワンショット | ✅ Working |
 | 前処理 | BETA CAE ANSA | 持続 / ワンショット | ✅ Working (Phase 1) |
-| 電子機器熱解析 | Simcenter Flotherm | ワンショット | ✅ Working (Phase A) |
 | 数値 / スクリプト | MATLAB | ワンショット | ✅ Working (v0) |
 | 電池モデリング | PyBaMM | ワンショット | ✅ Working |
 | **+ あなたのソルバー** | PR をどうぞ ── [開発](#-開発) を参照 | — | 🛠 |

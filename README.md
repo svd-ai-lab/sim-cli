@@ -113,8 +113,9 @@ The driver registry is **open and intentionally growing** — adding a new backe
 | Domain | Example backends shipping today | Sessions | Status |
 |---|---|---|---|
 | Electronics thermal | Simcenter Flotherm | persistent (GUI) | ✅ Working — model generation from natural language, XSD-validated FloSCRIPT, step-by-step build with checkpoints |
-| CFD | Ansys Fluent, OpenFOAM | persistent / one-shot | ✅ Working |
+| CFD | Ansys Fluent, OpenFOAM, Simcenter STAR-CCM+ | persistent / one-shot | ✅ Working |
 | Multiphysics | COMSOL Multiphysics | one-shot | ✅ Working |
+| CAE | Ansys Workbench, Ansys Mechanical, Abaqus | persistent / one-shot | ✅ Working |
 | Pre-processing | BETA CAE ANSA | persistent / one-shot | ✅ Working (Phase 1) |
 | Numerical / scripting | MATLAB | one-shot | ✅ Working (v0) |
 | Battery modeling | PyBaMM | one-shot | ✅ Working |
