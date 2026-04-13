@@ -1,0 +1,17 @@
+driver: starccm
+
+# No pip SDK — Star-CCM+ uses Java macros, not a Python package.
+# sdk_package is omitted intentionally.
+
+profiles:
+
+  # ── 2602 (21.02): Current installed version ──────────────────────
+
+  - name: starccm_v21_02
+    solver_versions: ["21.02", "2602"]
+    active_sdk_layer: null
+    active_solver_layer: "21.02"
+    notes: |
+      Simcenter STAR-CCM+ 2602 (version 21.02.007).
+      Java macro scripting via starccm+ -batch macro.java.
+      No Python SDK — automation through CLI and Java macros only.

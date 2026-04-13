@@ -254,7 +254,7 @@ def run(ctx, script, solver):
         data["parsed_output"] = parsed
         click.echo(json_mod.dumps(data, indent=2))
     else:
-        status = "converged" if result.exit_code == 0 else "failed"
+        status = "converged" if result.ok else "failed"
         click.echo(f"[sim] run:    {script} via {solver}")
         click.echo(f"[sim] status: {status} ({result.duration_s}s)")
         click.echo(f"[sim] log:    saved as #{run_id}")

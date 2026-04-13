@@ -35,7 +35,33 @@ from sim.driver import (
     SolverInstall,
 )
 
+from sim.runner import detect_output_errors
+
 log = logging.getLogger(__name__)
+
+# Workbench / IronPython error patterns (supplement generic ones)
+_WB_ERROR_PATTERNS = [
+    re.compile(r"Framework error caught", re.IGNORECASE),
+    re.compile(r"ScriptingException:", re.IGNORECASE),
+    re.compile(r"MissingMemberException:", re.IGNORECASE),
+    re.compile(r"AttributeError:", re.IGNORECASE),
+    re.compile(r"出现意外错误", re.IGNORECASE),  # CJK: "unexpected error"
+]
+
+
+def _detect_wb_errors(stdout: str, stderr: str) -> list[str]:
+    """Detect errors in Workbench output — generic + WB-specific patterns."""
+    errors = detect_output_errors(stdout, stderr)
+    for text, source in [(stderr, "stderr"), (stdout, "stdout")]:
+        if not text:
+            continue
+        for pat in _WB_ERROR_PATTERNS:
+            m = pat.search(text)
+            if m:
+                line = m.group(0)[:200]
+                if not any(line in e for e in errors):
+                    errors.append(f"[{source}] {line}")
+    return errors
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -75,6 +101,55 @@ def _try_import_pyworkbench():
         return pywb
     except ImportError:
         return None
+
+
+def _kill_process_tree(pid: int) -> None:
+    """Kill a process and all its children (AnsysFWW, ansyscl, etc.)."""
+    try:
+        import signal
+        # Windows: taskkill /T kills the entire process tree
+        if os.name == "nt":
+            subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(pid)],
+                capture_output=True, timeout=10,
+            )
+        else:
+            os.kill(pid, signal.SIGTERM)
+    except Exception:
+        pass
+
+
+def _exit_workbench(wb) -> None:
+    """Shut down a Workbench client and its entire process tree.
+
+    Strategy:
+    1. Try SDK-level exit (clean shutdown)
+    2. If that fails or leaves children, kill the process tree by PID
+    Never raises — disconnect must be idempotent and safe.
+    """
+    if wb is None:
+        return
+
+    # Grab the PID before attempting exit — we may need it for tree kill
+    pid = None
+    for attr in ("_process", "process"):
+        proc = getattr(wb, attr, None)
+        if proc is not None and hasattr(proc, "pid"):
+            pid = proc.pid
+            break
+
+    # Try SDK-level exit
+    for method in ("exit", "close"):
+        fn = getattr(wb, method, None)
+        if fn is not None and callable(fn):
+            try:
+                fn()
+            except Exception:
+                pass
+
+    # Kill the entire process tree (RunWB2 + AnsysFWW + ansyscl children)
+    if pid is not None:
+        _kill_process_tree(pid)
 
 
 def _clear_result_file() -> None:
@@ -377,6 +452,9 @@ class WorkbenchDriver:
     def disconnect(self, **kwargs) -> None:
         if self._client is None and self._backend is None:
             return
+        # Actually shut down the Workbench process
+        if self._backend == "pyworkbench" and self._client is not None:
+            _exit_workbench(self._client)
         self._client = None
         self._session_id = None
         self._mode = None
@@ -393,20 +471,30 @@ class WorkbenchDriver:
         _clear_result_file()
 
         t0 = time.time()
+        wb = None
         try:
             wb = pywb.launch_workbench(release=release)
             text = script.read_text(encoding="utf-8")
             result_str = wb.run_script_string(text, log_level="warning")
             stdout = result_str if isinstance(result_str, str) else str(result_str or "")
             stdout = self._append_result_file(stdout)
+
+            # Analyze ALL output for errors — never blindly return exit_code=0
+            errors = _detect_wb_errors(stdout, "")
+            exit_code = 1 if errors else 0
+
             return RunResult(
-                exit_code=0, stdout=stdout, stderr="",
+                exit_code=exit_code, stdout=stdout, stderr="",
                 duration_s=round(time.time() - t0, 4),
                 script=str(script), solver=self.name, timestamp=timestamp,
+                errors=errors,
             )
         except Exception as e:
             log.warning("SDK run_file failed: %s", e)
             return None
+        finally:
+            # One-shot: always close the Workbench process after run_file
+            _exit_workbench(wb)
 
     def _exec_sdk(self, code: str) -> tuple[bool, str, str | None]:
         """Execute snippet via SDK session."""
@@ -414,6 +502,9 @@ class WorkbenchDriver:
             result_str = self._client.run_script_string(code, log_level="warning")
             stdout = result_str if isinstance(result_str, str) else str(result_str or "")
             stdout = self._append_result_file(stdout)
+            errors = _detect_wb_errors(stdout, "")
+            if errors:
+                return False, stdout, "; ".join(errors)
             return True, stdout, None
         except Exception as e:
             return False, "", str(e)
@@ -444,11 +535,19 @@ class WorkbenchDriver:
             )
 
         stdout = self._append_result_file(result.stdout)
+        stderr = result.stderr or ""
+
+        # Analyze ALL output — exit_code alone is unreliable for RunWB2
+        errors = _detect_wb_errors(stdout, stderr)
+        exit_code = result.returncode
+        if exit_code == 0 and errors:
+            exit_code = 1
 
         return RunResult(
-            exit_code=result.returncode, stdout=stdout, stderr=result.stderr,
+            exit_code=exit_code, stdout=stdout, stderr=stderr,
             duration_s=round(time.time() - t0, 4),
             script=str(script), solver=self.name, timestamp=timestamp,
+            errors=errors,
         )
 
     def _exec_runwb2(self, code: str) -> tuple[bool, str, str | None]:
@@ -470,9 +569,11 @@ class WorkbenchDriver:
                 capture_output=True, text=True, timeout=600,
             )
             stdout = self._append_result_file(result.stdout)
-            if result.returncode == 0:
-                return True, stdout, None
-            return False, stdout, result.stderr
+            stderr = result.stderr or ""
+            errors = _detect_wb_errors(stdout, stderr)
+            if result.returncode != 0 or errors:
+                return False, stdout, "; ".join(errors) if errors else stderr
+            return True, stdout, None
         except Exception as e:
             return False, "", str(e)
         finally:

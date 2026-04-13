@@ -251,6 +251,10 @@ That is the entire setup — same `sim-cli` package on both sides, same wire pro
 
 ## 📰 News
 
+- **2026-04-13** 🏭 **Abaqus + Star-CCM+ drivers** — two new solver drivers. Abaqus: `.inp` input decks + Python scripts, cantilever beam E2E with deformation contour evidence. Star-CCM+: Java macro batch execution, pipe flow mesh generation E2E. Both with full TDD test suites.
+- **2026-04-13** 🔍 **Output-based error detection** — `RunResult` now has `errors` list and `ok` property. All drivers scan stdout/stderr for error patterns (Traceback, Exception, ScriptingException). `exit_code == 0` alone no longer counts as success.
+- **2026-04-13** 🧹 **Workbench process cleanup** — `disconnect()` and `run_file()` now kill the entire process tree (RunWB2 + AnsysFWW + ansyscl). No more orphaned Workbench windows after tests.
+- **2026-04-13** 📂 **Test directory reorganization** — flat `tests/` restructured into `tests/base/` (core) + `tests/drivers/<solver>/` (per-driver) + `tests/fixtures/<solver>/` + `tests/execution/<solver>/`.
 - **2026-04-12** 🏗 **Flotherm model generation** — Claude can now build Flotherm thermal models from natural language. FloSCRIPT XML generation with XSD validation, step-by-step execution, and checkpoint recovery. See svd-ai-lab/sim-cli#12.
 - **2026-04-07** 🚀 **sim-cli v0.2.0** — first public release on GitHub. The driver registry spans CFD, multiphysics, thermal, pre-processing, and battery solvers.
 - **2026-04-07** 🧠 Companion repo [`sim-skills`](https://github.com/svd-ai-lab/sim-skills) published — per-solver agent skills so an LLM can drive each new backend without prior context.

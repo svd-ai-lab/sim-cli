@@ -19,7 +19,7 @@ import time
 from pathlib import Path
 
 # ensure we can import sim
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
 from sim.drivers.mechanical import MechanicalDriver
 

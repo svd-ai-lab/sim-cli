@@ -36,3 +36,8 @@ tests/execution/logs/
 
 # Local Claude Code skills (project-private, do not publish)
 .claude/
+
+# Local/temp files
+mylocal.ip
+*.sim
+__pycache__/

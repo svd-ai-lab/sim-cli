@@ -87,6 +87,8 @@ The server keeps a single global `_state: SessionState` (one session per server 
 | `openfoam` | `OpenFOAMDriver` | `openfoam/driver.py` |
 | `workbench` | `WorkbenchDriver` | `workbench/driver.py` + `compatibility.yaml` |
 | `mechanical` | `MechanicalDriver` | `mechanical/driver.py` + `compatibility.yaml` |
+| `abaqus` | `AbaqusDriver` | `abaqus/driver.py` |
+| `starccm` | `StarccmDriver` | `starccm/driver.py` + `compatibility.yaml` |
 
 Drivers with `supports_session = True` (fluent, ansa, flotherm, matlab, workbench, mechanical) implement persistent-session lifecycle (`launch`/`run`/`query`/`disconnect`). The rest are one-shot only.
 
@@ -118,16 +120,48 @@ See `pybamm/driver.py` for the smallest reference implementation; `fluent/` for 
 ```
 tests/
   __init__.py
-  fixtures/                          mock solver scripts (good/bad imports/no-solve/...)
-  execution/                         end-to-end .ps1 + .py snippets used in manual runs
-  test_cli.py                        smoke tests for click commands
-  test_connect.py                    driver.connect() availability checks
-  test_lint.py                       lint protocol coverage
-  test_run.py                        one-shot subprocess execution
-  test_store.py                      RunStore persistence
-  test_logs.py                       sim logs CLI
-  test_comsol_driver.py              comsol driver unit tests
-  test_matlab_driver.py              matlab driver unit tests
+  conftest.py                        shared FIXTURES / EXECUTION paths
+  base/                              core framework tests (no solver needed)
+    test_cli.py                      smoke tests for click commands
+    test_compat.py                   skills layering / profile resolution
+    test_connect.py                  driver.connect() availability checks
+    test_lint.py                     lint protocol coverage
+    test_run.py                      one-shot subprocess execution
+    test_store.py                    RunStore persistence
+    test_logs.py                     sim logs CLI
+  drivers/                           per-driver unit + integration tests
+    abaqus/
+      test_abaqus_driver.py          protocol compliance
+      test_abaqus_e2e.py             cantilever beam E2E
+    comsol/
+      test_comsol_driver.py          unit tests
+    flotherm/
+      test_flotherm_lint.py          FloSCRIPT XSD validation
+    fluent/
+      test_fluent_mixing_elbow.py    mixing_elbow E2E
+    matlab/
+      test_matlab_driver.py          unit tests
+    starccm/
+      test_starccm_driver.py         unit tests
+    workbench/
+      test_workbench_driver.py       unit tests (monkeypatched)
+      test_workbench_integration.py  real SDK integration
+  fixtures/                          mock solver scripts, organized by solver
+    abaqus/                          .py + .inp fixtures
+    comsol/                          .py fixtures
+    matlab/                          .m fixtures
+    pybamm/                          .py fixtures
+    starccm/                         .java fixtures
+    workbench/                       .wbjn + .py fixtures
+    mock_solver.py                   shared mock scripts
+    mock_fail.py
+    not_simulation.py
+  execution/                         E2E scripts (per solver, manual runs)
+    abaqus/                          cantilever beam scripts
+    fluent/                          mixing_elbow snippets + PS1 runners
+    mechanical/                      static structural E2E + observation coupling
+    starccm/                         smoke test Java macro
+    workbench/                       SDK example runners
 ```
 
 Tests that need a real solver are gated by import-availability flags (e.g. `HAS_PYBAMM`) and skip gracefully when the package is missing.

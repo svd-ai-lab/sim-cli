@@ -32,7 +32,7 @@ from functools import partial
 # Force unbuffered output so background runs show progress
 print = partial(print, flush=True)
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
 from sim.drivers.mechanical import MechanicalDriver
 

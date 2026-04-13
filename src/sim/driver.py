@@ -60,12 +60,20 @@ class RunResult:
     script: str
     solver: str
     timestamp: str
+    errors: list[str] = field(default_factory=list)
+
+    @property
+    def ok(self) -> bool:
+        """Comprehensive success check: exit_code AND no detected errors."""
+        return self.exit_code == 0 and len(self.errors) == 0
 
     def to_dict(self) -> dict:
         return {
             "exit_code": self.exit_code,
+            "ok": self.ok,
             "stdout": self.stdout,
             "stderr": self.stderr,
+            "errors": self.errors,
             "duration_s": self.duration_s,
             "script": self.script,
             "solver": self.solver,
