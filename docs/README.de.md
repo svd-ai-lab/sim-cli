@@ -210,10 +210,11 @@ Die Driver-Registry ist **offen und absichtlich wachsend** — ein neuer Backend
 
 | Domäne | Beispiel-Backends, die heute funktionieren | Sessions | Status |
 |---|---|---|---|
-| CFD | Ansys Fluent, OpenFOAM | persistent / one-shot | ✅ Working |
+| Elektronik-Thermik | Simcenter Flotherm | persistent (GUI) | ✅ Working — Modellgenerierung aus natürlicher Sprache, XSD-validiertes FloSCRIPT, schrittweiser Aufbau mit Checkpoints |
+| CFD | Ansys Fluent, OpenFOAM, Simcenter STAR-CCM+ | persistent / one-shot | ✅ Working |
 | Multiphysik | COMSOL Multiphysics | one-shot | ✅ Working |
+| CAE | Ansys Workbench, Ansys Mechanical, Abaqus | persistent / one-shot | ✅ Working |
 | Vorverarbeitung | BETA CAE ANSA | persistent / one-shot | ✅ Working (Phase 1) |
-| Elektronik-Thermik | Simcenter Flotherm | one-shot | ✅ Working (Phase A) |
 | Numerik / Scripting | MATLAB | one-shot | ✅ Working (v0) |
 | Batteriemodellierung | PyBaMM | one-shot | ✅ Working |
 | **+ dein Solver** | PR öffnen — siehe [Entwicklung](#-entwicklung) | — | 🛠 |

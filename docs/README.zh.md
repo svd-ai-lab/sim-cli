@@ -208,10 +208,11 @@ sim --host <server-ip> disconnect
 
 | 领域 | 当前已支持的示例后端 | 会话模式 | 状态 |
 |---|---|---|---|
-| CFD | Ansys Fluent、OpenFOAM | 持久 / 一次性 | ✅ 可用 |
+| 电子热分析 | Simcenter Flotherm | 持久（GUI）| ✅ 可用 —— 自然语言驱动的模型生成、XSD 校验的 FloSCRIPT、带检查点的分步构建 |
+| CFD | Ansys Fluent、OpenFOAM、Simcenter STAR-CCM+ | 持久 / 一次性 | ✅ 可用 |
 | 多物理场 | COMSOL Multiphysics | 一次性 | ✅ 可用 |
+| CAE | Ansys Workbench、Ansys Mechanical、Abaqus | 持久 / 一次性 | ✅ 可用 |
 | 前处理 | BETA CAE ANSA | 持久 / 一次性 | ✅ 可用（Phase 1）|
-| 电子热分析 | Simcenter Flotherm | 一次性 | ✅ 可用（Phase A）|
 | 数值 / 脚本 | MATLAB | 一次性 | ✅ 可用（v0）|
 | 电池建模 | PyBaMM | 一次性 | ✅ 可用 |
 | **+ 你的求解器** | 提 PR —— 见 [Adding a driver](#-开发) | — | 🛠 |
