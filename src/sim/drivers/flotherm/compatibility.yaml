@@ -28,6 +28,16 @@ profiles:
     notes: |
       Simcenter Flotherm 2412 (2024.4).
 
+  - name: flotherm_2410
+    solver_versions: ["2410"]
+    active_solver_layer: "2410"
+    notes: |
+      Simcenter Flotherm 2410 (2024.3). Tested 2026-04-12 on
+      DESKTOP-623UBP1. Headless translator.exe + solexe.exe path
+      crashes with 0xC0000005 (same as 2504 on this machine — see
+      sim-cli#14). GUI automation via feat/flotherm-gui-automation
+      branch works.
+
   - name: flotherm_2406
     solver_versions: ["2406"]
     active_solver_layer: "2406"
