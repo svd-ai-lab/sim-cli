@@ -92,7 +92,9 @@ The server keeps a single global `_state: SessionState` (one session per server 
 | `cfx` | `CfxDriver` | `cfx/driver.py` + `compatibility.yaml` |
 | `ls_dyna` | `LsDynaDriver` | `lsdyna/driver.py` + `compatibility.yaml` |
 
-Drivers with `supports_session = True` (fluent, ansa, flotherm, matlab, workbench, mechanical, cfx) implement persistent-session lifecycle (`launch`/`run`/`query`/`disconnect`). The rest are one-shot only.
+Drivers with `supports_session = True` (fluent, ansa, flotherm, matlab, workbench, mechanical, cfx, ls_dyna) implement persistent-session lifecycle (`launch`/`run`/`query`/`disconnect`). The rest are one-shot only.
+
+LS-DYNA is a special case: the *solver* is one-shot (no live process to connect to), but the session holds a persistent Python namespace with PyDyna `Deck`/`run_dyna` and a DPF `Model` so deck-building and post-processing can be driven incrementally via `sim exec`.
 
 `get_driver(name)` looks up by `.name` attribute.
 

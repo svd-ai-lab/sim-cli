@@ -338,17 +338,20 @@ def exec_cmd(ctx, code, code_file, label):
 # ── inspect (live session state) ─────────────────────────────────────────────
 
 @main.command()
-@click.argument("name", default="session.summary",
-                type=click.Choice([
-                    "session.summary",
-                    "session.versions",
-                    "session.mode",
-                    "last.result",
-                    "workflow.summary",
-                ]))
+@click.argument("name", default="session.summary")
 @click.pass_context
 def inspect(ctx, name):
-    """Query live session state."""
+    """Query live session state.
+
+    Common targets across all drivers:
+      session.summary, session.versions, session.mode, last.result, workflow.summary
+
+    Driver-specific targets (resolved by the driver's query() method):
+      ls_dyna:    deck.summary, deck.text, workdir.files, results.summary
+      mechanical: mechanical.project_directory, mechanical.files, mechanical.product_info
+      fluent:     field.catalog, workflow.summary
+      ...
+    """
     from sim.session import SessionClient
     client = SessionClient(host=ctx.obj["host"], port=ctx.obj["port"])
     result = client.query(name=name)

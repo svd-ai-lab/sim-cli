@@ -174,9 +174,21 @@ def _scan_lsdyna_installs() -> list[SolverInstall]:
 class LsDynaDriver:
     """Sim driver for Ansys LS-DYNA.
 
+    Dual-mode driver:
+      * One-shot: ``run_file(.k)`` — direct subprocess call to ``lsdyna_sp.exe``.
+      * Persistent session: ``launch/run/query/disconnect`` — Python namespace
+        holding a PyDyna ``Deck`` (build phase) and a DPF ``Model`` (post phase).
+        Solver invocation inside a session is still one-shot subprocess; the
+        *session* is the surrounding Python state.
+
     DriverProtocol surface:
-        name, detect, lint, connect, parse_output, run_file, detect_installed
+        name, supports_session, detect, lint, connect, parse_output,
+        run_file, detect_installed, launch, run, query, disconnect
     """
+
+    def __init__(self) -> None:
+        self._runtime = None  # type: ignore[assignment]
+        # Lazy import keeps PyDyna optional for one-shot users
 
     @property
     def name(self) -> str:
@@ -184,7 +196,7 @@ class LsDynaDriver:
 
     @property
     def supports_session(self) -> bool:
-        return False
+        return True
 
     # -- detect ---------------------------------------------------------------
 
@@ -441,3 +453,70 @@ class LsDynaDriver:
             solver=self.name,
             timestamp=datetime.now(timezone.utc).isoformat(),
         )
+
+    # -- session lifecycle ----------------------------------------------------
+
+    def _ensure_runtime(self):
+        if self._runtime is None:
+            from sim.drivers.lsdyna.runtime import LsDynaSessionRuntime
+            self._runtime = LsDynaSessionRuntime()
+        return self._runtime
+
+    def launch(self, **kwargs) -> dict:
+        """Start a persistent PyDyna session.
+
+        Accepts:
+          workdir  — Path or str for solver IO (default: temp dir)
+          awp_root — Path to ANSYS install (default: auto-detect)
+          mode, ui_mode, processors — accepted for protocol compatibility (ignored)
+
+        Augments PATH with Intel runtime DLLs so subsequent run_dyna() calls
+        from the session find libiomp5md.dll (KI-002).
+        """
+        runtime = self._ensure_runtime()
+
+        # If user didn't supply awp_root, derive from detected install
+        if "awp_root" not in kwargs:
+            installs = self.detect_installed()
+            if installs:
+                bin_dir = Path(installs[0].path)
+                # Walk up to find the AWP root (folder containing tp/)
+                for parent in [bin_dir] + list(bin_dir.parents):
+                    if (parent / "tp").is_dir():
+                        kwargs["awp_root"] = str(parent)
+                        # Augment PATH with Intel DLLs for run_dyna() calls
+                        env_updates = self._runtime_env(installs[0])
+                        if "PATH" in env_updates:
+                            os.environ["PATH"] = env_updates["PATH"]
+                        break
+
+        return runtime.launch(**kwargs)
+
+    def run(self, code: str, label: str = "snippet") -> dict:
+        """Execute a Python snippet in the session namespace.
+
+        The snippet has access to: deck, kwd, Deck, workdir, run_dyna,
+        model, dpf. Assign `_result = ...` to return data.
+        """
+        runtime = self._ensure_runtime()
+        return runtime.exec_snippet(code, label)
+
+    def query(self, name: str) -> dict:
+        """Query session state.
+
+        Supported names:
+          session.summary   — basic session info
+          deck.summary      — keyword count, type list, completeness flags
+          deck.text         — serialized .k file content
+          workdir.files     — files currently in the working directory
+          results.summary   — DPF model metadata (after solve)
+          last.result       — previous exec_snippet record
+        """
+        runtime = self._ensure_runtime()
+        return runtime.query(name)
+
+    def disconnect(self, **kwargs) -> dict:
+        """Tear down the session. Idempotent."""
+        if self._runtime is None:
+            return {"ok": True, "disconnected": True, "note": "no active session"}
+        return self._runtime.disconnect()

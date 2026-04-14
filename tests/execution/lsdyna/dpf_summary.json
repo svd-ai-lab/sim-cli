@@ -1,0 +1,25 @@
+{
+  "n_states": 12,
+  "time_start": 0.0,
+  "time_end": 1.0000407695770264,
+  "kinetic_energy": {
+    "max": 4.876334796025117e-13,
+    "min": 0.0,
+    "final": 2.4575358284365724e-20
+  },
+  "internal_energy": {
+    "max": 1.999999936531045e-20,
+    "final": -0.03942641615867615
+  },
+  "displacement_final": {
+    "max_magnitude": 0.03422332795495055,
+    "min_magnitude": 0.0
+  },
+  "energy_plot": "dpf_kinetic_energy.png",
+  "stress_von_mises_final": {
+    "max": 0.009551176438192005,
+    "min": 0.009551176438192005
+  },
+  "stress_plot": "dpf_stress_contour.png",
+  "displacement_plot": "dpf_displacement.png"
+}

@@ -315,6 +315,18 @@ def inspect(name: str):
                 **{k: v for k, v in last.items() if k != "code"},
             },
         }
+    # Fallback: ask the active driver to handle driver-specific inspect targets
+    # (e.g. ls_dyna's deck.summary, mechanical.project_directory)
+    driver = _state.driver
+    if driver is not None and hasattr(driver, "query"):
+        try:
+            result = driver.query(name)
+        except Exception as exc:
+            raise HTTPException(500, f"driver query failed: {exc}") from exc
+        if isinstance(result, dict):
+            if result.get("ok") is False:
+                raise HTTPException(404, result.get("error", f"unknown inspect target: {name}"))
+            return {"ok": True, "data": result}
     raise HTTPException(404, f"unknown inspect target: {name}")
 
 
