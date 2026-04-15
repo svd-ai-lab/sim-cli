@@ -260,6 +260,20 @@ That is the entire setup — same `sim-cli` package on both sides, same wire pro
 
 ---
 
+## 📰 News
+
+Highlights from the last few milestones — full history in [`CHANGELOG.md`](CHANGELOG.md).
+
+- **2026-04-15** 🐍 **Pure-Python simulation ecosystem — 13 new pip-installable drivers**: OpenSeesPy, SfePy, Cantera, OpenMDAO, FiPy, pymoo, Pyomo, SimPy, Trimesh, Devito, CoolProp, scikit-rf, pandapower. Each verified against analytical/textbook benchmarks (CH4/air adiabatic flame 2225 K, Sellar MDA, NSGA-II ZDT1 Pareto, water T_sat 373.124 K, etc.).
+- **2026-04-15** 🐧 **Open-source Linux CAE — 9 new drivers** reachable via remote `sim serve`: CalculiX, Gmsh, SU2, LAMMPS, scikit-fem, Elmer FEM, meshio, pyvista, PyMFEM. Each with Tier-1 unit tests + real-E2E physics verification (cantilever tip 0.1 % err, NACA0012 inviscid, LJ NVT, Poisson < 1 % err).
+- **2026-04-14** 🔩 **MAPDL driver (Phase 1 + Phase 2)** — new Ansys MAPDL driver covering both one-shot `sim run` and persistent PyMAPDL gRPC session (`sim connect/exec/inspect`). 4-profile compatibility matrix (24.1–25.2), 2D I-beam + 3D notched plate E2E, same 2D beam re-driven through 10-step session with identical physics.
+- **2026-04-14** 🌡 **Flotherm 2410 (2024.3) profile** added to the compatibility matrix.
+- **2026-04-14** 🐍 **LS-DYNA session mode + driver-agnostic inspect** — persistent Python namespace with PyDyna `Deck` + DPF `Model`; `sim inspect` no longer hardcodes builtin targets.
+- **2026-04-14** 💥 **LS-DYNA driver** — explicit/implicit nonlinear FEA via `.k` keyword files, single hex tension E2E with 7129-cycle normal termination.
+- **2026-04-14** 🌀 **CFX driver** — hybrid `cfx5solve` / `cfx5post -line` / `cfx5post -batch` with 27 unit tests + VMFL015 E2E.
+
+---
+
 ## 📄 License
 
 Apache-2.0 — see [LICENSE](LICENSE).
