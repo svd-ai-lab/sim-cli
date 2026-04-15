@@ -1,0 +1,11 @@
+driver: lammps
+
+profiles:
+  - name: lammps_stable_29Aug2024
+    solver_versions: ["20240829"]
+    active_sdk_layer: null
+    active_solver_layer: "stable_29Aug2024"
+    notes: |
+      LAMMPS stable release 29Aug2024, built from source with `make
+      serial`. E2E verified: LJ liquid NVT equilibration (50 steps,
+      target T=1.5, observed T~1.48). Serial only — no MPI.

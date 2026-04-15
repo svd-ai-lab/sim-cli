@@ -15,6 +15,29 @@ from sim.drivers.abaqus import AbaqusDriver
 from sim.drivers.starccm import StarccmDriver
 from sim.drivers.cfx import CfxDriver
 from sim.drivers.lsdyna import LsDynaDriver
+from sim.drivers.mapdl import MapdlDriver
+from sim.drivers.calculix import CalculixDriver
+from sim.drivers.gmsh import GmshDriver
+from sim.drivers.su2 import Su2Driver
+from sim.drivers.lammps import LammpsDriver
+from sim.drivers.scikit_fem import ScikitFemDriver
+from sim.drivers.elmer import ElmerDriver
+from sim.drivers.meshio import MeshioDriver
+from sim.drivers.pyvista import PyvistaDriver
+from sim.drivers.pymfem import PymfemDriver
+from sim.drivers.openseespy import OpenSeesPyDriver
+from sim.drivers.sfepy import SfepyDriver
+from sim.drivers.cantera import CanteraDriver
+from sim.drivers.openmdao import OpenMDAODriver
+from sim.drivers.fipy import FipyDriver
+from sim.drivers.pymoo import PymooDriver
+from sim.drivers.pyomo import PyomoDriver
+from sim.drivers.simpy import SimpyDriver
+from sim.drivers.trimesh import TrimeshDriver
+from sim.drivers.devito import DevitoDriver
+from sim.drivers.coolprop import CoolPropDriver
+from sim.drivers.scikitrf import ScikitRfDriver
+from sim.drivers.pandapower import PandapowerDriver
 
 DRIVERS: list[DriverProtocol] = [
     PyBaMMLDriver(),
@@ -30,6 +53,29 @@ DRIVERS: list[DriverProtocol] = [
     StarccmDriver(),
     CfxDriver(),
     LsDynaDriver(),
+    MapdlDriver(),
+    CalculixDriver(),
+    GmshDriver(),
+    Su2Driver(),
+    LammpsDriver(),
+    ScikitFemDriver(),
+    ElmerDriver(),
+    MeshioDriver(),
+    PyvistaDriver(),
+    PymfemDriver(),
+    OpenSeesPyDriver(),
+    SfepyDriver(),
+    CanteraDriver(),
+    OpenMDAODriver(),
+    FipyDriver(),
+    PymooDriver(),
+    PyomoDriver(),
+    SimpyDriver(),
+    TrimeshDriver(),
+    DevitoDriver(),
+    CoolPropDriver(),
+    ScikitRfDriver(),
+    PandapowerDriver(),
 ]
 
 

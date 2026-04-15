@@ -1,0 +1,12 @@
+driver: pymfem
+sdk_package: mfem
+
+profiles:
+  - name: pymfem_4
+    solver_versions: ["4.8"]
+    active_sdk_layer: "4"
+    active_solver_layer: null
+    notes: |
+      PyMFEM 4.8 pip install (wheel includes compiled C++ MFEM).
+      Serial module `mfem.ser`. E2E verified: Poisson -Δu=1 on unit
+      square → u_max=0.07353 (analytical 0.07367, error 0.2%).

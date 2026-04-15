@@ -1,0 +1,2 @@
+This is plain text with no CalculiX keywords at all.
+Not even a *HEADING line. Should lint as error.

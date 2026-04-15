@@ -120,6 +120,15 @@ The driver registry is **open and intentionally growing** — adding a new backe
 | Pre-processing | BETA CAE ANSA | persistent / one-shot | ✅ Working (Phase 1) |
 | Numerical / scripting | MATLAB | one-shot | ✅ Working (v0) |
 | Battery modeling | PyBaMM | one-shot | ✅ Working |
+| Implicit FEA | Ansys MAPDL, CalculiX, Elmer FEM, PyMFEM, scikit-fem, SfePy, OpenSeesPy | persistent / one-shot | ✅ Working |
+| Pre/post-processing | Gmsh, meshio, pyvista, Trimesh | one-shot | ✅ Working |
+| Open-source CFD | OpenFOAM, SU2 | one-shot / remote | ✅ Working |
+| Molecular dynamics | LAMMPS | one-shot | ✅ Working |
+| FD codegen / seismic | Devito | one-shot | ✅ Working |
+| Thermo properties / combustion | CoolProp, Cantera | one-shot | ✅ Working |
+| Optimization / MDAO | OpenMDAO, pymoo, Pyomo | one-shot | ✅ Working |
+| Discrete-event simulation | SimPy | one-shot | ✅ Working |
+| Power systems / RF | pandapower, scikit-rf | one-shot | ✅ Working |
 | **+ your solver** | open a PR — see [Adding a driver](#-development) | — | 🛠 |
 
 Per-solver protocols, snippets, and demo workflows live in [`sim-skills`](https://github.com/svd-ai-lab/sim-skills), which is **also designed to grow** alongside the driver registry — one new agent skill per new backend.

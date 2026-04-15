@@ -1,0 +1,13 @@
+driver: pyvista
+sdk_package: pyvista
+
+profiles:
+  - name: pyvista_0_47
+    solver_versions: ["0.47"]
+    active_sdk_layer: "0_47"
+    active_solver_layer: null
+    notes: |
+      pyvista 0.47 pip install (pulls vtk, numpy, matplotlib). Pure
+      Python post-processor for sim's output pipeline. E2E verified:
+      Gmsh → meshio → pyvista computes unit sphere area (0.76% error)
+      and volume (1.37% error).

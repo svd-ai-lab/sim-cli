@@ -1,0 +1,2 @@
+import devito
+print("loaded")

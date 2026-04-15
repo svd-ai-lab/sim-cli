@@ -1,0 +1,12 @@
+driver: meshio
+sdk_package: meshio
+
+profiles:
+  - name: meshio_5
+    solver_versions: ["5.3"]
+    active_sdk_layer: "5"
+    active_solver_layer: null
+    notes: |
+      meshio 5.x pip install (with [all] extras for HDF5/NetCDF support).
+      Pure Python, no separate binary. E2E verified: Gmsh sphere → VTK
+      round-trip (258 points preserved, bbox ±1 on unit sphere).

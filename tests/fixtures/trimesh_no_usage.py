@@ -1,0 +1,2 @@
+import trimesh
+print("loaded")

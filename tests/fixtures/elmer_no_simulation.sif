@@ -1,0 +1,8 @@
+! Missing Simulation block - lint should error
+Header
+  Mesh DB "." "mesh"
+End
+
+Body 1
+  Equation = 1
+End

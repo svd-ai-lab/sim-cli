@@ -1,0 +1,11 @@
+driver: su2
+
+profiles:
+  - name: su2_8_4
+    solver_versions: ["8.4"]
+    active_sdk_layer: null
+    active_solver_layer: "8.4"
+    notes: |
+      SU2 v8.4.0 "Harrier" prebuilt Linux serial binary. E2E verified
+      with Inviscid Bump (100 iter Euler → RMS[Rho]=-4.91). For parallel
+      runs switch to SU2-v8.4.0-linux64-mpi.zip.

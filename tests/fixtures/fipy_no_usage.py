@@ -1,0 +1,2 @@
+import fipy
+print("loaded")

@@ -1,0 +1,5 @@
+# Missing units command - lint should error
+atom_style      atomic
+dimension       3
+pair_style      lj/cut 2.5
+run             100

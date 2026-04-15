@@ -1,0 +1,13 @@
+driver: calculix
+# CalculiX has no Python SDK — scripts are .inp decks passed to the
+# ccx native binary via subprocess. No sdk_package.
+
+profiles:
+  - name: calculix_2_11
+    solver_versions: ["2.11"]
+    active_sdk_layer: null
+    active_solver_layer: "2.11"
+    notes: |
+      CalculiX 2.11 from Debian buster .deb. Requires LD_LIBRARY_PATH
+      pointing at libspooles.so.2.2. Static + Frequency verified; coarse
+      mesh cantilever E2E at 500..5000 tip deflection band.
