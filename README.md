@@ -251,22 +251,6 @@ That is the entire setup — same `sim-cli` package on both sides, same wire pro
 
 ---
 
-## 📰 News
-
-- **2026-04-14** 🌡 **Flotherm 2410 (2024.3) profile** — added 2410 to the Flotherm compatibility matrix. Detection works identically to 2504 via path-based version extraction (no driver code changes). GUI launch + FloSCRIPT lint with the 2410 XSD verified. Headless `translator.exe`/`solexe.exe` path still hits the same 0xC0000005 access violation as 2504 (tracked in svd-ai-lab/sim-cli#14).
-- **2026-04-14** 🐍 **LS-DYNA session mode + driver-agnostic inspect** — `LsDynaDriver.supports_session = True`. Session holds a persistent Python namespace with PyDyna `Deck`, `run_dyna`, and DPF `Model` (auto-loaded after each solve). Auto-augments PATH with Intel runtime DLLs. Also fixed two cross-driver bugs in CLI/server: `sim inspect` no longer hardcodes the 5 builtin targets (now accepts any string and falls back to `driver.query()`), unblocking driver-specific inspect targets like `deck.summary`, `mechanical.project_directory`, etc. 17 session E2E + 11 DPF E2E added.
-- **2026-04-14** 💥 **LS-DYNA driver** — new Ansys LS-DYNA driver for explicit/implicit nonlinear FEA. Pure subprocess execution via `lsdyna_sp.exe i=<file.k>`, keyword file detection/linting, Intel runtime DLL auto-discovery, LS-DYNA-specific output parsing (spaced-character termination messages, exit code 0 on error). 24 unit tests + single hex tension E2E with 7129-cycle normal termination. Compatible with ANSYS 2024 R1 (R14.0).
-- **2026-04-14** 🌀 **CFX driver** — new Ansys CFX driver with persistent session support. Three-phase hybrid architecture: `cfx5solve` (one-shot solve) → `cfx5post -line` (interactive queries via Perl `evaluate()`) → `cfx5post -batch` (auto-delegated rendering with filled contours). CCL file detection/linting, CFX-specific output parsing, 27 unit tests + VMFL015 E2E with step-by-step session transcript. No Python SDK — pure CLI toolchain.
-- **2026-04-13** 🏭 **Abaqus + Star-CCM+ drivers** — two new solver drivers. Abaqus: `.inp` input decks + Python scripts, cantilever beam E2E with deformation contour evidence. Star-CCM+: Java macro batch execution, pipe flow mesh generation E2E. Both with full TDD test suites.
-- **2026-04-13** 🔍 **Output-based error detection** — `RunResult` now has `errors` list and `ok` property. All drivers scan stdout/stderr for error patterns (Traceback, Exception, ScriptingException). `exit_code == 0` alone no longer counts as success.
-- **2026-04-13** 🧹 **Workbench process cleanup** — `disconnect()` and `run_file()` now kill the entire process tree (RunWB2 + AnsysFWW + ansyscl). No more orphaned Workbench windows after tests.
-- **2026-04-13** 📂 **Test directory reorganization** — flat `tests/` restructured into `tests/base/` (core) + `tests/drivers/<solver>/` (per-driver) + `tests/fixtures/<solver>/` + `tests/execution/<solver>/`.
-- **2026-04-12** 🏗 **Flotherm model generation** — Claude can now build Flotherm thermal models from natural language. FloSCRIPT XML generation with XSD validation, step-by-step execution, and checkpoint recovery. See svd-ai-lab/sim-cli#12.
-- **2026-04-07** 🚀 **sim-cli v0.2.0** — first public release on GitHub. The driver registry spans CFD, multiphysics, thermal, pre-processing, and battery solvers.
-- **2026-04-07** 🧠 Companion repo [`sim-skills`](https://github.com/svd-ai-lab/sim-skills) published — per-solver agent skills so an LLM can drive each new backend without prior context.
-
----
-
 ## 📄 License
 
 Apache-2.0 — see [LICENSE](LICENSE).
