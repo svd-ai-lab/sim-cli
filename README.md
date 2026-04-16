@@ -121,7 +121,7 @@ The driver registry is **open and intentionally growing** — adding a new backe
 | Numerical / scripting | MATLAB | one-shot | ✅ Working (v0) |
 | Battery modeling | PyBaMM | one-shot | ✅ Working |
 | Implicit FEA | Ansys MAPDL, CalculiX, Elmer FEM, PyMFEM, scikit-fem, SfePy, OpenSeesPy | persistent / one-shot | ✅ Working |
-| Pre/post-processing | Gmsh, meshio, pyvista, Trimesh | one-shot | ✅ Working |
+| Pre/post-processing | Gmsh, meshio, pyvista, ParaView, HyperMesh, Trimesh | one-shot | ✅ Working |
 | Open-source CFD | OpenFOAM, SU2 | one-shot / remote | ✅ Working |
 | Molecular dynamics | LAMMPS | one-shot | ✅ Working |
 | FD codegen / seismic | Devito | one-shot | ✅ Working |
@@ -264,6 +264,8 @@ That is the entire setup — same `sim-cli` package on both sides, same wire pro
 
 Highlights from the last few milestones — full history in [`CHANGELOG.md`](CHANGELOG.md).
 
+- **2026-04-16** 🔧 **HyperMesh driver** — new Altair HyperMesh FE pre-processor driver. Python `hm` API with 1946 model methods + 225 entity classes. Batch execution via `hw -b -script`. Detects via ALTAIR_HOME env, PATH, Program Files scan. 26 unit tests. 2-profile compat matrix (2024-2025).
+- **2026-04-16** 🔬 **ParaView driver** — new Kitware ParaView post-processing driver. Detects `pvpython`/`pvbatch` on PATH, conda `paraview` package, or binary installs in standard locations. One-shot via `pvpython script.py` using `paraview.simple` API. 26 unit tests (detect/lint/connect/parse/run). Supports 30+ input formats (.vtu/.vtk/.case/.foam/.cgns/.pvd/.exo/.stl/.xdmf). 2-profile compat matrix (5.12–5.13).
 - **2026-04-16** 🔧 **ICEM CFD driver** — new Ansys ICEM CFD meshing preprocessor driver. Pure CLI Orchestration via `icemcfd.bat -batch -script <file.tcl>` (Tcl 8.4 scripting, 1850 `ic_*` commands). Batch tetra meshing via `ic_run_tetra` (Programmer's Guide p143). 15 unit tests + Box.tin → 26752 tetra E2E (860 KB `.uns`, 3.9s). 4-profile compat matrix (24.1–25.2). No session mode — ICEM is a preprocessor, one-shot is the correct model.
 - **2026-04-15** 🐍 **Pure-Python simulation ecosystem — 13 new pip-installable drivers**: OpenSeesPy, SfePy, Cantera, OpenMDAO, FiPy, pymoo, Pyomo, SimPy, Trimesh, Devito, CoolProp, scikit-rf, pandapower. Each verified against analytical/textbook benchmarks (CH4/air adiabatic flame 2225 K, Sellar MDA, NSGA-II ZDT1 Pareto, water T_sat 373.124 K, etc.).
 - **2026-04-15** 🐧 **Open-source Linux CAE — 9 new drivers** reachable via remote `sim serve`: CalculiX, Gmsh, SU2, LAMMPS, scikit-fem, Elmer FEM, meshio, pyvista, PyMFEM. Each with Tier-1 unit tests + real-E2E physics verification (cantilever tip 0.1 % err, NACA0012 inviscid, LJ NVT, Poisson < 1 % err).

@@ -93,6 +93,8 @@ The server keeps a single global `_state: SessionState` (one session per server 
 | `ls_dyna` | `LsDynaDriver` | `lsdyna/driver.py` + `compatibility.yaml` |
 | `mapdl` | `MapdlDriver` | `mapdl/driver.py` + `compatibility.yaml` |
 | `icem` | `IcemDriver` | `icem/driver.py` + `compatibility.yaml` |
+| `paraview` | `ParaViewDriver` | `paraview/driver.py` + `compatibility.yaml` |
+| `hypermesh` | `HyperMeshDriver` | `hypermesh/driver.py` + `compatibility.yaml` |
 
 Drivers with `supports_session = True` (fluent, ansa, flotherm, matlab, workbench, mechanical, cfx, ls_dyna, mapdl) implement persistent-session lifecycle (`launch`/`run`/`query`/`disconnect`). The rest are one-shot only.
 

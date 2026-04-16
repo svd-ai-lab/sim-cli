@@ -39,6 +39,8 @@ from sim.drivers.devito import DevitoDriver
 from sim.drivers.coolprop import CoolPropDriver
 from sim.drivers.scikitrf import ScikitRfDriver
 from sim.drivers.pandapower import PandapowerDriver
+from sim.drivers.paraview import ParaViewDriver
+from sim.drivers.hypermesh import HyperMeshDriver
 
 DRIVERS: list[DriverProtocol] = [
     PyBaMMLDriver(),
@@ -78,6 +80,8 @@ DRIVERS: list[DriverProtocol] = [
     CoolPropDriver(),
     ScikitRfDriver(),
     PandapowerDriver(),
+    ParaViewDriver(),
+    HyperMeshDriver(),
 ]
 
 
