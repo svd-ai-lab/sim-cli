@@ -16,6 +16,7 @@ from sim.drivers.starccm import StarccmDriver
 from sim.drivers.cfx import CfxDriver
 from sim.drivers.lsdyna import LsDynaDriver
 from sim.drivers.mapdl import MapdlDriver
+from sim.drivers.icem import IcemDriver
 from sim.drivers.calculix import CalculixDriver
 from sim.drivers.gmsh import GmshDriver
 from sim.drivers.su2 import Su2Driver
@@ -54,6 +55,7 @@ DRIVERS: list[DriverProtocol] = [
     CfxDriver(),
     LsDynaDriver(),
     MapdlDriver(),
+    IcemDriver(),
     CalculixDriver(),
     GmshDriver(),
     Su2Driver(),

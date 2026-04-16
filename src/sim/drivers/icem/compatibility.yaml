@@ -1,0 +1,40 @@
+# sim-cli — ICEM CFD driver compatibility matrix.
+#
+# ICEM CFD ships as part of the Ansys Unified Installation. There is no
+# separate SDK — the scripting engine is Tcl embedded in med_batch.exe.
+# Version tracking follows the Ansys unified release cadence (24.1, 24.2, etc.).
+
+driver: icem
+# No sdk_package — ICEM has no pip-installable SDK.
+
+profiles:
+
+  - name: icem_v24_1
+    solver_versions: ["24.1", "24.1.0", "2024 R1"]
+    active_sdk_layer: null
+    active_solver_layer: "24.1"
+    notes: |
+      ICEM CFD 24.1 on Windows. Detected via ICEMCFD_ROOT241.
+      Batch mode: icemcfd.bat -batch -script <file.tcl>
+      Tcl 8.3.3 scripting engine with ic_* command API.
+
+  - name: icem_v24_2
+    solver_versions: ["24.2", "24.2.0", "2024 R2"]
+    active_sdk_layer: null
+    active_solver_layer: "24.2"
+    notes: |
+      ICEM CFD 24.2. Same Tcl API. Detected via ICEMCFD_ROOT242.
+
+  - name: icem_v25_1
+    solver_versions: ["25.1", "25.1.0", "2025 R1"]
+    active_sdk_layer: null
+    active_solver_layer: "25.1"
+    notes: |
+      ICEM CFD 25.1. Same Tcl API.
+
+  - name: icem_v25_2
+    solver_versions: ["25.2", "25.2.0", "2025 R2"]
+    active_sdk_layer: null
+    active_solver_layer: "25.2"
+    notes: |
+      ICEM CFD 25.2. Same Tcl API.
