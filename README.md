@@ -280,3 +280,26 @@ Highlights from the last few milestones — full history in [`CHANGELOG.md`](CHA
 ## 📄 License
 
 Apache-2.0 — see [LICENSE](LICENSE).
+
+### Third-party solver SDKs
+
+`sim-cli` is a thin wrapper/runtime — it does **not** bundle or redistribute any vendor solver or vendor SDK. Each solver backend is reached through a third-party SDK (e.g. `ansys-fluent-core`, `ansys-mapdl-core`, `ansys-workbench-core`, `ansys-mechanical-core`, `ansys-dyna-core`, `ansys-dpf-core`, `mph`, `matlabengine`) that the user installs separately via `sim env install` or as an optional extra.
+
+Users are responsible for obtaining a valid license for each underlying solver and for complying with the license, copyright, and EULA of every third-party SDK they choose to install alongside `sim-cli`. See [`NOTICE`](NOTICE) for the list of optional SDK dependencies and their upstream locations.
+
+### Trademarks
+
+All product, solver, and company names appearing in this repository are used for identification purposes only. Ownership is retained by the respective holders:
+
+- **Ansys®**, **Fluent®**, **Workbench®**, **Mechanical®**, **MAPDL**, **CFX®**, **LS-DYNA®**, **ICEM CFD™**, **DPF** are trademarks or registered trademarks of **ANSYS, Inc.**
+- **Abaqus®**, **SIMULIA®** are trademarks of **Dassault Systèmes**.
+- **COMSOL Multiphysics®** is a trademark of **COMSOL AB**.
+- **MATLAB®** is a registered trademark of **The MathWorks, Inc.**
+- **Simcenter™ STAR-CCM+**, **Simcenter Flotherm™** are trademarks of **Siemens Digital Industries Software**.
+- **ANSA®** is a trademark of **BETA CAE Systems**.
+- **HyperMesh®**, **Altair®** are trademarks of **Altair Engineering, Inc.**
+- **ParaView®** is a trademark of **Kitware, Inc.**
+- **OpenFOAM®** is a registered trademark of **OpenCFD Ltd.**
+- All other solver and product names are trademarks of their respective owners.
+
+`sim-cli` is an independent open-source project and is **not affiliated with, endorsed by, or sponsored by** any of the vendors listed above.
