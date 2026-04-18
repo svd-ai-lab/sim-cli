@@ -1,0 +1,17 @@
+driver: newton
+sdk_package: newton
+
+profiles:
+  - name: newton_1_x
+    solver_versions: ["1.0", "1.1", "1.2", "1.2.0.dev0", "1.3"]
+    active_sdk_layer: "1_x"
+    active_solver_layer: "1_x"
+    notes: |
+      NVIDIA Newton (alpha). GPU physics engine built on Warp.
+      Requires Python 3.10+ and CUDA 12 for GPU execution.
+      Install into a dedicated venv:
+        uv venv <path> --python 3.12
+        uv pip install --python <path>/Scripts/python.exe warp-lang newton
+        setx NEWTON_VENV <path>
+      Newton upstream tree with path-dep install (newton-cli style) also works:
+        uv pip install -e <newton-src>[importers,sim]

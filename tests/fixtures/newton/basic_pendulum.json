@@ -1,0 +1,34 @@
+{
+  "schema": "sim/newton/recipe/v1",
+  "ops": [
+    {"op": "add_link"},
+    {"op": "add_shape_box", "args": {"body": 0, "hx": 1.0, "hy": 0.1, "hz": 0.1}},
+    {"op": "add_link"},
+    {"op": "add_shape_box", "args": {"body": 1, "hx": 1.0, "hy": 0.1, "hz": 0.1}},
+    {
+      "op": "add_joint_revolute",
+      "args": {
+        "parent": -1,
+        "child": 0,
+        "axis": [0.0, 1.0, 0.0],
+        "parent_xform": {
+          "p": [0.0, 0.0, 5.0],
+          "q": {"axis": [0.0, 0.0, 1.0], "angle": -1.5707963267948966}
+        },
+        "child_xform": {"p": [-1.0, 0.0, 0.0], "q": [0.0, 0.0, 0.0, 1.0]}
+      }
+    },
+    {
+      "op": "add_joint_revolute",
+      "args": {
+        "parent": 0,
+        "child": 1,
+        "axis": [0.0, 1.0, 0.0],
+        "parent_xform": {"p": [1.0, 0.0, 0.0], "q": [0.0, 0.0, 0.0, 1.0]},
+        "child_xform": {"p": [-1.0, 0.0, 0.0], "q": [0.0, 0.0, 0.0, 1.0]}
+      }
+    },
+    {"op": "add_articulation", "args": {"joints": [0, 1], "label": "pendulum"}},
+    {"op": "add_ground_plane"}
+  ]
+}
