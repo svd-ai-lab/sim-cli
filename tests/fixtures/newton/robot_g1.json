@@ -1,0 +1,42 @@
+{
+  "schema": "sim/newton/recipe/v1",
+  "ops": [
+    {
+      "op": "replicate",
+      "args": {
+        "count": 2,
+        "recipe": {
+          "schema": "sim/newton/recipe/v1",
+          "ops": [
+            {"op": "register_mujoco_custom_attributes"},
+            {"op": "set_default_joint_cfg", "args": {
+              "limit_ke": 1000.0, "limit_kd": 10.0, "friction": 1e-05
+            }},
+            {"op": "set_default_shape_cfg", "args": {
+              "ke": 1000.0, "kd": 200.0, "kf": 1000.0, "mu": 0.75
+            }},
+            {"op": "add_usd", "args": {
+              "source": "C:\\Users\\Administrator\\AppData\\Local\\newton-physics\\newton\\Cache\\newton-assets_unitree_g1_a8095fc7_8e8df07d\\unitree_g1\\usd_structured\\g1_29dof_with_hand_rev_1_0.usda",
+              "xform": {"p": [0.0, 0.0, 0.2], "q": [0.0, 0.0, 0.0, 1.0]},
+              "collapse_fixed_joints": true,
+              "enable_self_collisions": false,
+              "hide_collision_shapes": true,
+              "skip_mesh_approximation": true
+            }},
+            {"op": "set_builder_array", "args": {
+              "name": "joint_target_ke", "fill": 500.0, "range": [6, null]
+            }},
+            {"op": "set_builder_array", "args": {
+              "name": "joint_target_kd", "fill": 10.0, "range": [6, null]
+            }},
+            {"op": "set_builder_array", "args": {
+              "name": "joint_target_mode", "fill": 1, "range": [6, null]
+            }}
+          ]
+        }
+      }
+    },
+    {"op": "set_default_shape_cfg", "args": {"ke": 1000.0, "kd": 200.0}},
+    {"op": "add_ground_plane"}
+  ]
+}

@@ -1,0 +1,23 @@
+driver: isaac
+sdk_package: isaacsim
+
+profiles:
+  - name: isaac_4_5
+    solver_versions: ["4.5", "4.5.0", "4.5.1"]
+    active_sdk_layer: "4_5"
+    active_solver_layer: "4_5"
+    notes: |
+      NVIDIA Isaac Sim 4.5 (pip wheel). Python 3.10 required.
+      Namespace migration: omni.isaac.* → isaacsim.* for core APIs.
+      Install:
+        uv venv <path> --python 3.10
+        uv pip install --python <path>/Scripts/python.exe "isaacsim[all]" \
+            --extra-index-url https://pypi.nvidia.com
+        setx ISAAC_VENV <path>
+
+  - name: isaac_5_0
+    solver_versions: ["5.0", "5.0.0"]
+    active_sdk_layer: "5_0"
+    active_solver_layer: "5_0"
+    notes: |
+      Placeholder for Isaac Sim 5.0. Verify API parity when released.
