@@ -330,7 +330,12 @@ class FlothermDriver:
         # .xml FloSCRIPT → play via GUI automation
         if text.lower().endswith(".xml") and os.path.isfile(text):
             gui_result = self._play_floscript(text)
-            return {"ok": True, "action": "play_floscript", "script": text, "gui": gui_result}
+            return {
+                "ok": gui_result.get("ok", False),
+                "action": "play_floscript",
+                "script": text,
+                "gui": gui_result,
+            }
 
         # "solve" → play solve FloSCRIPT via GUI
         if text.lower() == "solve":

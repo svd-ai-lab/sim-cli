@@ -62,6 +62,12 @@ FastAPI app exposing:
 
 The server keeps a single global `_state: SessionState` (one session per server process).
 
+**`sim serve --reload` drops the session on any source change under the watched tree.** uvicorn's reload watchdog observes file mtimes in `src/sim/**`; any edit (git pull, scp of a modified driver, even touching an unrelated module) restarts the worker, wiping `_state`. Child solver processes (Flotherm GUI, Fluent, etc.) survive the reload because they're spawned separately, but the session handle to them is gone — you have to `connect` again. Driver temp files (written to the solver's workspace, e.g. `flouser/_sim_*.xml`) live outside `src/` so they don't retrigger. Practical rules:
+
+- Don't edit driver code mid-experiment; finish the run, then edit.
+- For long autonomous experiments where you're editing driver code iteratively, launch **without** `--reload` and restart manually when you want the new code picked up.
+- Reconnecting after a reload takes ~20s for GUI-mode Flotherm (the existing GUI process is re-adopted; no re-launch needed).
+
 ### Driver protocol (`src/sim/driver.py`)
 `DriverProtocol` (a `runtime_checkable` `Protocol`):
 - `name: str` — registered driver name
