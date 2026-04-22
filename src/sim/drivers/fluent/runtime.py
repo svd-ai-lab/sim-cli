@@ -52,13 +52,24 @@ class PyFluentRuntime:
 
     # ── snippet execution ────────────────────────────────────────────────────────
 
-    def exec_snippet(self, code: str, label: str = "pyfluent-snippet") -> RunRecord:
+    def exec_snippet(
+        self, code: str, label: str = "pyfluent-snippet",
+        timeout_s: float | None = None,
+    ) -> RunRecord:
         """
         Execute a Python code snippet inside the active session context.
 
         Injects: session, solver, meshing, _result into the execution namespace.
         Captures stdout/stderr. Writes a JSON log to .sim/runs/<uuid>.json.
+
+        `timeout_s`: hard deadline (default: `sim._timeout.DEFAULT_TIMEOUT_S`
+        = 300s). If the snippet blocks past this (e.g. Fluent RPC hang on
+        invalid path), the helper returns a synthetic RunRecord with
+        ok=False + error describing the timeout. The hung thread is
+        abandoned (daemon) — the caller should disconnect() the session.
         """
+        from sim._timeout import call_with_timeout, DEFAULT_TIMEOUT_S
+
         info = self.get_active_session()
         if info is None:
             raise RuntimeError("No active session. Call register_session() first.")
@@ -77,12 +88,30 @@ class PyFluentRuntime:
         ok = True
         started_at = time.time()
 
-        try:
+        def _run_snippet():
             with redirect_stdout(stdout_buf), redirect_stderr(stderr_buf):
                 exec(code, namespace)  # noqa: S102
-        except Exception:
+
+        timeout_budget = (
+            DEFAULT_TIMEOUT_S if timeout_s is None else timeout_s
+        )
+        t_result = call_with_timeout(_run_snippet, timeout_s=timeout_budget)
+
+        if t_result.hung:
             ok = False
-            error = traceback.format_exc()
+            error = (
+                f"snippet exceeded timeout_s={timeout_budget} "
+                f"(hung in Fluent RPC; session is likely unusable — "
+                f"disconnect and re-launch)"
+            )
+        elif t_result.exception is not None:
+            ok = False
+            # Rebuild the traceback string. t_result.exception IS the
+            # raised exception from the worker thread.
+            exc = t_result.exception
+            error = "".join(
+                traceback.format_exception(type(exc), exc, exc.__traceback__)
+            )
 
         ended_at = time.time()
 

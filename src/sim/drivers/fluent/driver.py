@@ -11,7 +11,124 @@ import sys
 from sim.driver import ConnectionInfo, Diagnostic, LintResult, SolverInstall
 from sim.drivers.fluent.queries import handle_query
 from sim.drivers.fluent.runtime import PyFluentRuntime
+from sim.inspect import (
+    DomainExceptionMapProbe,
+    GuiDialogProbe,
+    InspectCtx,
+    ProcessMetaProbe,
+    PythonTracebackProbe,
+    RuntimeTimeoutProbe,
+    ScreenshotProbe,
+    SdkAttributeProbe,
+    StdoutJsonTailProbe,
+    TextStreamRulesProbe,
+    WorkdirDiffProbe,
+    collect_diagnostics,
+)
 from sim.runner import run_subprocess
+
+
+# Channel #2 — Fluent stderr rules (conservative).
+_FLUENT_STDERR_RULES: list[dict] = [
+    {"pattern": r"^\w+Error:", "severity": "error", "code": "generic.exception"},
+    {"pattern": r"^\w+Exception:", "severity": "error", "code": "generic.exception"},
+    {"pattern": r"RPC .* timeout", "severity": "error",
+     "code": "fluent.rpc.timeout", "message_template": "Fluent RPC timeout"},
+]
+
+# Channel #6 — Fluent TUI echo (stdout). pyfluent's scheme_eval / solver.tui
+# commands write to stdout via redirect_stdout. Watch for the canonical
+# Fluent error/warning/done prefixes.
+_FLUENT_TUI_STDOUT_RULES: list[dict] = [
+    {"pattern": r"^Error:", "severity": "error",
+     "code": "fluent.tui.error", "message_template": "TUI error: {match}"},
+    {"pattern": r"^Warning:", "severity": "warning",
+     "code": "fluent.tui.warning"},
+    {"pattern": r"^Error Object:", "severity": "error",
+     "code": "fluent.scheme.error_object"},
+    {"pattern": r"Divergence detected", "severity": "error",
+     "code": "fluent.solve.divergence"},
+    {"pattern": r"floating point exception", "severity": "error",
+     "code": "fluent.solve.fpe"},
+    {"pattern": r"reversed flow in \d+ faces", "severity": "warning",
+     "code": "fluent.solve.reversed_flow"},
+]
+
+# Channel #7 — Transcript file rules. Same kind of patterns as TUI but read
+# out of the .trn file the session wrote to disk (if the user / test opened
+# transcript logging via solver.file.start_transcript).
+_FLUENT_TRN_RULES: list[dict] = _FLUENT_TUI_STDOUT_RULES  # same vocabulary
+
+# Channel #4 — Default SDK attributes to probe on every run. These are the
+# settings agents most often need to "reason about the current state" over.
+_DEFAULT_FLUENT_SDK_ATTRS: list[str] = [
+    "setup.models.viscous.model",
+    "setup.models.energy.enabled",
+]
+
+
+def _read_transcript(ctx: InspectCtx) -> str:
+    """Channel #7 text selector: read workdir/session.trn if it exists."""
+    trn = Path(ctx.workdir) / "session.trn"
+    try:
+        return trn.read_text(encoding="utf-8", errors="replace")
+    except (FileNotFoundError, OSError):
+        return ""
+
+
+def _default_fluent_probes(enable_gui: bool = False) -> list:
+    """Probes wired into every Fluent run() — all 9 channels.
+
+    Baseline:
+      #1 ProcessMetaProbe          — exit_code + wall_time
+      #2 TextStreamRulesProbe(stderr) — generic Python exception lines
+      #3 StdoutJsonTailProbe       — last JSON line / _result fallback
+      #3+ PythonTracebackProbe     — structured traceback parsing
+      #4 SdkAttributeProbe         — viscous model, energy enabled
+      #5 DomainExceptionMapProbe   — python.* → fluent.* code upgrade
+      #6 TextStreamRulesProbe(stdout:TUI) — TUI echo rule matching
+      #7 TextStreamRulesProbe(log:session.trn) — transcript file, if opened
+      #9 WorkdirDiffProbe          — new files → Artifacts
+
+    GUI mode adds:
+      #8a GuiDialogProbe           — cx/fluent/ansys windows, titles + dialogs
+      #8b ScreenshotProbe          — per-window PNG crops (not desktop)
+
+    Order matters: post-processors (#5) must run AFTER the probes whose
+    output they consume (#3+). WorkdirDiff is last so new artifacts emitted
+    by earlier probes (screenshots) are available on disk.
+    """
+    probes: list = [
+        ProcessMetaProbe(),                                              # #1
+        RuntimeTimeoutProbe(),                                           # #1+ (Phase 2: hung-snippet synthetic)
+        TextStreamRulesProbe(                                            # #2
+            source="stderr",
+            text_selector=lambda ctx: ctx.stderr,
+            rules=_FLUENT_STDERR_RULES,
+        ),
+        StdoutJsonTailProbe(),                                           # #3
+        PythonTracebackProbe(),                                          # #3+
+        SdkAttributeProbe(attr_paths=_DEFAULT_FLUENT_SDK_ATTRS),         # #4
+        TextStreamRulesProbe(                                            # #6
+            source="tui:stdout",
+            text_selector=lambda ctx: ctx.stdout,
+            rules=_FLUENT_TUI_STDOUT_RULES,
+        ),
+        TextStreamRulesProbe(                                            # #7
+            source="log:session.trn",
+            text_selector=_read_transcript,
+            rules=_FLUENT_TRN_RULES,
+        ),
+        DomainExceptionMapProbe(),                                       # #5
+    ]
+    if enable_gui:
+        probes.append(GuiDialogProbe(                                    # #8a
+            process_name_substrings=("fluent", "ansys", "cx", "cortex")))
+        probes.append(ScreenshotProbe(                                   # #8b
+            filename_prefix="fluent_shot",
+            process_name_substrings=("fluent", "ansys", "cx", "cortex")))
+    probes.append(WorkdirDiffProbe())                                    # #9
+    return probes
 
 
 _VERSION_MAP = {
@@ -151,6 +268,11 @@ class PyFluentDriver:
 
     def __init__(self, sim_dir: Path | None = None):
         self._runtime = PyFluentRuntime(sim_dir=sim_dir)
+        # InspectProbe list — baseline 3. Phase 2 adds SDK-aware probes driven
+        # by real failure fixtures. Mutable so future session-specific probes
+        # can be appended post-launch (e.g. workdir watcher tied to the session's
+        # working dir).
+        self.probes = _default_fluent_probes()
 
     # ── DriverProtocol ───────────────────────────────────────────────────────────
 
@@ -303,11 +425,13 @@ class PyFluentDriver:
             ) from exc
 
         # Ensure pyfluent can locate Fluent 2024 R1 (v241).
-        # pyfluent >=0.38.0 dropped v241 from its FluentVersion enum, but it
-        # still honours the PYFLUENT_FLUENT_ROOT env var which bypasses the
-        # version check entirely.  If the user has AWP_ROOT241 set (standard
-        # Fluent 2024 R1 installation) and hasn't already pointed
-        # PYFLUENT_FLUENT_ROOT elsewhere, we set it automatically.
+        # pyfluent >=0.38.0 dropped v241 from FluentVersion enum. The
+        # PYFLUENT_FLUENT_ROOT env var was a valid workaround pre-0.38 but
+        # the post-connect scheme_eval.version check still trips on
+        # Fluent 2024 R1 (observed on 0.38.1). Phase 1 STATUS §3.1 documents
+        # this. pyproject now pins >=0.37,<0.39 so 0.37.x (which supports
+        # v241 end-to-end) is the default. We still set the env var here
+        # for 0.37.x's own launcher check.
         if not os.environ.get("PYFLUENT_FLUENT_ROOT"):
             awp241 = os.environ.get("AWP_ROOT241")
             if awp241:
@@ -339,20 +463,91 @@ class PyFluentDriver:
 
         session_id = str(uuid.uuid4())
         info = self._runtime.register_session(session_id, mode, source, session)
+        # Auto-enable GUI probes when the session is actually running with a
+        # visible GUI. Headless (no_gui/hidden_gui) sessions don't benefit —
+        # the screenshot would be blank and the dialog enum would find nothing
+        # Fluent-owned. Users can still opt in by setting driver.probes =
+        # _default_fluent_probes(enable_gui=True) explicitly.
+        if isinstance(ui_mode, str) and ui_mode.lower() == "gui":
+            self.probes = _default_fluent_probes(enable_gui=True)
         return info.to_dict()
 
-    def run(self, code: str, label: str = "pyfluent-snippet") -> dict:
+    def run(
+        self, code: str, label: str = "pyfluent-snippet",
+        timeout_s: float | None = None,
+    ) -> dict:
         """
         Execute a PyFluent snippet in the active session.
 
         The snippet runs with session/solver/meshing/_result injected.
         Assign to _result to return structured data.
 
+        `timeout_s` (Phase 2): per-snippet deadline. Default 300s via
+        `sim._timeout.DEFAULT_TIMEOUT_S`. Pass explicit value to override.
+        On timeout → ok=False, error string names the timeout, and the
+        probe layer emits `sim.runtime.snippet_timeout`.
+
         Returns:
-            {"run_id", "ok", "label", "stdout", "stderr", "error", "result"}
+            {run_id, ok, label, stdout, stderr, error, result,
+             diagnostics[], artifacts[]}
         """
-        record = self._runtime.exec_snippet(code=code, label=label)
-        return record.to_run_result()
+        # Snapshot workdir BEFORE the snippet runs so WorkdirDiffProbe can
+        # later emit only newly-introduced files as Artifacts. The snapshot
+        # is a list of relative paths.
+        workdir_path = Path(self._runtime._sim_dir)
+        try:
+            workdir_path.mkdir(parents=True, exist_ok=True)
+            before = sorted(
+                str(p.relative_to(workdir_path)).replace("\\", "/")
+                for p in workdir_path.rglob("*") if p.is_file()
+            )
+        except Exception:
+            before = []
+
+        record = self._runtime.exec_snippet(
+            code=code, label=label, timeout_s=timeout_s,
+        )
+        out = record.to_run_result()
+
+        # Build the inspect context from what the runtime captured. ok=False
+        # gets mapped to exit_code=1 so ProcessMetaProbe treats it as failure.
+        session_info = self._runtime.get_active_session()
+        session_ns: dict = {}
+        if session_info is not None:
+            session_ns["session"] = session_info.session
+            session_ns["solver_kind"] = session_info.mode
+        if record.error:
+            session_ns["_session_error"] = record.error
+        if record.result is not None:
+            session_ns["_result"] = record.result
+
+        wall = max(0.0, record.ended_at - record.started_at)
+        extras: dict = {}
+        # Plumb timeout state for RuntimeTimeoutProbe
+        err = record.error or ""
+        if "exceeded timeout_s" in err or "hung in Fluent RPC" in err:
+            from sim._timeout import DEFAULT_TIMEOUT_S  # noqa: PLC0415
+            extras["timeout_hit"] = True
+            extras["timeout_s"] = (
+                timeout_s if timeout_s is not None else DEFAULT_TIMEOUT_S
+            )
+            extras["timeout_elapsed_s"] = wall
+
+        ctx = InspectCtx(
+            stdout=record.stdout or "",
+            stderr=record.stderr or "",
+            workdir=str(workdir_path),
+            wall_time_s=wall,
+            exit_code=0 if record.ok else 1,
+            driver_name=self.name,
+            session_ns=session_ns,
+            workdir_before=before,
+            extras=extras,
+        )
+        diags, arts = collect_diagnostics(self.probes, ctx)
+        out["diagnostics"] = [d.to_dict() for d in diags]
+        out["artifacts"] = [a.to_dict() for a in arts]
+        return out
 
     def disconnect(self) -> dict:
         """Tear down the active Fluent session."""
