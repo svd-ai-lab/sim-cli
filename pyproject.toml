@@ -22,7 +22,11 @@ dependencies = [
 [project.optional-dependencies]
 # Convenience extras for installing a solver SDK alongside sim-cli. These
 # are not exclusive — pick whichever matches your local solver install.
-fluent  = ["ansys-fluent-core>=0.38,<0.39"]
+# 0.38 dropped Fluent 2024 R1 (v241) from FluentVersion enum and the
+# PYFLUENT_FLUENT_ROOT workaround no longer bypasses the post-connect
+# scheme_eval.version check — see Phase 1 STATUS §3.1. Widen to 0.37 so
+# hosts with Fluent 2024 R1 installed work out of the box.
+fluent  = ["ansys-fluent-core>=0.37,<0.39"]
 matlab  = ["matlabengine"]
 comsol  = ["mph>=1.2,<2.0"]
 pybamm  = ["pybamm>=24.0"]
