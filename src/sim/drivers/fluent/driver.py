@@ -266,6 +266,10 @@ class PyFluentDriver:
         query(name)                     -> dict   — named query
     """
 
+    # Process-name substrings that identify Fluent's own windows. Passed to
+    # ``GuiController`` so agents don't accidentally grab unrelated apps.
+    GUI_PROCESS_FILTER: tuple[str, ...] = ("fluent", "cx", "cortex", "fluentmeshing")
+
     def __init__(self, sim_dir: Path | None = None):
         self._runtime = PyFluentRuntime(sim_dir=sim_dir)
         # InspectProbe list — baseline 3. Phase 2 adds SDK-aware probes driven
@@ -273,6 +277,7 @@ class PyFluentDriver:
         # can be appended post-launch (e.g. workdir watcher tied to the session's
         # working dir).
         self.probes = _default_fluent_probes()
+        self._gui = None  # GuiController; set at launch() time when ui_mode=gui
 
     # ── DriverProtocol ───────────────────────────────────────────────────────────
 
@@ -468,8 +473,17 @@ class PyFluentDriver:
         # the screenshot would be blank and the dialog enum would find nothing
         # Fluent-owned. Users can still opt in by setting driver.probes =
         # _default_fluent_probes(enable_gui=True) explicitly.
-        if isinstance(ui_mode, str) and ui_mode.lower() == "gui":
+        gui_mode = isinstance(ui_mode, str) and ui_mode.lower() == "gui"
+        if gui_mode:
             self.probes = _default_fluent_probes(enable_gui=True)
+        # Phase 3: inject a GuiController into the session namespace so
+        # agents can click / type / dismiss Fluent dialogs via `sim exec`.
+        # Kept on the driver so every exec snippet reuses the same object.
+        from sim.gui import GuiController  # noqa: PLC0415
+        self._gui = GuiController(
+            process_name_substrings=self.GUI_PROCESS_FILTER,
+            workdir=str(self._runtime._sim_dir),
+        ) if gui_mode else None
         return info.to_dict()
 
     def run(
@@ -504,8 +518,12 @@ class PyFluentDriver:
         except Exception:
             before = []
 
+        extra_ns: dict = {}
+        if self._gui is not None:
+            extra_ns["gui"] = self._gui
         record = self._runtime.exec_snippet(
             code=code, label=label, timeout_s=timeout_s,
+            extra_namespace=extra_ns or None,
         )
         out = record.to_run_result()
 
@@ -558,6 +576,7 @@ class PyFluentDriver:
             except Exception:
                 pass
             self._runtime._active_id = None
+        self._gui = None
         return {"ok": True, "disconnected": True}
 
     def query(self, name: str) -> dict:

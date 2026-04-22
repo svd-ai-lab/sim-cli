@@ -55,6 +55,7 @@ class PyFluentRuntime:
     def exec_snippet(
         self, code: str, label: str = "pyfluent-snippet",
         timeout_s: float | None = None,
+        extra_namespace: dict | None = None,
     ) -> RunRecord:
         """
         Execute a Python code snippet inside the active session context.
@@ -67,6 +68,10 @@ class PyFluentRuntime:
         invalid path), the helper returns a synthetic RunRecord with
         ok=False + error describing the timeout. The hung thread is
         abandoned (daemon) — the caller should disconnect() the session.
+
+        `extra_namespace`: optional dict merged into the exec namespace
+        so drivers can inject cross-cutting objects (e.g. the ``gui``
+        actuation facade) without each snippet recreating them.
         """
         from sim._timeout import call_with_timeout, DEFAULT_TIMEOUT_S
 
@@ -81,6 +86,8 @@ class PyFluentRuntime:
             "meshing": session if info.mode == "meshing" else None,
             "_result": None,
         }
+        if extra_namespace:
+            namespace.update(extra_namespace)
 
         stdout_buf = io.StringIO()
         stderr_buf = io.StringIO()

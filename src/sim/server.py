@@ -229,6 +229,17 @@ def connect(req: ConnectRequest):
     _state.runs = []
     _state.profile = profile.name if profile else None
 
+    # Tool advertisement (Phase 3). Tells the agent which cross-driver
+    # actuation objects are live in the exec namespace for this session,
+    # plus where to find the tool's skill document. ``gui`` is the first
+    # entry — present whenever the driver constructed a ``GuiController``
+    # at launch (i.e. ui_mode=gui/desktop on a GUI-capable driver).
+    tools: list[str] = []
+    tool_refs: dict[str, str] = {}
+    if getattr(driver, "_gui", None) is not None:
+        tools.append("gui")
+        tool_refs["gui"] = "sim-skills/_tools/gui/SKILL.md"
+
     return {
         "ok": True,
         "data": {
@@ -240,6 +251,8 @@ def connect(req: ConnectRequest):
             "run_count": 0,
             "profile": _state.profile,
             "skills": skills_block_for_profile(req.solver, profile),
+            "tools": tools,
+            "tool_refs": tool_refs,
         },
     }
 

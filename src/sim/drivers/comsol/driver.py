@@ -417,6 +417,13 @@ class ComsolDriver:
         name, detect, lint, connect, parse_output, detect_installed
     """
 
+    # Process-name substrings that identify COMSOL windows. Used by
+    # Phase 3 ``GuiController`` to filter Desktop enumeration down to
+    # COMSOL-owned dialogs (mphserver, ComsolUI, Cortex-style client).
+    GUI_PROCESS_FILTER: tuple[str, ...] = (
+        "comsol", "comsolui", "comsolmph", "mphserver", "comsolclient",
+    )
+
     def __init__(self) -> None:
         self._jvm_started = False
         self._model_util = None  # com.comsol.model.util.ModelUtil
@@ -434,6 +441,7 @@ class ComsolDriver:
         # InspectProbe list — baseline 9-channel (GUI off). launch() will
         # flip GUI probes on if ui_mode='gui'/'desktop'.
         self.probes: list = _default_comsol_probes(enable_gui=False)
+        self._gui = None  # GuiController; set at launch() when ui_mode=gui
 
     @property
     def name(self) -> str:
@@ -713,6 +721,17 @@ class ComsolDriver:
         self._run_count = 0
         self._last_run = None
 
+        # Flip probes to GUI-aware variant + construct gui actuation facade
+        # when the client window is actually up. Headless launches skip both.
+        gui_mode = ui_mode in ("gui", "desktop")
+        if gui_mode:
+            self.probes = _default_comsol_probes(enable_gui=True)
+            from sim.gui import GuiController  # noqa: PLC0415
+            self._gui = GuiController(
+                process_name_substrings=self.GUI_PROCESS_FILTER,
+                workdir=str(self._sim_dir),
+            )
+
         return {
             "ok": True,
             "session_id": self._session_id,
@@ -746,6 +765,8 @@ class ComsolDriver:
             "ModelUtil": self._model_util,
             "_result": None,
         }
+        if self._gui is not None:
+            namespace["gui"] = self._gui
 
         stdout_buf = io.StringIO()
         stderr_buf = io.StringIO()
@@ -856,6 +877,7 @@ class ComsolDriver:
                 pass
             self._server_proc = None
         self._model = None
+        self._gui = None
         self._model_util = None
         self._session_id = None
         self._connected_at = None

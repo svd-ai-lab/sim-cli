@@ -9,22 +9,25 @@ This separation is critical:
   - UIA invoke() throws COMError and corrupts COM state for the entire process
   - Running UIA in a subprocess isolates the corruption
   - Win32 ctypes for the standard file dialog works reliably from the main process
+
+Phase 3 refactor: the generic enumerate / find-by-title / fill-file-dialog
+primitives previously lived inline here; they now come from
+``sim.gui._win32_dialog`` so every driver (fluent / comsol / mechanical)
+can share the same implementation. The Flotherm-specific UIA menu trigger
+and Message Dock readers stay here.
 """
 from __future__ import annotations
 
-import ctypes
-import ctypes.wintypes
-import os
 import subprocess
 import sys
 import time
 
-
-user32 = ctypes.windll.user32 if os.name == "nt" else None
-
-WM_SETTEXT = 0x000C
-BM_CLICK = 0x00F5
-WM_CLOSE = 0x0010
+from sim.gui._win32_dialog import (
+    dismiss_windows_by_title_fragment,
+    fill_file_dialog as _fill_file_dialog,
+    find_dialog_by_title as _find_dialog,
+    user32,
+)
 
 _UIA_MENU_TRIGGER = """\
 import time
@@ -43,62 +46,9 @@ except Exception:
 """
 
 
-def _enum_visible_windows() -> list[tuple[int, str]]:
-    """Return [(hwnd, title)] for all visible windows."""
-    results: list[int] = []
-
-    @ctypes.WINFUNCTYPE(ctypes.wintypes.BOOL, ctypes.wintypes.HWND, ctypes.wintypes.LPARAM)
-    def cb(hwnd, _lp):
-        results.append(hwnd)
-        return True
-
-    user32.EnumWindows(cb, 0)
-    out = []
-    for hwnd in results:
-        if not user32.IsWindowVisible(hwnd):
-            continue
-        buf = ctypes.create_unicode_buffer(256)
-        user32.GetWindowTextW(hwnd, buf, 256)
-        if buf.value:
-            out.append((hwnd, buf.value))
-    return out
-
-
 def _dismiss_popups() -> list[str]:
     """Close any Message Window or error popups. Returns list of dismissed titles."""
-    dismissed = []
-    for hwnd, title in _enum_visible_windows():
-        if "Message" in title:
-            user32.PostMessageW(hwnd, WM_CLOSE, 0, 0)
-            dismissed.append(title)
-    if dismissed:
-        time.sleep(0.5)
-    return dismissed
-
-
-def _find_dialog(title_substring: str, timeout: float = 10) -> int | None:
-    """Poll for a dialog window containing title_substring."""
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        for hwnd, title in _enum_visible_windows():
-            if title_substring in title:
-                return hwnd
-        time.sleep(0.3)
-    return None
-
-
-def _fill_file_dialog(dialog_hwnd: int, file_path: str) -> bool:
-    """Set filename and click Open in a standard Windows file dialog."""
-    edit = user32.GetDlgItem(dialog_hwnd, 1148)
-    if not edit:
-        return False
-    user32.SendMessageW(edit, WM_SETTEXT, 0, ctypes.create_unicode_buffer(file_path))
-    time.sleep(0.3)
-    ok_btn = user32.GetDlgItem(dialog_hwnd, 1)
-    if not ok_btn:
-        return False
-    user32.SendMessageW(ok_btn, BM_CLICK, 0, 0)
-    return True
+    return dismiss_windows_by_title_fragment("Message")
 
 
 _MESSAGE_DOCK_READ = r"""
