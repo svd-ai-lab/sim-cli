@@ -41,3 +41,19 @@ tests/execution/logs/
 mylocal.ip
 *.sim
 __pycache__/
+
+# Solver-runtime temp files (Fluent cleanup scripts / COMSOL tetra scratch / misc .tmp)
+/cleanup-fluent-*.bat
+/*.tmp
+
+# LSDYNA runtime outputs — produced by every solver invocation, not fixtures
+tests/execution/lsdyna/d3dump[0-9]*
+tests/execution/lsdyna/d3hsp
+tests/execution/lsdyna/d3plot*
+tests/execution/lsdyna/messag
+tests/execution/lsdyna/status.out
+
+# Local self-reading plan docs (not shipped with PR)
+docs/abaqus-plan.md
+docs/plans/
+docs/superpowers/
