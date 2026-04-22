@@ -13,16 +13,180 @@ Python COMSOL bindings installed.
 from __future__ import annotations
 
 import ast
+import glob
+import io
 import json
 import os
 import re
 import shutil
 import sys
+import time
+import traceback
+import uuid
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from typing import Callable
 
 from sim.driver import ConnectionInfo, Diagnostic, LintResult, SolverInstall
+from sim.inspect import (
+    DomainExceptionMapProbe,
+    GuiDialogProbe,
+    InspectCtx,
+    ProcessMetaProbe,
+    PythonTracebackProbe,
+    RuntimeTimeoutProbe,
+    ScreenshotProbe,
+    SdkAttributeProbe,
+    StdoutJsonTailProbe,
+    TextStreamRulesProbe,
+    WorkdirDiffProbe,
+    collect_diagnostics,
+)
 from sim.runner import run_subprocess
+
+
+# ── Channel #2 — JVM/JPype-oriented stderr rules (COMSOL-specific) ─────────────
+# pyfluent swallows stderr; COMSOL's JPype bridge does NOT, so real JVM
+# warnings/errors make it through.
+_COMSOL_STDERR_RULES: list[dict] = [
+    {"pattern": r"^\[ERROR\]", "severity": "error", "code": "comsol.jvm.error"},
+    {"pattern": r"^\[WARN\]", "severity": "warning", "code": "comsol.jvm.warning"},
+    {"pattern": r"com\.comsol\.util\.exceptions\.FlException",
+     "severity": "error", "code": "comsol.java.fl_exception"},
+    {"pattern": r"did not converge", "severity": "error",
+     "code": "comsol.solve.not_converged"},
+    {"pattern": r"^Exception in thread", "severity": "error",
+     "code": "comsol.jvm.exception"},
+    # JPype-wrapped NullPointerException (common when calling Java API with
+    # bad tag on uninitialized feature)
+    {"pattern": r"java\.lang\.NullPointerException",
+     "severity": "error", "code": "comsol.java.npe"},
+]
+
+
+# ── Channel #5 — COMSOL python.* → comsol.* exception upgrade rules ────────────
+_COMSOL_EXC_MAP_RULES: list[dict] = [
+    # Feature tag not found: Java throws "No feature with tag 'xyz'"
+    {
+        "code_in": ("python.Exception", "python.RuntimeError",
+                    "python.java.lang.IllegalArgumentException"),
+        "regex": r"No feature with tag '(\S+?)'",
+        "upgrade_code": "comsol.feature.not_found",
+        "message_template": "COMSOL feature tag not found: '{group1}'",
+    },
+    # JPype-exposed ModelClient surface: agent tries `model.feature(...)`
+    # but that method doesn't exist on the raw Java client (exists on MPh's
+    # Python wrapper only). This is a common agent typo pattern.
+    {
+        "code_in": ("python.AttributeError",),
+        "regex": r"'com\.comsol[^']*' object has no attribute '(\w+)'",
+        "upgrade_code": "comsol.sdk.method_not_found",
+        "message_template": (
+            "COMSOL Java client has no method '{group1}' — did you mean "
+            "an MPh-wrapper method? Drill into the API tree explicitly "
+            "(e.g. model.component('comp1').physics('solid').feature('xyz'))."
+        ),
+    },
+    # Generic FlException surfacing as Python exception (via JPype wrapper).
+    # pyfluent uses different patterns, but COMSOL's JPype bridge raises
+    # Python Exception with message "Java Exception" when propagating a
+    # server-side FlException — plus a second diag carrying the full Java
+    # class name in `code`. We match the first one on message=="Java Exception".
+    {
+        "code_in": ("python.Exception",),
+        "regex": r"^Java Exception$",
+        "upgrade_code": "comsol.java.fl_exception",
+        "message_template": (
+            "COMSOL Java exception propagated through JPype "
+            "(check prior traceback diag for the precise Java class)"
+        ),
+    },
+    {
+        "code_in": ("python.RuntimeError", "python.Exception"),
+        "regex": r"com\.comsol\.util\.exceptions\.FlException",
+        "upgrade_code": "comsol.java.fl_exception",
+        "message_template": "COMSOL Java FlException: {orig}",
+    },
+    # Solver didn't converge / failed to find solution
+    {
+        "code_in": ("python.RuntimeError", "python.Exception"),
+        "regex": r"(Failed to find a solution|did not converge)",
+        "upgrade_code": "comsol.solve.failed",
+        "message_template": "COMSOL solve failed: {match}",
+    },
+    # Null pointer when calling into un-initialized Java object
+    {
+        "code_in": ("python.RuntimeError", "python.AttributeError"),
+        "regex": r"java\.lang\.NullPointerException",
+        "upgrade_code": "comsol.java.null_pointer",
+        "message_template": "COMSOL Java NullPointerException — object uninitialized",
+    },
+]
+
+
+# ── Channel #4 — default SDK attribute readers (COMSOL / MPh Model Java API) ──
+def _default_comsol_readers() -> list[tuple[str, object]]:
+    """Each reader is (label, callable(session) -> value). The session is
+    the MPh Model object. Readers call Java-API methods, NOT getattr chains.
+
+    Readers are wrapped so a missing/unavailable Java sub-object emits a
+    warning (via SdkAttributeProbe's exception handler) instead of crashing.
+    """
+    return [
+        ("model.physics.count",
+         lambda m: len(list(m.physics().tags())) if hasattr(m, "physics") else None),
+        ("model.study.count",
+         lambda m: len(list(m.study().tags())) if hasattr(m, "study") else None),
+        ("model.material.count",
+         lambda m: len(list(m.material().tags())) if hasattr(m, "material") else None),
+        ("model.hist",
+         lambda m: str(m.hist())[:200] if hasattr(m, "hist") else None),
+    ]
+
+
+def _default_comsol_probes(enable_gui: bool = False) -> list:
+    """COMSOL's 9-channel probe list — parallel to Fluent's.
+
+    Differences from Fluent (see PLAN Phase 2 §9-channel matrix):
+      #2  COMSOL-specific stderr rules (JVM/JPype flavored)
+      #4  uses `readers=` mode (Java-API style, not getattr-chain)
+      #5  DomainExceptionMapProbe with COMSOL-specific rules
+      #6  NOT wired — COMSOL session has no TUI concept
+      #7  NOT wired — COMSOL has no per-session transcript (only machine-global log)
+      #8a #8b process_name_substrings tuned for Cortex → Comsol family
+    """
+    probes: list = [
+        ProcessMetaProbe(),                                              # #1
+        RuntimeTimeoutProbe(),                                           # #1+
+        TextStreamRulesProbe(                                            # #2
+            source="stderr",
+            text_selector=lambda ctx: ctx.stderr,
+            rules=_COMSOL_STDERR_RULES,
+        ),
+        StdoutJsonTailProbe(),                                           # #3
+        PythonTracebackProbe(),                                          # #3+
+        SdkAttributeProbe(                                               # #4
+            readers=_default_comsol_readers(),
+            source_prefix="sdk:attr",
+            code_prefix="comsol.sdk.attr",
+        ),
+        # #6 TUI: intentionally not wired — COMSOL has no TUI in session mode
+        # #7 Log file: intentionally not wired — COMSOL has no per-session
+        #    transcript. Global %USERPROFILE%\.comsol\...\log is too noisy.
+        #    Phase 3 may revisit.
+        DomainExceptionMapProbe(rules=_COMSOL_EXC_MAP_RULES),            # #5
+    ]
+    if enable_gui:
+        probes.append(GuiDialogProbe(                                    # #8a
+            process_name_substrings=("comsol", "comsolui", "mphserver"),
+            code_prefix="comsol.gui",
+        ))
+        probes.append(ScreenshotProbe(                                   # #8b
+            filename_prefix="comsol_shot",
+            process_name_substrings=("comsol", "comsolui", "mphserver"),
+        ))
+    probes.append(WorkdirDiffProbe())                                    # #9
+    return probes
 
 
 # ─── extension points (open for additions, closed for modifications) ──────
@@ -253,13 +417,31 @@ class ComsolDriver:
         name, detect, lint, connect, parse_output, detect_installed
     """
 
+    def __init__(self) -> None:
+        self._jvm_started = False
+        self._model_util = None  # com.comsol.model.util.ModelUtil
+        self._model = None       # active COMSOL model
+        self._session_id: str | None = None
+        self._ui_mode: str | None = None
+        self._connected_at: float | None = None
+        self._run_count: int = 0
+        self._last_run: dict | None = None
+        self._server_proc = None
+        self._client_proc = None
+        self._port: int = 2036
+        # Sim dir for probe workdir (screenshots, workdir-diff baseline)
+        self._sim_dir: Path = Path(os.environ.get("SIM_DIR") or (Path.cwd() / ".sim"))
+        # InspectProbe list — baseline 9-channel (GUI off). launch() will
+        # flip GUI probes on if ui_mode='gui'/'desktop'.
+        self.probes: list = _default_comsol_probes(enable_gui=False)
+
     @property
     def name(self) -> str:
         return "comsol"
 
     @property
     def supports_session(self) -> bool:
-        return False
+        return True
 
     def detect(self, script: Path) -> bool:
         """Detect COMSOL/MPh scripts via `import mph`."""
@@ -386,3 +568,296 @@ class ComsolDriver:
             script=script,
             solver=self.name,
         )
+
+    # ── Persistent session via comsolmphserver + JPype ──────────────────────
+
+    def _resolve_comsol_root(self, comsol_root: str | None) -> str:
+        if comsol_root:
+            return comsol_root
+        env = os.environ.get("COMSOL_ROOT")
+        if env:
+            return env
+        installs = _scan_comsol_installs()
+        if installs:
+            return installs[0].path
+        raise RuntimeError("no COMSOL installation detected; set COMSOL_ROOT")
+
+    def _start_jvm(self, comsol_root: str) -> None:
+        if self._jvm_started:
+            return
+        import jpype
+        import jpype.imports  # enables `from com.comsol...` Java-as-Python imports
+        jre_path = os.path.join(comsol_root, "java", "win64", "jre")
+        plugins_dir = os.path.join(comsol_root, "plugins")
+        lib_dir = os.path.join(comsol_root, "lib", "win64")
+
+        jars = glob.glob(os.path.join(plugins_dir, "*.jar"))
+        if not jars:
+            raise RuntimeError(f"No COMSOL jars found in {plugins_dir}")
+
+        classpath = os.pathsep.join(jars)
+        jvm_dll = os.path.join(jre_path, "bin", "server", "jvm.dll")
+        if not os.path.isfile(jvm_dll):
+            raise RuntimeError(f"JVM not found at {jvm_dll}")
+
+        jpype.startJVM(
+            jvm_dll,
+            f"-Djava.class.path={classpath}",
+            f"-Dcs.root={comsol_root}",
+            f"-Djava.library.path={lib_dir}",
+            convertStrings=True,
+        )
+        self._jvm_started = True
+
+    def _wait_for_port(self, port: int, timeout: float = 90) -> bool:
+        import socket
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            try:
+                with socket.create_connection(("127.0.0.1", port), timeout=2):
+                    return True
+            except OSError:
+                time.sleep(2)
+        return False
+
+    def launch(
+        self,
+        mode: str = "solver",
+        ui_mode: str = "gui",
+        processors: int = 2,
+        comsol_root: str | None = None,
+        user: str | None = None,
+        password: str | None = None,
+    ) -> dict:
+        """Launch comsolmphserver + optional GUI client, connect via JPype.
+
+        1. Start `comsolmphserver.exe` as compute backend
+        2. Wait for it to listen on the port
+        3. Connect via `ModelUtil.connect()` from JPype
+        4. If ui_mode == 'gui', launch `comsolmphclient.exe` (visual GUI attached)
+        """
+        import subprocess
+
+        root = self._resolve_comsol_root(comsol_root)
+        user = user or os.environ.get("COMSOL_USER", "")
+        password = password or os.environ.get("COMSOL_PASSWORD", "")
+        bin_dir = os.path.join(root, "bin", "win64")
+        server_exe = os.path.join(bin_dir, "comsolmphserver.exe")
+        client_exe = os.path.join(bin_dir, "comsolmphclient.exe")
+
+        if not os.path.isfile(server_exe):
+            raise RuntimeError(f"comsolmphserver not found at {server_exe}")
+
+        # -login auto: use cached credentials set via `comsolmphserver -login force`
+        self._server_proc = subprocess.Popen(
+            [server_exe, "-port", str(self._port), "-multi", "on",
+             "-login", "auto", "-silent", "-graphics", "-3drend", "sw"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+        if not self._wait_for_port(self._port, timeout=90):
+            self._server_proc.kill()
+            self._server_proc = None
+            raise RuntimeError(
+                f"comsolmphserver did not start listening on port {self._port} "
+                "within 90s — check COMSOL license"
+            )
+
+        # Connect JPype first (lightweight, doesn't grab an exclusive lock)
+        # so the GUI client launching next won't race us on "Server is in
+        # use by another client". Then start the GUI, and poll ModelUtil
+        # until the GUI's auto-created Untitled model appears — adopt it
+        # so driver + GUI share the same Java object.
+        self._start_jvm(root)
+        from com.comsol.model.util import ModelUtil  # type: ignore
+
+        if user and password:
+            ModelUtil.connect("localhost", self._port, user, password)
+        else:
+            ModelUtil.connect("localhost", self._port)
+
+        from com.comsol.model.util import ServerBusyHandler  # type: ignore
+        ModelUtil.setServerBusyHandler(ServerBusyHandler(30000))
+        self._model_util = ModelUtil
+
+        if ui_mode in ("gui", "desktop") and os.path.isfile(client_exe):
+            client_args = [client_exe, "-port", str(self._port), "-login", "auto"]
+            cs_user = os.environ.get("COMSOL_USER")
+            cs_pass = os.environ.get("COMSOL_PASSWORD")
+            if cs_user and cs_pass:
+                client_args += ["-username", cs_user, "-password", cs_pass]
+            self._client_proc = subprocess.Popen(
+                client_args,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+
+        # Poll up to 90s for the GUI client to create its Untitled model.
+        # Fall back to ModelUtil.create("Model1") in headless/standalone.
+        self._model = None
+        if ui_mode in ("gui", "desktop"):
+            deadline = time.time() + 90
+            while time.time() < deadline:
+                tags = list(ModelUtil.tags())
+                if tags:
+                    self._model = ModelUtil.model(tags[0])
+                    break
+                time.sleep(1)
+        if self._model is None:
+            self._model = ModelUtil.create("Model1")
+
+        self._session_id = str(uuid.uuid4())
+        self._ui_mode = ui_mode
+        self._connected_at = time.time()
+        self._run_count = 0
+        self._last_run = None
+
+        return {
+            "ok": True,
+            "session_id": self._session_id,
+            "mode": "client-server",
+            "source": "launch",
+            "ui_mode": ui_mode,
+            "port": self._port,
+            "model_tag": str(self._model.tag()),
+        }
+
+    def run(
+        self, code: str, label: str = "comsol-snippet",
+        timeout_s: float | None = None,
+    ) -> dict:
+        """Execute a Python snippet with `model` and `ModelUtil` in scope.
+
+        Phase 2 additions:
+          - `timeout_s`: per-snippet deadline (default 300s via
+            `sim._timeout.DEFAULT_TIMEOUT_S`). Hung snippets return
+            ok=False and the probe layer emits `sim.runtime.snippet_timeout`.
+          - Returns `diagnostics[]` and `artifacts[]` populated by the
+            driver's probe list (9-channel coverage).
+        """
+        if self._model is None:
+            raise RuntimeError("No active COMSOL session — call launch() first")
+
+        from sim._timeout import call_with_timeout, DEFAULT_TIMEOUT_S  # noqa: PLC0415
+
+        namespace: dict = {
+            "model": self._model,
+            "ModelUtil": self._model_util,
+            "_result": None,
+        }
+
+        stdout_buf = io.StringIO()
+        stderr_buf = io.StringIO()
+        error: str | None = None
+        ok = True
+        started_at = time.time()
+
+        # Snapshot workdir BEFORE exec for WorkdirDiffProbe
+        workdir_path = Path(self._sim_dir)
+        try:
+            workdir_path.mkdir(parents=True, exist_ok=True)
+            before = sorted(
+                str(p.relative_to(workdir_path)).replace("\\", "/")
+                for p in workdir_path.rglob("*") if p.is_file()
+            )
+        except Exception:
+            before = []
+
+        def _run_snippet():
+            with redirect_stdout(stdout_buf), redirect_stderr(stderr_buf):
+                exec(code, namespace)  # noqa: S102
+
+        timeout_budget = (
+            DEFAULT_TIMEOUT_S if timeout_s is None else timeout_s
+        )
+        t_result = call_with_timeout(_run_snippet, timeout_s=timeout_budget)
+        hung = t_result.hung
+        if hung:
+            ok = False
+            error = (
+                f"snippet exceeded timeout_s={timeout_budget} "
+                f"(hung in COMSOL call; session is likely unusable — "
+                f"disconnect and re-launch)"
+            )
+        elif t_result.exception is not None:
+            ok = False
+            exc = t_result.exception
+            error = "".join(
+                traceback.format_exception(type(exc), exc, exc.__traceback__)
+            )
+
+        elapsed = round(time.time() - started_at, 4)
+        self._run_count += 1
+
+        if namespace.get("model") is not self._model and namespace.get("model") is not None:
+            self._model = namespace["model"]
+
+        record = {
+            "run_id": str(uuid.uuid4()),
+            "ok": ok,
+            "label": label,
+            "stdout": stdout_buf.getvalue(),
+            "stderr": stderr_buf.getvalue(),
+            "error": error,
+            "result": namespace.get("_result"),
+            "elapsed_s": elapsed,
+        }
+
+        # ── inspect probe pipeline (Phase 2) ───────────────────────────────
+        session_ns: dict = {}
+        if self._model is not None:
+            session_ns["session"] = self._model
+        if error:
+            session_ns["_session_error"] = error
+        if record["result"] is not None:
+            session_ns["_result"] = record["result"]
+
+        extras: dict = {}
+        if hung:
+            extras["timeout_hit"] = True
+            extras["timeout_s"] = timeout_budget
+            extras["timeout_elapsed_s"] = elapsed
+
+        ctx = InspectCtx(
+            stdout=record["stdout"] or "",
+            stderr=record["stderr"] or "",
+            workdir=str(workdir_path),
+            wall_time_s=elapsed,
+            exit_code=0 if ok else 1,
+            driver_name=self.name,
+            session_ns=session_ns,
+            workdir_before=before,
+            extras=extras,
+        )
+        diags, arts = collect_diagnostics(self.probes, ctx)
+        record["diagnostics"] = [d.to_dict() for d in diags]
+        record["artifacts"] = [a.to_dict() for a in arts]
+
+        self._last_run = record
+        return record
+
+    def disconnect(self) -> None:
+        if self._model_util is not None:
+            try:
+                self._model_util.disconnect()
+            except Exception:
+                pass
+        if self._client_proc is not None:
+            try:
+                self._client_proc.kill()
+            except Exception:
+                pass
+            self._client_proc = None
+        if self._server_proc is not None:
+            try:
+                self._server_proc.kill()
+            except Exception:
+                pass
+            self._server_proc = None
+        self._model = None
+        self._model_util = None
+        self._session_id = None
+        self._connected_at = None
+        self._run_count = 0
+        self._last_run = None
