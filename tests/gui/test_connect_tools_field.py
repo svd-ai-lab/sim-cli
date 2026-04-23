@@ -75,7 +75,7 @@ def test_connect_advertises_gui_tool(client):
     assert r.status_code == 200, r.text
     data = r.json()["data"]
     assert data["tools"] == ["gui"]
-    assert data["tool_refs"] == {"gui": "sim-skills/_tools/gui/SKILL.md"}
+    assert data["tool_refs"] == {"gui": "sim-skills/sim-cli/gui/SKILL.md"}
 
 
 def test_connect_omits_tool_when_no_gui(client):

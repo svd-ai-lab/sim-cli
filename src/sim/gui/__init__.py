@@ -32,7 +32,7 @@ raise unless the caller passes invalid Python types. The agent's
 subsequent inspect round (channel #3 traceback / #8 window_observed)
 will reflect the outcome.
 
-See ``sim-skills/_tools/gui/SKILL.md`` for the full agent-facing
+See ``sim-skills/sim-cli/gui/SKILL.md`` for the full agent-facing
 reference and solver-specific dialog recipes.
 """
 from __future__ import annotations
