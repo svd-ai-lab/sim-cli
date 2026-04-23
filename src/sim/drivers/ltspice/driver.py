@@ -44,9 +44,11 @@ _ANALYSIS_RE = re.compile(
 )
 
 # LTspice .log lines like:  "vout_pk: MAX(v(out))=0.999955 FROM 0 TO 0.005"
+# Expr excludes newlines — Windows LTspice 26.x writes "Files loaded:\n<path>"
+# blocks where a drive letter like "C:" otherwise looks like a measure name.
 _MEAS_RE = re.compile(
     r"^(?P<name>[A-Za-z_][\w]*)\s*:\s*"
-    r"(?P<expr>[^=]+?)=(?P<value>[-+0-9.eE]+(?:[a-zA-Z]*)?)"
+    r"(?P<expr>[^=\n\r]+?)=(?P<value>[-+0-9.eE]+(?:[a-zA-Z]*)?)"
     r"(?:\s+FROM\s+(?P<from>[-+0-9.eE]+))?"
     r"(?:\s+TO\s+(?P<to>[-+0-9.eE]+))?\s*$",
     re.MULTILINE,

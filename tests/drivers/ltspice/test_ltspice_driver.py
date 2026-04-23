@@ -141,6 +141,22 @@ class TestLogParser:
         assert len(out["warnings"]) == 1
         assert "floating" in out["warnings"][0]
 
+    def test_windows_log_with_drive_letter_path(self):
+        """Windows LTspice 26 emits 'Files loaded:\\n<C:\\path>' — don't let
+        the `C:` drive letter masquerade as a measure name."""
+        log = (
+            "LTspice 26.0.1 for Windows\n"
+            "Files loaded:\n"
+            "C:\\Users\\jiwei\\tmp\\rc.net\n"
+            "\n"
+            "vout_pk: MAX(V(out))=0.999954938889 FROM 0 TO 0.005\n"
+            "Total elapsed time: 0.061 seconds.\n"
+        )
+        out = _parse_log(log)
+        assert list(out["measures"].keys()) == ["vout_pk"]
+        assert out["measures"]["vout_pk"]["value"] == pytest.approx(0.999955, rel=1e-4)
+        assert out["measures"]["vout_pk"]["expr"] == "MAX(V(out))"
+
 
 class TestReadLog:
     """Both encodings seen in the wild — macOS 17.x is UTF-16 LE, Windows 26.x is UTF-8."""
