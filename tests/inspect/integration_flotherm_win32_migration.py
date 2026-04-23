@@ -92,10 +92,13 @@ def main() -> int:
     print(f"          workspace      = {info.get('workspace')}")
     print(f"          process_pid    = {info.get('process_pid')}")
 
-    # Give Flotherm a beat to finish painting its main window before we
-    # start poking menus.
-    print("[launch] waiting 15s for Flotherm main window ...", flush=True)
-    time.sleep(15)
+    # Wait until Flotherm main window appears instead of fixed sleep.
+    print("[launch] waiting for Flotherm main window (up to 60s) ...", flush=True)
+    _win = driver._gui.find(title_contains="Flotherm", timeout_s=60)
+    if _win:
+        print(f"[launch] main window: {_win.title!r}", flush=True)
+    else:
+        print("[launch] warning: Flotherm window not found within 60s", flush=True)
 
     turns: list[dict] = []
 

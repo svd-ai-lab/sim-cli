@@ -160,9 +160,8 @@ def play_floscript(script_path: str, timeout: float = 15) -> dict:
     except subprocess.TimeoutExpired:
         proc.kill()
 
-    time.sleep(1.0)
-
-    # Step 2: Find the Play FloSCRIPT file dialog
+    # Step 2: Find the Play FloSCRIPT file dialog.
+    # find_dialog already polls (up to 5s) so no sleep needed before it.
     dialog = _find_dialog("Play FloSCRIPT", timeout=5)
     if dialog is None:
         return {
@@ -175,10 +174,20 @@ def play_floscript(script_path: str, timeout: float = 15) -> dict:
     if not _fill_file_dialog(dialog, script_path):
         return {"ok": False, "error": "Failed to fill file dialog controls"}
 
-    # Step 4: give Flotherm a beat to render any runtime errors in the dock
-    time.sleep(1.5)
-    post_dock = read_message_dock()
-    new_lines = [ln for ln in post_dock if ln not in pre_dock]
+    # Step 4: Wait for Flotherm to process the FloSCRIPT and render dock output.
+    # Poll instead of sleeping: return as soon as new dock lines appear, up to 8s.
+    import time as _t
+    _deadline = _t.monotonic() + 8.0
+    post_dock: list[str] = []
+    while _t.monotonic() < _deadline:
+        post_dock = read_message_dock()
+        new_lines = [ln for ln in post_dock if ln not in pre_dock]
+        if new_lines:
+            break
+        _t.sleep(0.3)
+    else:
+        post_dock = read_message_dock()
+        new_lines = [ln for ln in post_dock if ln not in pre_dock]
     errors = [ln for ln in new_lines if "ERROR" in ln]
     warnings = [ln for ln in new_lines if "WARN" in ln]
 

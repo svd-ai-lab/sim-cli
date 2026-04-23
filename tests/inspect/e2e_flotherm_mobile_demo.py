@@ -76,9 +76,14 @@ def main() -> int:
     print(f"[launch] ok in {launch_sec}s  pid={info.get('process_pid')}  "
           f"install={info.get('install_root')}", flush=True)
 
-    # Give Flotherm its launch beat
-    print("[launch] waiting 15s for main window ...", flush=True)
-    time.sleep(15)
+    # Wait until the Flotherm main window appears instead of sleeping a fixed
+    # duration — faster on fast machines, robust on slow ones.
+    print("[launch] waiting for Flotherm main window (up to 60s) ...", flush=True)
+    _win = driver._gui.find(title_contains="Flotherm", timeout_s=60)
+    if _win:
+        print(f"[launch] main window: {_win.title!r}", flush=True)
+    else:
+        print("[launch] warning: Flotherm window not found within 60s", flush=True)
 
     trace: dict = {
         "pack": str(PACK),
@@ -109,9 +114,14 @@ def main() -> int:
             banner("IMPORT FAILED — aborting")
             return 2
 
-        # Read post-import dock for cell-count / grid-stats info lines
-        time.sleep(5)
-        post_import_dock = read_message_dock(timeout=20)
+        # Poll dock until import produces output (up to 20s) instead of fixed sleep.
+        _deadline = time.time() + 20
+        post_import_dock: list[str] = []
+        while time.time() < _deadline:
+            post_import_dock = read_message_dock(timeout=5)
+            if post_import_dock:
+                break
+            time.sleep(0.5)
         print(f"\n  post-import dock ({len(post_import_dock)} lines):",
               flush=True)
         for ln in post_import_dock[-15:]:

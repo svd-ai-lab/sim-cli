@@ -32,15 +32,11 @@ from sim.inspect import (
     DomainExceptionMapProbe,
     GuiDialogProbe,
     InspectCtx,
-    ProcessMetaProbe,
-    PythonTracebackProbe,
-    RuntimeTimeoutProbe,
     ScreenshotProbe,
     SdkAttributeProbe,
-    StdoutJsonTailProbe,
     TextStreamRulesProbe,
-    WorkdirDiffProbe,
     collect_diagnostics,
+    generic_probes,
 )
 from sim.runner import run_subprocess
 
@@ -145,27 +141,37 @@ def _default_comsol_readers() -> list[tuple[str, object]]:
 
 
 def _default_comsol_probes(enable_gui: bool = False) -> list:
-    """COMSOL's 9-channel probe list — parallel to Fluent's.
+    """COMSOL's probe list — generic base + COMSOL-specific channels.
 
-    Differences from Fluent (see PLAN Phase 2 §9-channel matrix):
-      #2  COMSOL-specific stderr rules (JVM/JPype flavored)
-      #4  uses `readers=` mode (Java-API style, not getattr-chain)
-      #5  DomainExceptionMapProbe with COMSOL-specific rules
+    Generic (from generic_probes()):
+      #1  ProcessMetaProbe         exit_code + wall_time
+      #1+ RuntimeTimeoutProbe      hung-snippet detection
+      #3  StdoutJsonTailProbe      last JSON line / _result fallback
+      #3+ PythonTracebackProbe     structured traceback parsing
+      #9  WorkdirDiffProbe         new files → Artifacts (always last)
+
+    COMSOL-specific:
+      #2  TextStreamRulesProbe(stderr)  JVM/JPype-flavored error patterns
+      #4  SdkAttributeProbe(readers=)  Java-API style attribute readers
+      #5  DomainExceptionMapProbe       COMSOL-specific exception upgrade rules
       #6  NOT wired — COMSOL session has no TUI concept
-      #7  NOT wired — COMSOL has no per-session transcript (only machine-global log)
-      #8a #8b process_name_substrings tuned for Cortex → Comsol family
+      #7  NOT wired — COMSOL has no per-session transcript
+      #8a GuiDialogProbe               Cortex/COMSOL windows (gui mode)
+      #8b ScreenshotProbe              per-window PNG crops (gui mode)
     """
+    from sim.inspect import generic_probes
+    _g = {p.name: p for p in generic_probes()}
     probes: list = [
-        ProcessMetaProbe(),                                              # #1
-        RuntimeTimeoutProbe(),                                           # #1+
-        TextStreamRulesProbe(                                            # #2
+        _g["process-meta"],                                              # #1  通用
+        _g["runtime-timeout"],                                           # #1+ 通用
+        TextStreamRulesProbe(                                            # #2  COMSOL 专用
             source="stderr",
             text_selector=lambda ctx: ctx.stderr,
             rules=_COMSOL_STDERR_RULES,
         ),
-        StdoutJsonTailProbe(),                                           # #3
-        PythonTracebackProbe(),                                          # #3+
-        SdkAttributeProbe(                                               # #4
+        _g["stdout-json-tail"],                                          # #3  通用
+        _g["python-traceback"],                                          # #3+ 通用
+        SdkAttributeProbe(                                               # #4  COMSOL 专用
             readers=_default_comsol_readers(),
             source_prefix="sdk:attr",
             code_prefix="comsol.sdk.attr",
@@ -173,19 +179,18 @@ def _default_comsol_probes(enable_gui: bool = False) -> list:
         # #6 TUI: intentionally not wired — COMSOL has no TUI in session mode
         # #7 Log file: intentionally not wired — COMSOL has no per-session
         #    transcript. Global %USERPROFILE%\.comsol\...\log is too noisy.
-        #    Phase 3 may revisit.
-        DomainExceptionMapProbe(rules=_COMSOL_EXC_MAP_RULES),            # #5
+        DomainExceptionMapProbe(rules=_COMSOL_EXC_MAP_RULES),            # #5  post-processor
     ]
     if enable_gui:
-        probes.append(GuiDialogProbe(                                    # #8a
+        probes.append(GuiDialogProbe(                                    # #8a COMSOL 专用
             process_name_substrings=("comsol", "comsolui", "mphserver"),
             code_prefix="comsol.gui",
         ))
-        probes.append(ScreenshotProbe(                                   # #8b
+        probes.append(ScreenshotProbe(                                   # #8b COMSOL 专用
             filename_prefix="comsol_shot",
             process_name_substrings=("comsol", "comsolui", "mphserver"),
         ))
-    probes.append(WorkdirDiffProbe())                                    # #9
+    probes.append(_g["workdir-diff"])                                    # #9  通用（始终最后）
     return probes
 
 

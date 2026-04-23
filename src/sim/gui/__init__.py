@@ -189,6 +189,34 @@ class GuiController:
             workdir=self._workdir,
         )
 
+    def wait_until_window_gone(
+        self,
+        title_contains: str,
+        timeout_s: float = 30.0,
+        poll_s: float = 0.5,
+    ) -> bool:
+        """Poll until no window with ``title_contains`` is visible, or timeout.
+
+        Returns ``True`` if the window is gone before ``timeout_s``, ``False``
+        if the timeout elapsed first.  Use this instead of ``time.sleep(N)``
+        after dismissing a dialog — it returns as soon as the window closes
+        rather than waiting a fixed duration.
+
+        Example::
+
+            dlg.click('OK')
+            gui.wait_until_window_gone('Login', timeout_s=15)
+        """
+        import time as _t
+        deadline = _t.monotonic() + timeout_s
+        while _t.monotonic() < deadline:
+            r = self.list_windows()
+            titles = [w.get("title", "") for w in (r.get("windows") or [])]
+            if not any(title_contains in t for t in titles):
+                return True
+            _t.sleep(poll_s)
+        return False
+
     def snapshot(self, max_depth: int = 3) -> dict:
         """Full UIA tree dump of every matching window.
 

@@ -209,9 +209,16 @@ class _CfxPostSession:
         self._out_q: queue.Queue[str] = queue.Queue()
         self._reader = threading.Thread(target=self._read_stdout, daemon=True)
         self._reader.start()
-        # Wait for startup (loading results can take 10-20s)
-        time.sleep(15)
-        self._drain()  # clear startup output
+        # Wait until CFX is idle: poll until 2s of stdout silence, max 60s.
+        # CFX emits a burst of output while loading the result file; when it
+        # stops, the process is ready for commands.
+        _deadline = time.monotonic() + 60.0
+        while time.monotonic() < _deadline:
+            chunk = self._drain(timeout=2.0)
+            if not chunk:
+                break  # 2s silence → CFX ready
+        else:
+            self._drain()  # drain any remaining output on timeout
 
     def _read_stdout(self):
         assert self._proc.stdout is not None

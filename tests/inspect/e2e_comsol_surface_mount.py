@@ -125,7 +125,7 @@ def main() -> int:
             '    r = dlg.click("确定")\n'
             '    if not r.get("ok"):\n'
             '        r = dlg.click("OK")\n'
-            '    import time as _t; _t.sleep(2)\n'
+            '    gui.wait_until_window_gone("连接到", timeout_s=15)\n'
             '    _result = {"ok": r.get("ok"), "click": r}',
             label="dismiss_login", timeout_s=30,
         )

@@ -161,9 +161,6 @@ class AnsaRuntime:
                 f"ANSA did not start listening on port {port} within 30s"
             )
 
-        # Small delay to let ANSA finish IAP initialization after port opens
-        time.sleep(1.0)
-
         # Connect via IAP (has its own retry loop, up to 60s)
         self._connection = iap.IAPConnection(port)
         resp = self._connection.hello()

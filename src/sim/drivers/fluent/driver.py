@@ -15,15 +15,11 @@ from sim.inspect import (
     DomainExceptionMapProbe,
     GuiDialogProbe,
     InspectCtx,
-    ProcessMetaProbe,
-    PythonTracebackProbe,
-    RuntimeTimeoutProbe,
     ScreenshotProbe,
     SdkAttributeProbe,
-    StdoutJsonTailProbe,
     TextStreamRulesProbe,
-    WorkdirDiffProbe,
     collect_diagnostics,
+    generic_probes,
 )
 from sim.runner import run_subprocess
 
@@ -77,57 +73,58 @@ def _read_transcript(ctx: InspectCtx) -> str:
 
 
 def _default_fluent_probes(enable_gui: bool = False) -> list:
-    """Probes wired into every Fluent run() — all 9 channels.
+    """Probes wired into every Fluent run() — generic base + Fluent-specific channels.
 
-    Baseline:
-      #1 ProcessMetaProbe          — exit_code + wall_time
-      #2 TextStreamRulesProbe(stderr) — generic Python exception lines
-      #3 StdoutJsonTailProbe       — last JSON line / _result fallback
-      #3+ PythonTracebackProbe     — structured traceback parsing
-      #4 SdkAttributeProbe         — viscous model, energy enabled
-      #5 DomainExceptionMapProbe   — python.* → fluent.* code upgrade
-      #6 TextStreamRulesProbe(stdout:TUI) — TUI echo rule matching
-      #7 TextStreamRulesProbe(log:session.trn) — transcript file, if opened
-      #9 WorkdirDiffProbe          — new files → Artifacts
+    Generic (from generic_probes()):
+      #1  ProcessMetaProbe         exit_code + wall_time
+      #1+ RuntimeTimeoutProbe      hung-snippet detection
+      #3  StdoutJsonTailProbe      last JSON line / _result fallback
+      #3+ PythonTracebackProbe     structured traceback parsing
+      #9  WorkdirDiffProbe         new files → Artifacts (always last)
 
-    GUI mode adds:
-      #8a GuiDialogProbe           — cx/fluent/ansys windows, titles + dialogs
-      #8b ScreenshotProbe          — per-window PNG crops (not desktop)
+    Fluent-specific:
+      #2  TextStreamRulesProbe(stderr)      generic Python exception lines
+      #4  SdkAttributeProbe                viscous model, energy enabled
+      #5  DomainExceptionMapProbe           python.* → fluent.* code upgrade
+      #6  TextStreamRulesProbe(stdout:TUI)  TUI echo rule matching
+      #7  TextStreamRulesProbe(log:trn)     transcript file, if opened
+      #8a GuiDialogProbe                    cx/fluent/ansys windows (gui mode)
+      #8b ScreenshotProbe                   per-window PNG crops (gui mode)
 
-    Order matters: post-processors (#5) must run AFTER the probes whose
-    output they consume (#3+). WorkdirDiff is last so new artifacts emitted
-    by earlier probes (screenshots) are available on disk.
+    Order matters: #5 must run AFTER #3+. WorkdirDiff is last.
     """
+    from sim.inspect import generic_probes
+    _g = {p.name: p for p in generic_probes()}
     probes: list = [
-        ProcessMetaProbe(),                                              # #1
-        RuntimeTimeoutProbe(),                                           # #1+ (Phase 2: hung-snippet synthetic)
-        TextStreamRulesProbe(                                            # #2
+        _g["process-meta"],                                              # #1  通用
+        _g["runtime-timeout"],                                           # #1+ 通用
+        TextStreamRulesProbe(                                            # #2  Fluent 专用
             source="stderr",
             text_selector=lambda ctx: ctx.stderr,
             rules=_FLUENT_STDERR_RULES,
         ),
-        StdoutJsonTailProbe(),                                           # #3
-        PythonTracebackProbe(),                                          # #3+
-        SdkAttributeProbe(attr_paths=_DEFAULT_FLUENT_SDK_ATTRS),         # #4
-        TextStreamRulesProbe(                                            # #6
+        _g["stdout-json-tail"],                                          # #3  通用
+        _g["python-traceback"],                                          # #3+ 通用
+        SdkAttributeProbe(attr_paths=_DEFAULT_FLUENT_SDK_ATTRS),         # #4  Fluent 专用
+        TextStreamRulesProbe(                                            # #6  Fluent 专用
             source="tui:stdout",
             text_selector=lambda ctx: ctx.stdout,
             rules=_FLUENT_TUI_STDOUT_RULES,
         ),
-        TextStreamRulesProbe(                                            # #7
+        TextStreamRulesProbe(                                            # #7  Fluent 专用
             source="log:session.trn",
             text_selector=_read_transcript,
             rules=_FLUENT_TRN_RULES,
         ),
-        DomainExceptionMapProbe(),                                       # #5
+        DomainExceptionMapProbe(),                                       # #5  post-processor
     ]
     if enable_gui:
-        probes.append(GuiDialogProbe(                                    # #8a
+        probes.append(GuiDialogProbe(                                    # #8a Fluent 专用
             process_name_substrings=("fluent", "ansys", "cx", "cortex")))
-        probes.append(ScreenshotProbe(                                   # #8b
+        probes.append(ScreenshotProbe(                                   # #8b Fluent 专用
             filename_prefix="fluent_shot",
             process_name_substrings=("fluent", "ansys", "cx", "cortex")))
-    probes.append(WorkdirDiffProbe())                                    # #9
+    probes.append(_g["workdir-diff"])                                    # #9  通用（始终最后）
     return probes
 
 

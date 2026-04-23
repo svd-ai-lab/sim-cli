@@ -786,6 +786,27 @@ class WorkdirDiffProbe:
         return ProbeResult(artifacts=arts)
 
 
+def generic_probes() -> list:
+    """任何 session driver 都可以免费使用的 5 个通用 probe。
+
+    #1  ProcessMetaProbe      exit_code + wall_time
+    #1+ RuntimeTimeoutProbe   hung-snippet 检测
+    #3  StdoutJsonTailProbe   最后一行 JSON / _result fallback
+    #3+ PythonTracebackProbe  结构化 traceback 解析
+    #9  WorkdirDiffProbe      新增文件 → Artifacts
+
+    需要 SDK 状态查询(#4)、日志扫描(#6/#7)、GUI 观察(#8a/#8b)的 driver
+    在此基础上追加 solver 专用 probe。
+    """
+    return [
+        ProcessMetaProbe(),
+        RuntimeTimeoutProbe(),
+        StdoutJsonTailProbe(),
+        PythonTracebackProbe(),
+        WorkdirDiffProbe(),
+    ]
+
+
 def _find_matching_windows(
     process_name_substrings: tuple[str, ...],
 ) -> tuple[list[dict], int, list[str]]:

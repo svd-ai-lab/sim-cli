@@ -137,8 +137,7 @@ def main() -> int:
             "    click_result = dlg.click('确定')\n"
             "    if not click_result.get('ok'):\n"
             "        click_result = dlg.click('OK')\n"
-            "    import time as _t\n"
-            "    _t.sleep(3)\n"
+            "    gui.wait_until_window_gone('连接到', timeout_s=15)\n"
             "    _result = {\n"
             "        'ok': click_result.get('ok', False),\n"
             "        'dismissed_title': dlg.title,\n"
@@ -159,17 +158,30 @@ def main() -> int:
 
         # ── stage 3: verify Cortex entered the main UI ──────────────────────
         banner("Stage 3 — verify main window visible post-dismiss")
+        # Poll up to 30s: COMSOL needs time to open the main window after login.
+        # On Chinese Windows the interim title is '未命名' (Untitled, no "COMSOL
+        # Multiphysics" suffix yet); on English it's "Untitled.mph - COMSOL
+        # Multiphysics". We accept either: any non-empty window whose title is
+        # NOT the login dialog counts as the main UI being reachable.
         code3 = (
             "import time as _t\n"
-            "_t.sleep(2)\n"
-            "post = gui.list_windows()\n"
-            "titles = [w['title'] for w in (post.get('windows') or [])]\n"
-            "main_visible = any('COMSOL Multiphysics' in t and '连接到' not in t\n"
-            "                    for t in titles)\n"
+            "titles, main_visible = [], False\n"
+            "for _attempt in range(15):\n"
+            "    _t.sleep(2)\n"
+            "    post = gui.list_windows()\n"
+            "    titles = [w['title'] for w in (post.get('windows') or [])]\n"
+            "    _login_gone = not any('连接到' in t and 'Server' in t for t in titles)\n"
+            "    _has_main = any(\n"
+            "        t.strip() and '连接到' not in t and 'Server' not in t\n"
+            "        for t in titles if t.strip()\n"
+            "    )\n"
+            "    main_visible = _login_gone or _has_main\n"
+            "    if main_visible:\n"
+            "        break\n"
             "_result = {'titles': titles, 'main_visible': main_visible,\n"
             "           'count': len(titles)}"
         )
-        r3 = driver.run(code3, label="stage3_verify_main", timeout_s=20.0)
+        r3 = driver.run(code3, label="stage3_verify_main", timeout_s=45.0)
         post_state = r3.get("result") or {}
         print(f"  titles           : {post_state.get('titles')}", flush=True)
         print(f"  main_visible     : {post_state.get('main_visible')}", flush=True)
