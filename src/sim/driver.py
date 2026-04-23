@@ -61,6 +61,8 @@ class RunResult:
     solver: str
     timestamp: str
     errors: list[str] = field(default_factory=list)
+    diagnostics: list[dict] = field(default_factory=list)
+    artifacts: list[dict] = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
@@ -78,6 +80,8 @@ class RunResult:
             "script": self.script,
             "solver": self.solver,
             "timestamp": self.timestamp,
+            "diagnostics": self.diagnostics,
+            "artifacts": self.artifacts,
         }
 
 

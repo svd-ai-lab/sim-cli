@@ -88,8 +88,43 @@ def execute_script(
     if python is None:
         python = sys.executable
 
-    return run_subprocess(
+    result = run_subprocess(
         [python, str(script)],
         script=script,
         solver=solver,
     )
+    _attach_probes(result, solver)
+    return result
+
+
+def _attach_probes(result: RunResult, solver: str) -> None:
+    """Run generic probes on a completed one-shot RunResult (in-place).
+
+    Probes applicable to subprocess one-shot runs:
+      #1  ProcessMetaProbe   — exit_code + wall_time (from result fields)
+      #3  StdoutJsonTailProbe — last JSON line on stdout
+      #3+ PythonTracebackProbe — tracebacks in stderr
+      #5  DomainExceptionMapProbe — upgrades python.* exception codes
+
+    Not applicable to one-shot runs (no live session, no workdir baseline):
+      #1+ RuntimeTimeoutProbe — no hung-snippet detection for subprocesses
+      #4  SdkAttributeProbe  — no live session namespace
+      #9  WorkdirDiffProbe   — skipped (workdir_before=None → applies()=False)
+    """
+    try:
+        from sim.inspect import InspectCtx, collect_diagnostics, generic_probes
+        ctx = InspectCtx(
+            stdout=result.stdout,
+            stderr=result.stderr,
+            workdir=str(Path(result.script).parent),
+            wall_time_s=result.duration_s,
+            exit_code=result.exit_code,
+            driver_name=solver,
+            session_ns={},
+            workdir_before=None,  # no baseline → WorkdirDiffProbe skipped
+        )
+        diags, arts = collect_diagnostics(generic_probes(), ctx)
+        result.diagnostics = [d.to_dict() for d in diags]
+        result.artifacts = [a.to_dict() for a in arts]
+    except Exception:
+        pass  # probes must never break the run path

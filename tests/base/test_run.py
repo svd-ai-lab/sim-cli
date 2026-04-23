@@ -1,5 +1,7 @@
 """Tests for sim run — Phase 2."""
 import json
+import textwrap
+import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -53,6 +55,54 @@ class TestRunner:
         )
         result = execute_script(FIXTURES / "matlab" / "matlab_ok.m", solver="matlab", driver=fake)
         assert result.stdout == "delegated"
+
+    # ── probe output tests ──────────────────────────────────────────────────
+
+    def test_run_produces_diagnostics(self):
+        """execute_script returns diagnostics list (may be empty, never None)."""
+        result = execute_script(FIXTURES / "mock_solver.py")
+        assert isinstance(result.diagnostics, list)
+
+    def test_run_process_meta_probe(self):
+        """ProcessMetaProbe fires on success: code sim.process.exit_zero."""
+        result = execute_script(FIXTURES / "mock_solver.py")
+        codes = [d["code"] for d in result.diagnostics]
+        assert "sim.process.exit_zero" in codes
+
+    def test_run_process_meta_failure(self):
+        """ProcessMetaProbe fires on failure: code sim.process.exit_nonzero."""
+        result = execute_script(FIXTURES / "mock_fail.py")
+        codes = [d["code"] for d in result.diagnostics]
+        assert "sim.process.exit_nonzero" in codes
+
+    def test_run_stdout_json_tail_probe(self):
+        """StdoutJsonTailProbe detects last JSON line on stdout."""
+        result = execute_script(FIXTURES / "mock_solver.py")
+        codes = [d["code"] for d in result.diagnostics]
+        assert "sim.stdout.json_tail" in codes
+
+    def test_run_traceback_probe(self):
+        """PythonTracebackProbe detects unhandled exceptions in stderr."""
+        code = textwrap.dedent("""
+            raise ValueError("intentional error for test")
+        """)
+        with tempfile.NamedTemporaryFile(suffix=".py", mode="w", delete=False) as f:
+            f.write(code)
+            tmp = Path(f.name)
+        try:
+            result = execute_script(tmp, solver="test")
+        finally:
+            tmp.unlink()
+        codes = [d["code"] for d in result.diagnostics]
+        assert "python.ValueError" in codes
+
+    def test_run_diagnostics_in_to_dict(self):
+        """diagnostics and artifacts appear in RunResult.to_dict()."""
+        result = execute_script(FIXTURES / "mock_solver.py")
+        d = result.to_dict()
+        assert "diagnostics" in d
+        assert "artifacts" in d
+        assert isinstance(d["diagnostics"], list)
 
 
 class TestRunCLI:
