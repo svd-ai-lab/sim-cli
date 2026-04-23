@@ -6,6 +6,7 @@ import json
 import os
 import re
 import shutil
+import time
 import uuid
 from pathlib import Path
 from typing import Callable
@@ -162,6 +163,71 @@ def _scan_matlab_installs() -> list[SolverInstall]:
     return sorted(found.values(), key=lambda i: i.version, reverse=True)
 
 
+# MATLAB stderr surfaces engine errors. stdout shows ??? and warning text.
+_MATLAB_STDERR_RULES: list[dict] = [
+    {"pattern": r"^Error:", "severity": "error",
+     "code": "matlab.engine.error"},
+    {"pattern": r"License checkout failed", "severity": "error",
+     "code": "matlab.license.checkout_failed"},
+]
+_MATLAB_STDOUT_RULES: list[dict] = [
+    {"pattern": r"^\?\?\? ", "severity": "error",
+     "code": "matlab.script.error"},
+    {"pattern": r"Out of memory\.", "severity": "error",
+     "code": "matlab.oom"},
+]
+
+
+def _default_matlab_probes(enable_gui: bool = False) -> list:
+    """MATLAB probe list — generic_probes() + MATLAB-specific channels.
+
+    Generic (via generic_probes()):
+      #1  ProcessMetaProbe      #1+ RuntimeTimeoutProbe
+      #3  StdoutJsonTailProbe   #3+ PythonTracebackProbe   #9 WorkdirDiffProbe
+
+    MATLAB-specific:
+      #2  TextStreamRulesProbe(stderr) — engine errors / license
+      #6  TextStreamRulesProbe(stdout) — ??? script errors / OOM
+      #5  DomainExceptionMapProbe — post-processor
+      #8a/#8b GUI dialog + screenshot only when enable_gui (desktop mode)
+
+    NOT wired:
+      #4  SdkAttributeProbe — engine state already returned by query()
+      #7  log file — no per-session log
+    """
+    from sim.inspect import (                                            # noqa: PLC0415
+        DomainExceptionMapProbe, GuiDialogProbe, ScreenshotProbe,
+        TextStreamRulesProbe, generic_probes,
+    )
+    _g = {p.name: p for p in generic_probes()}
+    probes: list = [
+        _g["process-meta"],                                              # #1
+        _g["runtime-timeout"],                                           # #1+
+        TextStreamRulesProbe(                                            # #2
+            source="stderr",
+            text_selector=lambda ctx: ctx.stderr,
+            rules=_MATLAB_STDERR_RULES,
+        ),
+        TextStreamRulesProbe(                                            # #6
+            source="matlab:stdout",
+            text_selector=lambda ctx: ctx.stdout,
+            rules=_MATLAB_STDOUT_RULES,
+        ),
+        _g["stdout-json-tail"],                                          # #3
+        _g["python-traceback"],                                          # #3+
+        DomainExceptionMapProbe(),                                        # #5
+    ]
+    if enable_gui:
+        probes.append(GuiDialogProbe(                                    # #8a
+            process_name_substrings=("matlab", "MATLAB"),
+            code_prefix="matlab.gui"))
+        probes.append(ScreenshotProbe(                                   # #8b
+            filename_prefix="matlab_shot",
+            process_name_substrings=("matlab", "MATLAB")))
+    probes.append(_g["workdir-diff"])                                    # #9
+    return probes
+
+
 class MatlabDriver:
     """MATLAB driver — one-shot and persistent session execution."""
 
@@ -169,6 +235,8 @@ class MatlabDriver:
         self._engine = None
         self._session_id: str | None = None
         self._desktop: bool = False
+        self.probes: list = _default_matlab_probes(enable_gui=False)
+        self._sim_dir = Path.cwd() / ".sim"
 
     @property
     def name(self) -> str:
@@ -312,14 +380,15 @@ class MatlabDriver:
             self._engine = matlab.engine.start_matlab()
 
         self._session_id = str(uuid.uuid4())
+        self.probes = _default_matlab_probes(enable_gui=self._desktop)
         return {
             "ok": True,
             "session_id": self._session_id,
             "ui_mode": ui_mode,
         }
 
-    def run(self, code: str, label: str = "snippet") -> dict:
-        """Execute MATLAB code in the persistent session."""
+    def _dispatch(self, code: str, label: str = "snippet") -> dict:
+        """Execute MATLAB code in the persistent session (no probes)."""
         if self._engine is None:
             raise RuntimeError("No active MATLAB session.")
 
@@ -345,6 +414,39 @@ class MatlabDriver:
             "error": error,
             "result": parsed,
         }
+
+    def run(self, code: str, label: str = "snippet") -> dict:
+        """Execute MATLAB code and attach inspect diagnostics."""
+        from sim.inspect import InspectCtx, collect_diagnostics         # noqa: PLC0415
+
+        wd = self._sim_dir
+        try:
+            wd.mkdir(parents=True, exist_ok=True)
+            before = sorted(
+                str(p.relative_to(wd)).replace("\\", "/")
+                for p in wd.rglob("*") if p.is_file()
+            )
+        except Exception:
+            before = []
+
+        t0 = time.monotonic()
+        result = self._dispatch(code, label)
+        wall = time.monotonic() - t0
+
+        ctx = InspectCtx(
+            stdout=result.get("stdout", "") or "",
+            stderr=result.get("stderr", "") or result.get("error", "") or "",
+            workdir=str(wd),
+            wall_time_s=wall,
+            exit_code=0 if result.get("ok") else 1,
+            driver_name=self.name,
+            session_ns={"_result": result.get("result")},
+            workdir_before=before,
+        )
+        diags, arts = collect_diagnostics(self.probes, ctx)
+        result["diagnostics"] = [d.to_dict() for d in diags]
+        result["artifacts"] = [a.to_dict() for a in arts]
+        return result
 
     def query(self, name: str) -> dict:
         """Named query against the MATLAB session."""

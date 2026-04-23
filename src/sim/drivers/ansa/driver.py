@@ -43,6 +43,63 @@ _GUI_ONLY_PATTERNS = (
 _SCAN_DRIVES = ("C", "D", "E", "F", "G")
 
 
+# ANSA stdout often surfaces Python exceptions thrown inside main() via the
+# IAP protocol. Most are caught by PythonTracebackProbe, but ANSA's own
+# scripting errors (e.g. base.* failures) print "ANSA error:" lines.
+_ANSA_STDOUT_RULES: list[dict] = [
+    {"pattern": r"ANSA error:", "severity": "error",
+     "code": "ansa.scripting.error"},
+    {"pattern": r"License checkout failed", "severity": "error",
+     "code": "ansa.license.checkout_failed"},
+]
+
+
+def _default_ansa_probes(enable_gui: bool = False) -> list:
+    """ANSA probe list — generic_probes() + ANSA-specific channels.
+
+    Generic (via generic_probes()):
+      #1  ProcessMetaProbe      #1+ RuntimeTimeoutProbe
+      #3  StdoutJsonTailProbe   #3+ PythonTracebackProbe   #9 WorkdirDiffProbe
+
+    ANSA-specific:
+      #6  TextStreamRulesProbe(ansa:stdout) — ANSA error / license patterns
+      #5  DomainExceptionMapProbe — post-processor
+      #8a GuiDialogProbe — only when enable_gui (ANSA -listenport, no -nogui)
+      #8b ScreenshotProbe — only when enable_gui
+
+    NOT wired:
+      #2  stderr — ANSA's IAP funnels everything through stdout
+      #4  SdkAttributeProbe — IAP exec_snippet returns dict already
+      #7  log file — no per-session log
+    """
+    from sim.inspect import (                                            # noqa: PLC0415
+        DomainExceptionMapProbe, GuiDialogProbe, ScreenshotProbe,
+        TextStreamRulesProbe, generic_probes,
+    )
+    _g = {p.name: p for p in generic_probes()}
+    probes: list = [
+        _g["process-meta"],                                              # #1
+        _g["runtime-timeout"],                                           # #1+
+        TextStreamRulesProbe(                                            # #6
+            source="ansa:stdout",
+            text_selector=lambda ctx: ctx.stdout,
+            rules=_ANSA_STDOUT_RULES,
+        ),
+        _g["stdout-json-tail"],                                          # #3
+        _g["python-traceback"],                                          # #3+
+        DomainExceptionMapProbe(),                                        # #5
+    ]
+    if enable_gui:
+        probes.append(GuiDialogProbe(                                    # #8a
+            process_name_substrings=("ansa", "ansa64"),
+            code_prefix="ansa.gui"))
+        probes.append(ScreenshotProbe(                                   # #8b
+            filename_prefix="ansa_shot",
+            process_name_substrings=("ansa", "ansa64")))
+    probes.append(_g["workdir-diff"])                                    # #9
+    return probes
+
+
 def _find_installation() -> tuple[str, str, str] | None:
     """Locate BETA CAE ANSA installation.
 
@@ -128,6 +185,8 @@ class AnsaDriver:
 
     def __init__(self):
         self._runtime = None  # lazy AnsaRuntime, created on first launch()
+        self.probes: list = _default_ansa_probes(enable_gui=False)
+        self._sim_dir = Path.cwd() / ".sim"
 
     @property
     def name(self) -> str:
@@ -478,7 +537,14 @@ class AnsaDriver:
         """
         rt = self._ensure_runtime()
         info = rt.launch(port=port, ui_mode=ui_mode)
+        self.probes = _default_ansa_probes(enable_gui=(ui_mode == "gui"))
         return info.to_dict()
+
+    def _dispatch(self, code: str, label: str = "ansa-snippet") -> dict:
+        """Execute a snippet inside the ANSA session (no probes attached)."""
+        rt = self._ensure_runtime()
+        record = rt.exec_snippet(code, label=label)
+        return record.to_run_result()
 
     def run(self, code: str, label: str = "ansa-snippet") -> dict:
         """Execute a Python snippet inside the live ANSA session.
@@ -487,9 +553,36 @@ class AnsaDriver:
         (base, constants, mesh, etc.). If main() is defined and returns
         a dict with string keys/values, it is captured as the result.
         """
-        rt = self._ensure_runtime()
-        record = rt.exec_snippet(code, label=label)
-        return record.to_run_result()
+        from sim.inspect import InspectCtx, collect_diagnostics         # noqa: PLC0415
+
+        wd = self._sim_dir
+        try:
+            wd.mkdir(parents=True, exist_ok=True)
+            before = sorted(
+                str(p.relative_to(wd)).replace("\\", "/")
+                for p in wd.rglob("*") if p.is_file()
+            )
+        except Exception:
+            before = []
+
+        t0 = time.monotonic()
+        result = self._dispatch(code, label)
+        wall = time.monotonic() - t0
+
+        ctx = InspectCtx(
+            stdout=result.get("stdout", "") or "",
+            stderr=result.get("stderr", "") or result.get("error", "") or "",
+            workdir=str(wd),
+            wall_time_s=wall,
+            exit_code=0 if result.get("ok") else 1,
+            driver_name=self.name,
+            session_ns={"_result": result.get("result")},
+            workdir_before=before,
+        )
+        diags, arts = collect_diagnostics(self.probes, ctx)
+        result["diagnostics"] = [d.to_dict() for d in diags]
+        result["artifacts"] = [a.to_dict() for a in arts]
+        return result
 
     def run_script(self, filepath: str, label: str | None = None) -> dict:
         """Execute a script file inside the live ANSA session via IAP."""

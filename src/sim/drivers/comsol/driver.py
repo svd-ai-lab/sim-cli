@@ -705,20 +705,46 @@ class ComsolDriver:
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
+            # The GUI client shows a "Connect to COMSOL Server" login dialog on
+            # startup before it creates an Untitled model. This dialog blocks
+            # ModelUtil.tags() from returning anything — causing a deadlock:
+            # launch() polls for tags while the dialog waits for a click that
+            # only comes after launch() returns. Fix: dismiss the dialog here,
+            # before we start polling tags.
+            from sim.gui import GuiController  # noqa: PLC0415
+            _preflight_gui = GuiController(
+                process_name_substrings=self.GUI_PROCESS_FILTER,
+                workdir=str(self._sim_dir),
+            )
+            _dlg = _preflight_gui.find(title_contains="连接到", timeout_s=10)
+            if _dlg is None:
+                _dlg = _preflight_gui.find(title_contains="Connect to COMSOL", timeout_s=3)
+            if _dlg is not None:
+                for _btn in ("确定", "OK"):
+                    _r = _dlg.click(_btn)
+                    if _r.get("ok"):
+                        break
+                _preflight_gui.wait_until_window_gone("连接到", timeout_s=10)
 
-        # Poll up to 90s for the GUI client to create its Untitled model.
-        # Fall back to ModelUtil.create("Model1") in headless/standalone.
-        self._model = None
-        if ui_mode in ("gui", "desktop"):
-            deadline = time.time() + 90
-            while time.time() < deadline:
-                tags = list(ModelUtil.tags())
-                if tags:
-                    self._model = ModelUtil.model(tags[0])
-                    break
-                time.sleep(1)
-        if self._model is None:
-            self._model = ModelUtil.create("Model1")
+        # Create model. Guard against the server surviving a previous
+        # disconnect(): if "Model1" already exists on the server, that tag
+        # belongs to a stale session — remove it first, then create fresh.
+        # Fallback: if removal is refused, create with a session-unique name
+        # so we never conflict.
+        _model_tag = "Model1"
+        try:
+            self._model = ModelUtil.create(_model_tag)
+        except Exception:
+            for _stale in list(ModelUtil.tags()):
+                try:
+                    ModelUtil.remove(_stale)
+                except Exception:
+                    pass
+            try:
+                self._model = ModelUtil.create(_model_tag)
+            except Exception:
+                _model_tag = f"Model_{uuid.uuid4().hex[:6]}"
+                self._model = ModelUtil.create(_model_tag)
 
         self._session_id = str(uuid.uuid4())
         self._ui_mode = ui_mode

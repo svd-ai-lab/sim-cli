@@ -32,6 +32,63 @@ from sim.driver import ConnectionInfo, Diagnostic, LintResult, RunResult, Solver
 
 log = logging.getLogger(__name__)
 
+# CFX cfx5post -line emits "ERROR" / "INTERNAL" / "WARNING" lines on stdout.
+# stderr is rarely populated (cfx5post buffers everything via its own log).
+_CFX_STDOUT_RULES: list[dict] = [
+    {"pattern": r"^\s*ERROR\b", "severity": "error",
+     "code": "cfx.post.error"},
+    {"pattern": r"\bINTERNAL\b", "severity": "error",
+     "code": "cfx.post.internal_error"},
+    {"pattern": r"License checkout failed", "severity": "error",
+     "code": "cfx.license.checkout_failed"},
+]
+
+
+def _default_cfx_probes(enable_gui: bool = False) -> list:
+    """CFX probe list — generic_probes() + cfx5post-specific channels.
+
+    Generic (via generic_probes()):
+      #1  ProcessMetaProbe      #1+ RuntimeTimeoutProbe
+      #3  StdoutJsonTailProbe   #3+ PythonTracebackProbe   #9 WorkdirDiffProbe
+
+    CFX-specific:
+      #6  TextStreamRulesProbe(cfx:stdout) — ERROR / INTERNAL / license
+      #5  DomainExceptionMapProbe — post-processor
+
+    NOT wired:
+      #2  stderr — cfx5post -line keeps stderr empty
+      #4  SdkAttributeProbe — session.summary already exposes state
+      #7  log file — solver log lives next to .res, not a per-snippet log
+      #8  GUI — cfx5post -line is text-only; no window to probe
+    """
+    from sim.inspect import (                                            # noqa: PLC0415
+        DomainExceptionMapProbe, GuiDialogProbe, ScreenshotProbe,
+        TextStreamRulesProbe, generic_probes,
+    )
+    _g = {p.name: p for p in generic_probes()}
+    probes: list = [
+        _g["process-meta"],                                              # #1
+        _g["runtime-timeout"],                                           # #1+
+        TextStreamRulesProbe(                                            # #6
+            source="cfx:stdout",
+            text_selector=lambda ctx: ctx.stdout,
+            rules=_CFX_STDOUT_RULES,
+        ),
+        _g["stdout-json-tail"],                                          # #3
+        _g["python-traceback"],                                          # #3+
+        DomainExceptionMapProbe(),                                        # #5
+    ]
+    if enable_gui:
+        probes.append(GuiDialogProbe(                                    # #8a
+            process_name_substrings=("cfx5", "ansys"),
+            code_prefix="cfx.gui"))
+        probes.append(ScreenshotProbe(                                   # #8b
+            filename_prefix="cfx_shot",
+            process_name_substrings=("cfx5", "ansys")))
+    probes.append(_g["workdir-diff"])                                    # #9
+    return probes
+
+
 # ---------------------------------------------------------------------------
 # Detection helpers
 # ---------------------------------------------------------------------------
@@ -320,6 +377,8 @@ class CfxDriver:
         self._session: _CfxPostSession | None = None
         self._session_info: dict = {}
         self._ccl_history: list[str] = []  # CCL blocks sent via enterccl
+        self.probes: list = _default_cfx_probes(enable_gui=False)
+        self._sim_dir = Path.cwd() / ".sim"
 
     @property
     def name(self) -> str:
@@ -659,6 +718,44 @@ class CfxDriver:
         return dict(self._session_info)
 
     def run(self, code: str, label: str = "") -> dict:
+        """Execute a snippet inside the live cfx5post session and attach diagnostics.
+
+        Wraps :meth:`_dispatch` with timing, an :class:`InspectCtx`, and the
+        configured probe list. The shape of the returned dict matches
+        ``_dispatch`` plus ``diagnostics`` and ``artifacts`` lists.
+        """
+        from sim.inspect import InspectCtx, collect_diagnostics         # noqa: PLC0415
+
+        wd = self._sim_dir
+        try:
+            wd.mkdir(parents=True, exist_ok=True)
+            before = sorted(
+                str(p.relative_to(wd)).replace("\\", "/")
+                for p in wd.rglob("*") if p.is_file()
+            )
+        except Exception:
+            before = []
+
+        t0 = time.monotonic()
+        result = self._dispatch(code, label)
+        wall = time.monotonic() - t0
+
+        ctx = InspectCtx(
+            stdout=result.get("stdout", "") or "",
+            stderr=result.get("error", "") or "",
+            workdir=str(wd),
+            wall_time_s=wall,
+            exit_code=0 if result.get("ok") else 1,
+            driver_name=self.name,
+            session_ns={"_result": result.get("result")},
+            workdir_before=before,
+        )
+        diags, arts = collect_diagnostics(self.probes, ctx)
+        result["diagnostics"] = [d.to_dict() for d in diags]
+        result["artifacts"] = [a.to_dict() for a in arts]
+        return result
+
+    def _dispatch(self, code: str, label: str = "") -> dict:
         """Execute a command in the live cfx5post session.
 
         The ``code`` can be:

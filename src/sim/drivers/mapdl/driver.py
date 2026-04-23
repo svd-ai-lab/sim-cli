@@ -34,6 +34,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 from sim.driver import ConnectionInfo, Diagnostic, LintResult, SolverInstall
@@ -129,11 +130,33 @@ def _find_mapdl_exe(root: Path) -> Path | None:
     return None
 
 
+def _default_mapdl_probes() -> list:
+    """MAPDL probe list — generic_probes() + MAPDL-specific channels.
+
+    exec_snippet captures real stdout/stderr, so all generic probes fire.
+    No solver-specific stderr rules (MAPDL errors surface as Python exceptions).
+    No SdkAttributeProbe (#4) — mapdl gRPC client lives inside runtime namespace.
+    No GuiDialogProbe — MAPDL runs headless.
+    """
+    from sim.inspect import DomainExceptionMapProbe, generic_probes  # noqa: PLC0415
+    _g = {p.name: p for p in generic_probes()}
+    return [
+        _g["process-meta"],                                            # #1
+        _g["runtime-timeout"],                                         # #1+
+        _g["stdout-json-tail"],                                        # #3
+        _g["python-traceback"],                                        # #3+
+        DomainExceptionMapProbe(),                                      # #5
+        _g["workdir-diff"],                                            # #9
+    ]
+
+
 class MapdlDriver:
     """MAPDL driver — Phase 1 (one-shot) + Phase 2 (session)."""
 
     def __init__(self) -> None:
         self._runtime = None
+        self._sim_dir: Path = Path(os.environ.get("SIM_DIR") or (Path.cwd() / ".sim"))
+        self.probes: list = _default_mapdl_probes()
 
     @property
     def name(self) -> str:
@@ -338,13 +361,46 @@ class MapdlDriver:
         """
         return self._ensure_runtime().launch(**kwargs)
 
+    def _dispatch(self, code: str, label: str = "snippet") -> dict:
+        """Exec a Python snippet in the session namespace (no probes)."""
+        return self._ensure_runtime().exec_snippet(code, label)
+
     def run(self, code: str, label: str = "snippet") -> dict:
-        """Exec a Python snippet in the session namespace.
+        """Exec a Python snippet and attach inspect diagnostics.
 
         Namespace has: ``mapdl``, ``np``, ``launch_mapdl``, ``workdir``,
         ``_result``. Assign ``_result = ...`` to return data.
         """
-        return self._ensure_runtime().exec_snippet(code, label)
+        from sim.inspect import InspectCtx, collect_diagnostics       # noqa: PLC0415
+
+        wd = self._sim_dir
+        try:
+            wd.mkdir(parents=True, exist_ok=True)
+            before = sorted(
+                str(p.relative_to(wd)).replace("\\", "/")
+                for p in wd.rglob("*") if p.is_file()
+            )
+        except Exception:
+            before = []
+
+        t0 = time.monotonic()
+        result = self._dispatch(code, label)
+        wall = time.monotonic() - t0
+
+        ctx = InspectCtx(
+            stdout=result.get("stdout", ""),
+            stderr=result.get("stderr", "") or result.get("error", "") or "",
+            workdir=str(wd),
+            wall_time_s=wall,
+            exit_code=0 if result.get("ok") else 1,
+            driver_name=self.name,
+            session_ns={"_result": result.get("result")},
+            workdir_before=before,
+        )
+        diags, arts = collect_diagnostics(self.probes, ctx)
+        result["diagnostics"] = [d.to_dict() for d in diags]
+        result["artifacts"] = [a.to_dict() for a in arts]
+        return result
 
     def query(self, name: str) -> dict:
         """Named queries (session.summary, mesh.summary, workdir.files,

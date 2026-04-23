@@ -36,6 +36,16 @@ _ERROR_TERM_RE = re.compile(r"E\s*r\s*r\s*o\s*r\s+t\s*e\s*r\s*m\s*i\s*n\s*a\s*t\
 _ELAPSED_RE = re.compile(r"Elapsed\s+time\s+([\d.]+)\s+seconds", re.IGNORECASE)
 _ERROR_PATTERN_RE = re.compile(r"\*\*\*\s*(Error|Fatal)", re.IGNORECASE)
 
+# TextStreamRulesProbe rules — translate LS-DYNA solver patterns to probe format
+_LSDYNA_STDERR_RULES: list[dict] = [
+    {"pattern": r"\*\*\*\s*Error", "severity": "error",
+     "code": "lsdyna.solver.error"},
+    {"pattern": r"\*\*\*\s*Fatal", "severity": "error",
+     "code": "lsdyna.solver.fatal"},
+    {"pattern": r"E\s*r\s*r\s*o\s*r\s+t\s*e\s*r\s*m\s*i\s*n\s*a\s*t\s*i\s*o\s*n",
+     "severity": "error", "code": "lsdyna.solve.error_termination"},
+]
+
 # Executables to search for (preferred order: sp first for speed in testing)
 _EXE_NAMES = [
     "lsdyna_sp.exe",
@@ -171,6 +181,33 @@ def _scan_lsdyna_installs() -> list[SolverInstall]:
 # ---------------------------------------------------------------------------
 
 
+def _default_lsdyna_probes() -> list:
+    """LS-DYNA probe list — generic_probes() + LS-DYNA-specific channels.
+
+    exec_snippet captures real stdout/stderr, so all generic probes fire.
+    #2 TextStreamRulesProbe(stderr) — ***Error/***Fatal from solver output.
+    No GuiDialogProbe — LS-DYNA runs as subprocess (headless).
+    No SdkAttributeProbe — deck/model live inside runtime namespace.
+    """
+    from sim.inspect import (                                          # noqa: PLC0415
+        DomainExceptionMapProbe, TextStreamRulesProbe, generic_probes,
+    )
+    _g = {p.name: p for p in generic_probes()}
+    return [
+        _g["process-meta"],                                            # #1
+        _g["runtime-timeout"],                                         # #1+
+        TextStreamRulesProbe(                                          # #2
+            source="stderr",
+            text_selector=lambda ctx: ctx.stderr,
+            rules=_LSDYNA_STDERR_RULES,
+        ),
+        _g["stdout-json-tail"],                                        # #3
+        _g["python-traceback"],                                        # #3+
+        DomainExceptionMapProbe(),                                      # #5
+        _g["workdir-diff"],                                            # #9
+    ]
+
+
 class LsDynaDriver:
     """Sim driver for Ansys LS-DYNA.
 
@@ -189,6 +226,8 @@ class LsDynaDriver:
     def __init__(self) -> None:
         self._runtime = None  # type: ignore[assignment]
         # Lazy import keeps PyDyna optional for one-shot users
+        self._sim_dir: Path = Path(os.environ.get("SIM_DIR") or (Path.cwd() / ".sim"))
+        self.probes: list = _default_lsdyna_probes()
 
     @property
     def name(self) -> str:
@@ -492,14 +531,48 @@ class LsDynaDriver:
 
         return runtime.launch(**kwargs)
 
+    def _dispatch(self, code: str, label: str = "snippet") -> dict:
+        """Execute a Python snippet in the session namespace (no probes)."""
+        runtime = self._ensure_runtime()
+        return runtime.exec_snippet(code, label)
+
     def run(self, code: str, label: str = "snippet") -> dict:
-        """Execute a Python snippet in the session namespace.
+        """Execute a snippet and attach inspect diagnostics.
 
         The snippet has access to: deck, kwd, Deck, workdir, run_dyna,
         model, dpf. Assign `_result = ...` to return data.
         """
-        runtime = self._ensure_runtime()
-        return runtime.exec_snippet(code, label)
+        from sim.inspect import InspectCtx, collect_diagnostics       # noqa: PLC0415
+
+        wd = self._sim_dir
+        try:
+            wd.mkdir(parents=True, exist_ok=True)
+            before = sorted(
+                str(p.relative_to(wd)).replace("\\", "/")
+                for p in wd.rglob("*") if p.is_file()
+            )
+        except Exception:
+            before = []
+
+        t0 = time.monotonic()
+        result = self._dispatch(code, label)
+        wall = time.monotonic() - t0
+
+        # stderr may have LS-DYNA solver output (***Error / Error termination)
+        ctx = InspectCtx(
+            stdout=result.get("stdout", ""),
+            stderr=result.get("stderr", "") or result.get("error", "") or "",
+            workdir=str(wd),
+            wall_time_s=wall,
+            exit_code=0 if result.get("ok") else 1,
+            driver_name=self.name,
+            session_ns={"_result": result.get("result")},
+            workdir_before=before,
+        )
+        diags, arts = collect_diagnostics(self.probes, ctx)
+        result["diagnostics"] = [d.to_dict() for d in diags]
+        result["artifacts"] = [a.to_dict() for a in arts]
+        return result
 
     def query(self, name: str) -> dict:
         """Query session state.

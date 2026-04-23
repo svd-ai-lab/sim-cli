@@ -59,6 +59,15 @@ log = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
+# IronPython error patterns on stdout (run_python_script return value).
+# Mechanical doesn't produce stderr through the gRPC interface.
+_MECH_STDOUT_RULES: list[dict] = [
+    {"pattern": r"\bError\b", "severity": "error", "code": "mech.scripting.error"},
+    {"pattern": r"\bWarning\b", "severity": "warning", "code": "mech.scripting.warning"},
+    # Ansys license errors surface in the run_python_script return string
+    {"pattern": r"Cannot checkout", "severity": "error", "code": "mech.license.checkout_failed"},
+]
+
 # IronPython identifiers that indicate a Mechanical scripting snippet.
 _MECH_SCRIPT_MARKERS = (
     "ExtAPI.",
@@ -77,6 +86,55 @@ _MECH_PY_IMPORT = re.compile(
 
 _AWP_ROOT_RE = re.compile(r"^AWP_ROOT(\d{3})$")
 _VERSION_DIR_RE = re.compile(r"v(\d{2})(\d)$")
+
+
+def _default_mechanical_probes(enable_gui: bool = True) -> list:
+    """Mechanical probe list — generic_probes() + Mechanical-specific channels.
+
+    Generic (via generic_probes()):
+      #1  ProcessMetaProbe      #1+ RuntimeTimeoutProbe
+      #3  StdoutJsonTailProbe   #3+ PythonTracebackProbe   #9 WorkdirDiffProbe
+
+    Mechanical-specific:
+      #6  TextStreamRulesProbe(mech:stdout) — Error/Warning in script return value
+      #5  DomainExceptionMapProbe           — post-processor
+      #8a GuiDialogProbe                    — Mechanical GUI / Script Error dialog
+      #8b ScreenshotProbe                   — GUI screenshot
+
+    NOT wired:
+      #2  stderr — always "" (run_python_script doesn't produce stderr)
+      #4  SdkAttributeProbe — get_product_info() is expensive, skip
+      #7  log — no per-session log accessible via gRPC
+
+    enable_gui=True by default because Mechanical always launches with a
+    visible GUI window (batch=False is the driver's policy).
+    """
+    from sim.inspect import (                                          # noqa: PLC0415
+        DomainExceptionMapProbe, GuiDialogProbe, ScreenshotProbe,
+        TextStreamRulesProbe, generic_probes,
+    )
+    _g = {p.name: p for p in generic_probes()}
+    probes: list = [
+        _g["process-meta"],                                            # #1  通用
+        _g["runtime-timeout"],                                         # #1+ 通用
+        TextStreamRulesProbe(                                          # #6  via stdout
+            source="mech:stdout",
+            text_selector=lambda ctx: ctx.stdout,
+            rules=_MECH_STDOUT_RULES,
+        ),
+        _g["stdout-json-tail"],                                        # #3  通用
+        _g["python-traceback"],                                        # #3+ 通用
+        DomainExceptionMapProbe(),                                      # #5  post-processor
+    ]
+    if enable_gui:
+        probes.append(GuiDialogProbe(                                  # #8a
+            process_name_substrings=("AnsysWBU", "Mechanical", "ANSYS"),
+            code_prefix="mech.gui"))
+        probes.append(ScreenshotProbe(                                 # #8b
+            filename_prefix="mech_shot",
+            process_name_substrings=("AnsysWBU", "Mechanical", "ANSYS")))
+    probes.append(_g["workdir-diff"])                                  # #9  通用（始终最后）
+    return probes
 
 
 def _version_code(version_str: str) -> int:
@@ -108,6 +166,8 @@ class MechanicalDriver:
         self._run_count: int = 0
         self._version: str | None = None
         self._launched_at: float | None = None
+        self._sim_dir: Path = Path(os.environ.get("SIM_DIR") or (Path.cwd() / ".sim"))
+        self.probes: list = _default_mechanical_probes(enable_gui=True)
 
     # ── DriverProtocol ─────────────────────────────────────────────
 
@@ -444,13 +504,8 @@ class MechanicalDriver:
             "batch": batch,
         }
 
-    def run(self, code: str, label: str = "snippet") -> dict:
-        """Execute a Mechanical scripting snippet.
-
-        The snippet runs inside Mechanical's IronPython interpreter.
-        ``ExtAPI``, ``DataModel``, ``Model`` are available as globals.
-        The last expression's string form is returned as ``stdout``.
-        """
+    def _dispatch(self, code: str, label: str = "snippet") -> dict:
+        """Execute a Mechanical scripting snippet (no probes)."""
         if self._client is None:
             raise RuntimeError("No active Mechanical session — call launch() first")
 
@@ -476,6 +531,39 @@ class MechanicalDriver:
             "result": self.parse_output(stdout) if stdout else None,
             "elapsed_s": round(time.time() - started, 4),
         }
+
+    def run(self, code: str, label: str = "snippet") -> dict:
+        """Execute a snippet and attach inspect diagnostics."""
+        from sim.inspect import InspectCtx, collect_diagnostics       # noqa: PLC0415
+
+        wd = self._sim_dir
+        try:
+            wd.mkdir(parents=True, exist_ok=True)
+            before = sorted(
+                str(p.relative_to(wd)).replace("\\", "/")
+                for p in wd.rglob("*") if p.is_file()
+            )
+        except Exception:
+            before = []
+
+        t0 = time.monotonic()
+        result = self._dispatch(code, label)
+        wall = time.monotonic() - t0
+
+        ctx = InspectCtx(
+            stdout=result.get("stdout", ""),
+            stderr=result.get("error", "") or "",  # error string → stderr slot
+            workdir=str(wd),
+            wall_time_s=wall,
+            exit_code=0 if result.get("ok") else 1,
+            driver_name=self.name,
+            session_ns={"_result": result.get("result")},
+            workdir_before=before,
+        )
+        diags, arts = collect_diagnostics(self.probes, ctx)
+        result["diagnostics"] = [d.to_dict() for d in diags]
+        result["artifacts"] = [a.to_dict() for a in arts]
+        return result
 
     def query(self, name: str) -> dict:
         """Session-level queries.

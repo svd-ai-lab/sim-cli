@@ -143,6 +143,7 @@ def main() -> int:
         )
 
         total_step_sec = 0.0
+        solve_ok = False
         for fname, desc in STEPS:
             banner(f"Step {fname} — {desc}")
             script_path = WORKFLOW_DIR / fname
@@ -158,70 +159,156 @@ def main() -> int:
             if not step_out["ok"]:
                 banner(f"STEP FAILED — aborting downstream: {fname}")
                 break
+            # Between solve and plot: try early MaxMinVolume extraction.
+            # Before plot groups exist, the result context might be cleaner.
+            if fname == "04_solve.py":
+                solve_ok = True
+                banner("Early extract — MaxMinVolume before plot groups")
+                early_code = """\
+import jpype as _jp
+JS = _jp.JArray(_jp.JString)
+ds_tags = [str(t) for t in model.result().dataset().tags()]
+ds_tag = ds_tags[0] if ds_tags else "dset1"
+print(f"early: datasets={ds_tags}")
+_early_max = None
+_early_method = None
+_early_diag = []
+# Try MaxMinVolume without selection (default = all)
+try:
+    for _t in list(model.result().numerical().tags()):
+        if str(_t) == "_emm":
+            model.result().numerical().remove("_emm")
+    mm = model.result().numerical().create("_emm", "MaxMinVolume")
+    mm.set("data", ds_tag)
+    mm.set("expr", JS(["T-273.15"]))
+    _mat = [[float(v) for v in row] for row in mm.computeResult()]
+    _early_max = _mat[0][0]
+    model.result().numerical().remove("_emm")
+    _early_method = "MaxMinVolume_no_selection"
+except Exception as _e:
+    _early_diag.append(f"MaxMinVolume_no_selection FAIL: {str(_e)[:120]}")
+# Try export
+if _early_max is None:
+    import os, tempfile
+    _ep = os.path.join(tempfile.gettempdir(), "sim_comsol_early.txt")
+    try:
+        _ex = model.result().export().create("_ex", "Data")
+        _ex.set("data", ds_tag)
+        _ex.set("expr", JS(["T-273.15"]))
+        _ex.set("filename", _ep)
+        _ex.run()
+        model.result().export().remove("_ex")
+        _vals = []
+        with open(_ep) as _f:
+            for _line in _f:
+                _line = _line.strip()
+                if not _line or _line.startswith("%"):
+                    continue
+                try:
+                    _vals.append(float(_line.split()[-1]))
+                except Exception:
+                    pass
+        if _vals:
+            _early_max = max(_vals)
+            _early_method = "export.Data"
+        try: os.remove(_ep)
+        except: pass
+    except Exception as _e2:
+        _early_diag.append(f"export.Data FAIL: {str(_e2)[:120]}")
+print(f"early Tmax={_early_max} method={_early_method}")
+print(f"early diag: {_early_diag}")
+_result = {"early_max_T_C": _early_max, "early_method": _early_method,
+           "early_diag": _early_diag}
+"""
+                early_out = run_step(driver, "early_extract", early_code, timeout_s=60)
+                trace["early_extract"] = early_out
 
         # ── Extract numerical result: chip max temperature ──────────────────
         banner("Extract result — chip surface max temperature")
-        extract_code = (
-            '# Extract Tmax/Tmin via MaxMinVolume feature with the stationary\n'
-            '# solution dataset explicitly bound. COMSOL created "dset1" during\n'
-            '# createAutoSequence — verify the tag and bind it.\n'
-            'import jpype as _jp\n'
-            'JS = _jp.JArray(_jp.JString)\n'
-            '\n'
-            '# Discover the solution dataset tag (usually "dset1")\n'
-            'ds_tags = [str(t) for t in model.result().dataset().tags()]\n'
-            'print("available datasets:", ds_tags)\n'
-            'ds_tag = ds_tags[0] if ds_tags else "dset1"\n'
-            'print("using dataset:", ds_tag)\n'
-            '\n'
-            '# Clean up any stale eval features from prior runs\n'
-            'for _t in list(model.result().numerical().tags()):\n'
-            '    _ts = str(_t)\n'
-            '    if _ts in ("_maxmin_T", "_maxT", "_minT"):\n'
-            '        model.result().numerical().remove(_t)\n'
-            '\n'
-            'mm = model.result().numerical().create("_maxmin_T", "MaxMinVolume")\n'
-            'mm.set("data", ds_tag)\n'
-            'mm.set("expr", JS(["T-273.15"]))\n'
-            'mm.set("descr", JS(["Temperature (degC)"]))\n'
-            '# Select all domains in comp1\n'
-            'mm.selection().all()\n'
-            '\n'
-            'raw = mm.computeResult()\n'
-            '# Flatten the 2D Java array into a list of floats\n'
-            '_mat = []\n'
-            'for _row in raw:\n'
-            '    _mat.append([float(_v) for _v in _row])\n'
-            'print("computeResult matrix (rows x cols):",\n'
-            '      len(_mat), "x", len(_mat[0]) if _mat else 0)\n'
-            'for _i, _row in enumerate(_mat):\n'
-            '    print(f"  row {_i}: {_row}")\n'
-            '\n'
-            '# MaxMinVolume contract: row 0 = max values, row 1 = min values\n'
-            '# column 0 is the value itself; remaining columns are coordinates\n'
-            '# of the max/min location (x, y, z).\n'
-            'max_T_C = _mat[0][0]\n'
-            'min_T_C = _mat[1][0] if len(_mat) > 1 else None\n'
-            'max_loc = _mat[0][1:4] if len(_mat[0]) >= 4 else None\n'
-            'min_loc = _mat[1][1:4] if (len(_mat) > 1 and len(_mat[1]) >= 4) else None\n'
-            '\n'
-            'print(f"\\nTmax = {max_T_C:.2f} degC at {max_loc}")\n'
-            'if min_T_C is not None:\n'
-            '    print(f"Tmin = {min_T_C:.2f} degC at {min_loc}")\n'
-            'print(f"Reference chip max T (COMSOL Appl Lib 847): 45.80 degC")\n'
-            '\n'
-            'model.result().numerical().remove("_maxmin_T")\n'
-            '\n'
-            '_result = {\n'
-            '    "max_T_C": max_T_C,\n'
-            '    "min_T_C": min_T_C,\n'
-            '    "max_location_m": max_loc,\n'
-            '    "min_location_m": min_loc,\n'
-            '    "reference_max_T_C": 45.8,\n'
-            '    "model": "COMSOL Application Library 847",\n'
-            '    "dataset_used": ds_tag,\n'
-            '}'
-        )
+        extract_code = """\
+import jpype as _jp
+import os, tempfile
+JS = _jp.JArray(_jp.JString)
+
+ds_tags = [str(t) for t in model.result().dataset().tags()]
+print("datasets:", ds_tags)
+ds_tag = ds_tags[0] if ds_tags else "dset1"
+
+max_T_C = None
+min_T_C = None
+max_loc = None
+_method = None
+_diag = []
+
+# Method 1: Export temperature field — correct attr is "data" (not "dataset")
+_exp_path = os.path.join(tempfile.gettempdir(), "sim_comsol_T.txt")
+try:
+    for _t in list(model.result().export().tags()):
+        if str(_t) == "_Texp":
+            model.result().export().remove("_Texp")
+    _exp = model.result().export().create("_Texp", "Data")
+    _exp.set("data", ds_tag)
+    _exp.set("expr", JS(["T-273.15"]))
+    _exp.set("filename", _exp_path)
+    _exp.run()
+    model.result().export().remove("_Texp")
+    _vals = []
+    with open(_exp_path, "r") as _f:
+        for _line in _f:
+            _line = _line.strip()
+            if not _line or _line.startswith("%"):
+                continue
+            try:
+                _vals.append(float(_line.split()[-1]))
+            except Exception:
+                pass
+    if _vals:
+        max_T_C = max(_vals)
+        min_T_C = min(_vals)
+        _method = "export.Data"
+        _diag.append(f"export: {len(_vals)} nodes, max={max_T_C:.3f}")
+    try:
+        os.remove(_exp_path)
+    except Exception:
+        pass
+except Exception as _e1:
+    _diag.append(f"export.Data FAIL: {str(_e1)[:120]}")
+
+# Method 2: MaxMinVolume
+if max_T_C is None:
+    try:
+        for _t in list(model.result().numerical().tags()):
+            if str(_t) in ("_mm",):
+                model.result().numerical().remove(_t)
+        _mm = model.result().numerical().create("_mm", "MaxMinVolume")
+        _mm.set("data", ds_tag)
+        _mm.set("expr", JS(["T-273.15"]))
+        _mm.selection().all()
+        _mat = [[float(v) for v in row] for row in _mm.computeResult()]
+        max_T_C = _mat[0][0]
+        min_T_C = _mat[1][0] if len(_mat) > 1 else None
+        max_loc = _mat[0][1:4] if len(_mat[0]) >= 4 else None
+        _method = "MaxMinVolume"
+        model.result().numerical().remove("_mm")
+    except Exception as _e2:
+        _diag.append(f"MaxMinVolume FAIL: {str(_e2)[:120]}")
+
+print(f"Tmax = {max_T_C} degC  (method={_method})")
+if min_T_C is not None:
+    print(f"Tmin = {min_T_C} degC")
+print("Reference chip max T (COMSOL Appl Lib 847): 45.80 degC")
+print(f"diag: {_diag}")
+
+_result = {
+    "max_T_C": max_T_C,
+    "min_T_C": min_T_C,
+    "max_location_m": max_loc,
+    "method": _method,
+    "reference_max_T_C": 45.8,
+    "dataset_used": ds_tag,
+    "diag": _diag,
+}
+"""
         extract = run_step(driver, "extract_result", extract_code, timeout_s=60)
         trace["extract"] = extract
 
@@ -237,6 +324,9 @@ def main() -> int:
     all_steps_ok = all(s.get("ok") for s in trace["steps"])
     extract_ok = (trace.get("extract") or {}).get("ok")
     max_T = ((trace.get("extract") or {}).get("result") or {}).get("max_T_C")
+    # Fallback to early_extract (taken before plot groups) if late extract failed
+    if max_T is None:
+        max_T = ((trace.get("early_extract") or {}).get("result") or {}).get("early_max_T_C")
 
     banner("RESULT SUMMARY")
     print(f"  launch_sec           : {launch_sec}", flush=True)

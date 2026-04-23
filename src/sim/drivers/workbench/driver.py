@@ -48,6 +48,68 @@ _WB_ERROR_PATTERNS = [
     re.compile(r"出现意外错误", re.IGNORECASE),  # CJK: "unexpected error"
 ]
 
+# TextStreamRulesProbe rules — same patterns translated to probe format.
+# Workbench stderr is always "" so we scan stdout instead (#6 position).
+_WB_STDOUT_RULES: list[dict] = [
+    {"pattern": r"Framework error caught", "severity": "error",
+     "code": "wb.scripting.framework_error"},
+    {"pattern": r"ScriptingException:", "severity": "error",
+     "code": "wb.scripting.exception"},
+    {"pattern": r"MissingMemberException:", "severity": "error",
+     "code": "wb.scripting.missing_member"},
+    {"pattern": r"AttributeError:", "severity": "warning",
+     "code": "wb.scripting.attribute_error"},
+    {"pattern": r"出现意外错误", "severity": "error",
+     "code": "wb.unexpected_error"},
+]
+
+
+def _default_workbench_probes(enable_gui: bool = False) -> list:
+    """Workbench probe list — generic_probes() + Workbench-specific channels.
+
+    Generic (via generic_probes()):
+      #1  ProcessMetaProbe      #1+ RuntimeTimeoutProbe
+      #3  StdoutJsonTailProbe   #3+ PythonTracebackProbe   #9 WorkdirDiffProbe
+
+    Workbench-specific:
+      #6  TextStreamRulesProbe(wb:stdout) — Framework/Scripting errors on stdout
+          (Workbench stderr is always "" — both SDK and RunWB2 suppress it)
+      #5  DomainExceptionMapProbe         — post-processor
+      #8a GuiDialogProbe                  — optional, only if enable_gui
+      #8b ScreenshotProbe                 — optional, only if enable_gui
+
+    NOT wired:
+      #2  stderr  — always "" for Workbench
+      #4  SdkAttributeProbe — dual-backend state is complex to inspect
+      #7  log file — no per-session log
+    """
+    from sim.inspect import (                                          # noqa: PLC0415
+        DomainExceptionMapProbe, GuiDialogProbe, ScreenshotProbe,
+        TextStreamRulesProbe, generic_probes,
+    )
+    _g = {p.name: p for p in generic_probes()}
+    probes: list = [
+        _g["process-meta"],                                            # #1  通用
+        _g["runtime-timeout"],                                         # #1+ 通用
+        TextStreamRulesProbe(                                          # #6  via stdout
+            source="wb:stdout",
+            text_selector=lambda ctx: ctx.stdout,
+            rules=_WB_STDOUT_RULES,
+        ),
+        _g["stdout-json-tail"],                                        # #3  通用
+        _g["python-traceback"],                                        # #3+ 通用
+        DomainExceptionMapProbe(),                                      # #5  post-processor
+    ]
+    if enable_gui:
+        probes.append(GuiDialogProbe(                                  # #8a
+            process_name_substrings=("AnsysWBU", "Workbench", "RunWB2"),
+            code_prefix="wb.gui"))
+        probes.append(ScreenshotProbe(                                 # #8b
+            filename_prefix="wb_shot",
+            process_name_substrings=("AnsysWBU", "Workbench")))
+    probes.append(_g["workdir-diff"])                                  # #9  通用（始终最后）
+    return probes
+
 
 def _detect_wb_errors(stdout: str, stderr: str) -> list[str]:
     """Detect errors in Workbench output — generic + WB-specific patterns."""
@@ -181,6 +243,8 @@ class WorkbenchDriver:
         self._run_count: int = 0
         self._version: str | None = None
         self._backend: str | None = None  # "pyworkbench" | "runwb2"
+        self._sim_dir: Path = Path(os.environ.get("SIM_DIR") or (Path.cwd() / ".sim"))
+        self.probes: list = _default_workbench_probes(enable_gui=False)
 
     # ── DriverProtocol ──────────────────────────────────────────────
 
@@ -412,8 +476,8 @@ class WorkbenchDriver:
             "backend": self._backend,
         }
 
-    def run(self, code: str, label: str = "snippet") -> dict:
-        """Execute a script snippet against the live session."""
+    def _dispatch(self, code: str, label: str = "snippet") -> dict:
+        """Execute a script snippet against the live session (no probes)."""
         if self._client is None and self._backend != "runwb2":
             raise RuntimeError("No active session — call launch() first")
 
@@ -436,6 +500,39 @@ class WorkbenchDriver:
             "result": self.parse_output(stdout) if stdout else None,
             "elapsed_s": round(time.time() - started, 4),
         }
+
+    def run(self, code: str, label: str = "snippet") -> dict:
+        """Execute a snippet and attach inspect diagnostics."""
+        from sim.inspect import InspectCtx, collect_diagnostics       # noqa: PLC0415
+
+        wd = self._sim_dir
+        try:
+            wd.mkdir(parents=True, exist_ok=True)
+            before = sorted(
+                str(p.relative_to(wd)).replace("\\", "/")
+                for p in wd.rglob("*") if p.is_file()
+            )
+        except Exception:
+            before = []
+
+        t0 = time.monotonic()
+        result = self._dispatch(code, label)
+        wall = time.monotonic() - t0
+
+        ctx = InspectCtx(
+            stdout=result.get("stdout", ""),
+            stderr=result.get("error", "") or "",  # error string → stderr slot
+            workdir=str(wd),
+            wall_time_s=wall,
+            exit_code=0 if result.get("ok") else 1,
+            driver_name=self.name,
+            session_ns={"_result": result.get("result")},
+            workdir_before=before,
+        )
+        diags, arts = collect_diagnostics(self.probes, ctx)
+        result["diagnostics"] = [d.to_dict() for d in diags]
+        result["artifacts"] = [a.to_dict() for a in arts]
+        return result
 
     def query(self, name: str) -> dict:
         if name == "session.summary":
