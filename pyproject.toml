@@ -30,7 +30,6 @@ fluent  = ["ansys-fluent-core>=0.37,<0.39"]
 matlab  = ["matlabengine"]
 comsol  = ["mph>=1.2,<2.0"]
 pybamm  = ["pybamm>=24.0"]
-ltspice = ["spicelib>=1.0"]  # raw/log parsing; driver falls back to regex if absent
 dev     = ["pytest>=8.0", "ruff>=0.4"]
 
 [project.scripts]

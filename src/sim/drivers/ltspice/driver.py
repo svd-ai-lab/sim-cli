@@ -136,19 +136,14 @@ def _parse_log(text: str) -> dict:
 
 
 def _raw_trace_names(raw_path: Path) -> list[str]:
-    """Return trace names from an LTspice .raw file, best-effort.
+    """Return trace names from an LTspice .raw file.
 
-    Uses spicelib if installed; otherwise parses the UTF-16 LE header,
-    which contains ``Variables:`` / ``Binary:`` sections.
+    Parses the UTF-16 LE header which contains ``Variables:`` / ``Binary:``
+    sections. No external dependency — the spec is well-understood and the
+    header format is stable across LTspice 17.x / 24.x / 26.x.
     """
     if not raw_path.is_file():
         return []
-    try:
-        from spicelib import RawRead  # type: ignore
-        return list(RawRead(str(raw_path)).get_trace_names())
-    except Exception:
-        pass
-    # Fallback: read first 64KB, decode UTF-16 LE, split on 'Variables:'
     head = raw_path.read_bytes()[:65536]
     try:
         text = head.decode("utf-16-le", errors="replace")
