@@ -7,7 +7,7 @@ import pytest
 
 from sim.driver import SolverInstall
 from sim.drivers.ltspice import LTspiceDriver
-from sim.drivers.ltspice.driver import _parse_log
+from sim.drivers.ltspice.driver import _parse_log, _read_log
 
 FIXTURES = Path(__file__).parent.parent.parent / "fixtures"
 
@@ -140,6 +140,31 @@ class TestLogParser:
         out = _parse_log(log)
         assert len(out["warnings"]) == 1
         assert "floating" in out["warnings"][0]
+
+
+class TestReadLog:
+    """Both encodings seen in the wild — macOS 17.x is UTF-16 LE, Windows 26.x is UTF-8."""
+
+    def test_utf16_le_no_bom(self, tmp_path):
+        log = tmp_path / "mac.log"
+        text = "vout_pk: MAX(v(out))=0.999 FROM 0 TO 0.005\n"
+        log.write_bytes(text.encode("utf-16-le"))
+        assert "vout_pk" in _read_log(log)
+
+    def test_utf8_windows(self, tmp_path):
+        log = tmp_path / "win.log"
+        log.write_text(
+            "LTspice 26.0.1 for Windows\n"
+            "vout_pk: MAX(V(out))=0.999 FROM 0 TO 0.005\n",
+            encoding="utf-8",
+        )
+        assert "vout_pk" in _read_log(log)
+
+    def test_utf8_bom(self, tmp_path):
+        log = tmp_path / "bom.log"
+        log.write_bytes("\ufeffvout_pk: MAX(v(out))=1.0\n".encode("utf-8"))
+        out = _read_log(log)
+        assert out.startswith("vout_pk"), out
 
 
 class TestRunFile:

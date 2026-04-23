@@ -67,18 +67,30 @@ _ELAPSED_RE = re.compile(
 
 
 def _read_log(path: Path) -> str:
-    """Read an LTspice .log file. Encoding is UTF-16 LE on every platform.
+    """Read an LTspice .log file.
 
-    Falls back to utf-8/latin-1 for older or cross-compiled builds.
+    Encoding varies by version:
+      - LTspice 17.x (macOS native): UTF-16 LE, no BOM
+      - LTspice 26.x (Windows): UTF-8, no BOM
+
+    Sniff BOM first, then detect UTF-16 LE by the "0x00 at every odd byte"
+    pattern (ASCII text under UTF-16 LE), else fall back to UTF-8.
+    A naive chain that tries utf-16-le first produces garbage on UTF-8 logs
+    because UTF-16 LE decoding never raises on arbitrary bytes.
     """
     if not path.is_file():
         return ""
     data = path.read_bytes()
-    for enc in ("utf-16-le", "utf-16", "utf-8", "latin-1"):
-        try:
-            return data.decode(enc)
-        except UnicodeDecodeError:
-            continue
+    if not data:
+        return ""
+    if data.startswith(b"\xff\xfe"):
+        return data[2:].decode("utf-16-le", errors="replace")
+    if data.startswith(b"\xfe\xff"):
+        return data[2:].decode("utf-16-be", errors="replace")
+    if data.startswith(b"\xef\xbb\xbf"):
+        return data[3:].decode("utf-8", errors="replace")
+    if len(data) >= 4 and data[1] == 0 and data[3] == 0:
+        return data.decode("utf-16-le", errors="replace")
     return data.decode("utf-8", errors="replace")
 
 
