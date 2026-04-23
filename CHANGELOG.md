@@ -12,6 +12,17 @@ changes at milestone boundaries.
 
 ### Added
 
+- **`sim.gui` subpackage — cross-driver GUI actuation (Phase 3 P0).** New actuation layer that every GUI-capable driver now injects into its `sim exec` namespace, separate from (and complementary to) the Phase 1-2 observation layer:
+  - `sim/gui/_win32_dialog.py` — Win32 ctypes primitives (`enum_visible_windows`, `find_dialog_by_title`, `fill_file_dialog`, `close_window`, `dismiss_windows_by_title_fragment`), extracted from the flotherm driver so every driver can share them.
+  - `sim/gui/_pywinauto_tools.py` — subprocess-isolated pywinauto UIA helpers (`find_window` / `click_by_name` / `send_text` / `close_window` / `activate_window` / `screenshot_window` / `snapshot_uia_tree` / `list_windows`). Each call runs in a fresh `python -c` subprocess to keep the main process's COM apartment clean (pywinauto has a history of COM pollution on repeated calls).
+  - `sim/gui/__init__.py` — `GuiController` + `SimWindow` facade. Agent-visible API: `gui.find(title_contains=...)`, `dlg.click("OK")`, `dlg.send_text("C:\\path", into="File name")`, `dlg.screenshot()`, `gui.list_windows()`, `gui.snapshot(max_depth=5)`. On non-Windows / headless: methods return `{"ok": False, "error": ...}` without raising.
+  - Fluent + COMSOL drivers construct `self._gui = GuiController(<process filter>)` during `launch()` when `ui_mode=gui|desktop`, and pass `extra_namespace={"gui": self._gui}` through `run()`. Flotherm's `_win32_backend.py` migrated to import from `sim.gui._win32_dialog` — behaviour unchanged, code no longer duplicated.
+  - `POST /connect` advertises availability: `data.tools = ["gui"]` + `data.tool_refs = {"gui": "sim-skills/sim-cli/gui/SKILL.md"}`, emitted only when the active driver constructed a `GuiController` at launch. Lets agents self-discover without forcing them to re-read the skill tree.
+  - 13 L1 unit tests (monkey-patched pywinauto, including `/connect` contract test) + two real-solver L3 e2e scripts:
+    - `tests/inspect/e2e_flotherm_mobile_demo.py` — imports the bundled `Mobile_Demo-Steady_State.pack`, triggers solve, polls the Message Window dock. Converges (I/8003) in clock time 8 s, 153,449 grid cells, zero errors / warnings.
+    - `tests/inspect/e2e_comsol_surface_mount.py` + `_extract_comsol_Tmax.py` — runs the full 6-step `surface_mount_package` sim-skills workflow (geometry → materials → physics → mesh → solve → plot), then reads the saved `.mph` via mph to report `Tmax = 97.32 °C` over 49,356 solution nodes (stationary solve 10.9 s, 8468 tetrahedral elements, min quality 0.154).
+  - Companion docs live in sibling sim-skills repo at `sim-skills/sim-cli/gui/SKILL.md` (full API reference + 3 snippets) with matching "GUI actuation" sections added to the `fluent`, `comsol`, `flotherm` SKILL files.
+
 - **Pure-Python simulation ecosystem — 13 new pip-installable drivers.** All installed via `pip install <pkg>` on Python 3.7+, executed one-shot via `sim run script.py --solver <name>`, each verified against an analytical / textbook benchmark:
   - `openseespy` 3.5 (structural / earthquake FEM) — cantilever-beam tip deflection, rel err 1.3e-12
   - `sfepy` 2025.4 (pure-Python FEM) — Poisson on unit square, 1.3% err on 8×8 mesh
