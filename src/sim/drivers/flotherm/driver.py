@@ -28,11 +28,9 @@ from typing import Protocol
 
 from sim.driver import ConnectionInfo, Diagnostic, LintResult, RunResult, SolverInstall
 from sim.inspect import (
-    DomainExceptionMapProbe,
     GuiDialogProbe,
     InspectCtx,
     ScreenshotProbe,
-    TextStreamRulesProbe,
     collect_diagnostics,
     generic_probes,
 )
@@ -53,59 +51,23 @@ from sim.drivers.flotherm._helpers import (
 _FLOSCRIPT_MARKER = "<xml_log_file"
 
 
-# ── Channel #2 — stderr rules for Win32 backend Python errors ───────────────
-_FLOTHERM_STDERR_RULES: list[dict] = [
-    {"pattern": r"^\w+Error:", "severity": "error", "code": "generic.exception"},
-    {"pattern": r"^\w+Exception:", "severity": "error", "code": "generic.exception"},
-]
-
-
 def _default_flotherm_probes(enable_gui: bool = True) -> list:
-    """Flotherm probe list — generic base + GUI observation channels.
+    """Flotherm probe list — generic_probes() + optional GUI observation.
 
-    Generic (from generic_probes()):
-      #1  ProcessMetaProbe         exit_code + wall_time
-      #1+ RuntimeTimeoutProbe      hung-snippet detection
-      #3  StdoutJsonTailProbe      _result fallback (picks up gui_result dict)
-      #3+ PythonTracebackProbe     Win32 backend Python tracebacks
-      #9  WorkdirDiffProbe         workspace file changes → Artifacts
-
-    Flotherm-specific:
-      #2  TextStreamRulesProbe(stderr)  Win32 backend exception lines
-      #5  DomainExceptionMapProbe       post-processor
-      #8a GuiDialogProbe               Flotherm GUI windows (gui mode, default on)
-      #8b ScreenshotProbe              per-window PNG crops (gui mode, default on)
-
-    #4 SdkAttributeProbe: not wired — Flotherm has no Python SDK session.
-    #6/#7: not wired — no TUI / no transcript (dock read via read_message_dock()).
-
-    enable_gui=True is the default because Flotherm currently only supports GUI mode.
-    Initial full coverage; trim after e2e results confirm which channels are useful.
+    No driver-layer semantic assertions: "what counts as an error" is the
+    agent's job, not the driver's. Probes here only extract facts.
+    enable_gui=True by default because Flotherm currently only supports GUI mode.
     """
-    _g = {p.name: p for p in generic_probes()}
-    probes: list = [
-        _g["process-meta"],                                              # #1  通用
-        _g["runtime-timeout"],                                           # #1+ 通用
-        TextStreamRulesProbe(                                            # #2  Flotherm 专用
-            source="stderr",
-            text_selector=lambda ctx: ctx.stderr,
-            rules=_FLOTHERM_STDERR_RULES,
-        ),
-        _g["stdout-json-tail"],                                          # #3  通用
-        _g["python-traceback"],                                          # #3+ 通用
-        # #4 SdkAttributeProbe: not wired (no Python SDK session)
-        DomainExceptionMapProbe(),                                       # #5  post-processor
-    ]
+    probes: list = list(generic_probes())
     if enable_gui:
-        probes.append(GuiDialogProbe(                                    # #8a Flotherm 专用
+        probes.append(GuiDialogProbe(
             process_name_substrings=("flotherm", "floview", "floserv"),
             code_prefix="flotherm.gui",
         ))
-        probes.append(ScreenshotProbe(                                   # #8b Flotherm 专用
+        probes.append(ScreenshotProbe(
             filename_prefix="flotherm_shot",
             process_name_substrings=("flotherm", "floview", "floserv"),
         ))
-    probes.append(_g["workdir-diff"])                                    # #9  通用（始终最后）
     return probes
 
 

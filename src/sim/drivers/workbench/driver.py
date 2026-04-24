@@ -48,66 +48,23 @@ _WB_ERROR_PATTERNS = [
     re.compile(r"出现意外错误", re.IGNORECASE),  # CJK: "unexpected error"
 ]
 
-# TextStreamRulesProbe rules — same patterns translated to probe format.
-# Workbench stderr is always "" so we scan stdout instead (#6 position).
-_WB_STDOUT_RULES: list[dict] = [
-    {"pattern": r"Framework error caught", "severity": "error",
-     "code": "wb.scripting.framework_error"},
-    {"pattern": r"ScriptingException:", "severity": "error",
-     "code": "wb.scripting.exception"},
-    {"pattern": r"MissingMemberException:", "severity": "error",
-     "code": "wb.scripting.missing_member"},
-    {"pattern": r"AttributeError:", "severity": "warning",
-     "code": "wb.scripting.attribute_error"},
-    {"pattern": r"出现意外错误", "severity": "error",
-     "code": "wb.unexpected_error"},
-]
-
-
 def _default_workbench_probes(enable_gui: bool = False) -> list:
-    """Workbench probe list — generic_probes() + Workbench-specific channels.
+    """Workbench probe list — generic_probes() + optional GUI observation.
 
-    Generic (via generic_probes()):
-      #1  ProcessMetaProbe      #1+ RuntimeTimeoutProbe
-      #3  StdoutJsonTailProbe   #3+ PythonTracebackProbe   #9 WorkdirDiffProbe
-
-    Workbench-specific:
-      #6  TextStreamRulesProbe(wb:stdout) — Framework/Scripting errors on stdout
-          (Workbench stderr is always "" — both SDK and RunWB2 suppress it)
-      #5  DomainExceptionMapProbe         — post-processor
-      #8a GuiDialogProbe                  — optional, only if enable_gui
-      #8b ScreenshotProbe                 — optional, only if enable_gui
-
-    NOT wired:
-      #2  stderr  — always "" for Workbench
-      #4  SdkAttributeProbe — dual-backend state is complex to inspect
-      #7  log file — no per-session log
+    No driver-layer semantic assertions: "what counts as an error" is the
+    agent's job, not the driver's. Probes here only extract facts.
     """
     from sim.inspect import (                                          # noqa: PLC0415
-        DomainExceptionMapProbe, GuiDialogProbe, ScreenshotProbe,
-        TextStreamRulesProbe, generic_probes,
+        GuiDialogProbe, ScreenshotProbe, generic_probes,
     )
-    _g = {p.name: p for p in generic_probes()}
-    probes: list = [
-        _g["process-meta"],                                            # #1  通用
-        _g["runtime-timeout"],                                         # #1+ 通用
-        TextStreamRulesProbe(                                          # #6  via stdout
-            source="wb:stdout",
-            text_selector=lambda ctx: ctx.stdout,
-            rules=_WB_STDOUT_RULES,
-        ),
-        _g["stdout-json-tail"],                                        # #3  通用
-        _g["python-traceback"],                                        # #3+ 通用
-        DomainExceptionMapProbe(),                                      # #5  post-processor
-    ]
+    probes: list = list(generic_probes())
     if enable_gui:
-        probes.append(GuiDialogProbe(                                  # #8a
+        probes.append(GuiDialogProbe(
             process_name_substrings=("AnsysWBU", "Workbench", "RunWB2"),
             code_prefix="wb.gui"))
-        probes.append(ScreenshotProbe(                                 # #8b
+        probes.append(ScreenshotProbe(
             filename_prefix="wb_shot",
             process_name_substrings=("AnsysWBU", "Workbench")))
-    probes.append(_g["workdir-diff"])                                  # #9  通用（始终最后）
     return probes
 
 

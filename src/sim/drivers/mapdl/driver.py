@@ -131,23 +131,13 @@ def _find_mapdl_exe(root: Path) -> Path | None:
 
 
 def _default_mapdl_probes() -> list:
-    """MAPDL probe list — generic_probes() + MAPDL-specific channels.
+    """MAPDL probe list — generic_probes() only.
 
-    exec_snippet captures real stdout/stderr, so all generic probes fire.
-    No solver-specific stderr rules (MAPDL errors surface as Python exceptions).
-    No SdkAttributeProbe (#4) — mapdl gRPC client lives inside runtime namespace.
-    No GuiDialogProbe — MAPDL runs headless.
+    No driver-layer semantic assertions: "what counts as an error" is the
+    agent's job, not the driver's. Probes here only extract facts.
     """
-    from sim.inspect import DomainExceptionMapProbe, generic_probes  # noqa: PLC0415
-    _g = {p.name: p for p in generic_probes()}
-    return [
-        _g["process-meta"],                                            # #1
-        _g["runtime-timeout"],                                         # #1+
-        _g["stdout-json-tail"],                                        # #3
-        _g["python-traceback"],                                        # #3+
-        DomainExceptionMapProbe(),                                      # #5
-        _g["workdir-diff"],                                            # #9
-    ]
+    from sim.inspect import generic_probes  # noqa: PLC0415
+    return generic_probes()
 
 
 class MapdlDriver:

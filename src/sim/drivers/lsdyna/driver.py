@@ -36,16 +36,6 @@ _ERROR_TERM_RE = re.compile(r"E\s*r\s*r\s*o\s*r\s+t\s*e\s*r\s*m\s*i\s*n\s*a\s*t\
 _ELAPSED_RE = re.compile(r"Elapsed\s+time\s+([\d.]+)\s+seconds", re.IGNORECASE)
 _ERROR_PATTERN_RE = re.compile(r"\*\*\*\s*(Error|Fatal)", re.IGNORECASE)
 
-# TextStreamRulesProbe rules — translate LS-DYNA solver patterns to probe format
-_LSDYNA_STDERR_RULES: list[dict] = [
-    {"pattern": r"\*\*\*\s*Error", "severity": "error",
-     "code": "lsdyna.solver.error"},
-    {"pattern": r"\*\*\*\s*Fatal", "severity": "error",
-     "code": "lsdyna.solver.fatal"},
-    {"pattern": r"E\s*r\s*r\s*o\s*r\s+t\s*e\s*r\s*m\s*i\s*n\s*a\s*t\s*i\s*o\s*n",
-     "severity": "error", "code": "lsdyna.solve.error_termination"},
-]
-
 # Executables to search for (preferred order: sp first for speed in testing)
 _EXE_NAMES = [
     "lsdyna_sp.exe",
@@ -182,30 +172,14 @@ def _scan_lsdyna_installs() -> list[SolverInstall]:
 
 
 def _default_lsdyna_probes() -> list:
-    """LS-DYNA probe list — generic_probes() + LS-DYNA-specific channels.
+    """LS-DYNA probe list — generic_probes() only.
 
-    exec_snippet captures real stdout/stderr, so all generic probes fire.
-    #2 TextStreamRulesProbe(stderr) — ***Error/***Fatal from solver output.
-    No GuiDialogProbe — LS-DYNA runs as subprocess (headless).
-    No SdkAttributeProbe — deck/model live inside runtime namespace.
+    No driver-layer semantic assertions: "what counts as an error" is the
+    agent's job, not the driver's. Probes here only extract facts.
+    LS-DYNA runs headless as a subprocess, so no GUI probes either.
     """
-    from sim.inspect import (                                          # noqa: PLC0415
-        DomainExceptionMapProbe, TextStreamRulesProbe, generic_probes,
-    )
-    _g = {p.name: p for p in generic_probes()}
-    return [
-        _g["process-meta"],                                            # #1
-        _g["runtime-timeout"],                                         # #1+
-        TextStreamRulesProbe(                                          # #2
-            source="stderr",
-            text_selector=lambda ctx: ctx.stderr,
-            rules=_LSDYNA_STDERR_RULES,
-        ),
-        _g["stdout-json-tail"],                                        # #3
-        _g["python-traceback"],                                        # #3+
-        DomainExceptionMapProbe(),                                      # #5
-        _g["workdir-diff"],                                            # #9
-    ]
+    from sim.inspect import generic_probes  # noqa: PLC0415
+    return list(generic_probes())
 
 
 class LsDynaDriver:

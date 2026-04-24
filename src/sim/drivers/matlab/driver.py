@@ -163,68 +163,23 @@ def _scan_matlab_installs() -> list[SolverInstall]:
     return sorted(found.values(), key=lambda i: i.version, reverse=True)
 
 
-# MATLAB stderr surfaces engine errors. stdout shows ??? and warning text.
-_MATLAB_STDERR_RULES: list[dict] = [
-    {"pattern": r"^Error:", "severity": "error",
-     "code": "matlab.engine.error"},
-    {"pattern": r"License checkout failed", "severity": "error",
-     "code": "matlab.license.checkout_failed"},
-]
-_MATLAB_STDOUT_RULES: list[dict] = [
-    {"pattern": r"^\?\?\? ", "severity": "error",
-     "code": "matlab.script.error"},
-    {"pattern": r"Out of memory\.", "severity": "error",
-     "code": "matlab.oom"},
-]
-
-
 def _default_matlab_probes(enable_gui: bool = False) -> list:
-    """MATLAB probe list — generic_probes() + MATLAB-specific channels.
+    """MATLAB probe list — generic_probes() + optional GUI observation.
 
-    Generic (via generic_probes()):
-      #1  ProcessMetaProbe      #1+ RuntimeTimeoutProbe
-      #3  StdoutJsonTailProbe   #3+ PythonTracebackProbe   #9 WorkdirDiffProbe
-
-    MATLAB-specific:
-      #2  TextStreamRulesProbe(stderr) — engine errors / license
-      #6  TextStreamRulesProbe(stdout) — ??? script errors / OOM
-      #5  DomainExceptionMapProbe — post-processor
-      #8a/#8b GUI dialog + screenshot only when enable_gui (desktop mode)
-
-    NOT wired:
-      #4  SdkAttributeProbe — engine state already returned by query()
-      #7  log file — no per-session log
+    No driver-layer semantic assertions: "what counts as an error" is the
+    agent's job, not the driver's. Probes here only extract facts.
     """
     from sim.inspect import (                                            # noqa: PLC0415
-        DomainExceptionMapProbe, GuiDialogProbe, ScreenshotProbe,
-        TextStreamRulesProbe, generic_probes,
+        GuiDialogProbe, ScreenshotProbe, generic_probes,
     )
-    _g = {p.name: p for p in generic_probes()}
-    probes: list = [
-        _g["process-meta"],                                              # #1
-        _g["runtime-timeout"],                                           # #1+
-        TextStreamRulesProbe(                                            # #2
-            source="stderr",
-            text_selector=lambda ctx: ctx.stderr,
-            rules=_MATLAB_STDERR_RULES,
-        ),
-        TextStreamRulesProbe(                                            # #6
-            source="matlab:stdout",
-            text_selector=lambda ctx: ctx.stdout,
-            rules=_MATLAB_STDOUT_RULES,
-        ),
-        _g["stdout-json-tail"],                                          # #3
-        _g["python-traceback"],                                          # #3+
-        DomainExceptionMapProbe(),                                        # #5
-    ]
+    probes: list = list(generic_probes())
     if enable_gui:
-        probes.append(GuiDialogProbe(                                    # #8a
+        probes.append(GuiDialogProbe(
             process_name_substrings=("matlab", "MATLAB"),
             code_prefix="matlab.gui"))
-        probes.append(ScreenshotProbe(                                   # #8b
+        probes.append(ScreenshotProbe(
             filename_prefix="matlab_shot",
             process_name_substrings=("matlab", "MATLAB")))
-    probes.append(_g["workdir-diff"])                                    # #9
     return probes
 
 

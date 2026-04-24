@@ -10,7 +10,12 @@ This test mocks ``_dispatch`` (so no real solver is needed) and verifies
 that the wrapping ``run()`` actually populates ``diagnostics`` with the
 expected probe codes.
 
-If you add a new driver via the probe-extension skill, add a row here.
+Drivers only emit fact-type probes (process exit, stdout JSON tail, python
+traceback, workdir diff). They do NOT emit solver-specific "this regex =
+this error" diagnostics — that semantic interpretation is the agent's
+job, not the driver's.
+
+If you add a new driver, add a row here.
 """
 from __future__ import annotations
 
@@ -20,24 +25,15 @@ from pathlib import Path
 import pytest
 
 
-# Each entry: (driver_module_path, class_name, marker_text_for_solver_specific_rule)
-# The "marker" is text inserted into mocked stdout that the driver's
-# TextStreamRulesProbe should match.
+# Each entry: (driver_module_path, class_name)
 _DRIVERS = [
-    ("sim.drivers.workbench.driver", "WorkbenchDriver",
-     "ScriptingException: foo", "wb.scripting.exception"),
-    ("sim.drivers.mechanical.driver", "MechanicalDriver",
-     "Error: license checkout failed", "mech.scripting.error"),
-    ("sim.drivers.mapdl.driver", "MapdlDriver",
-     None, None),  # MAPDL has no driver-specific stream probe
-    ("sim.drivers.lsdyna.driver", "LsDynaDriver",
-     "*** Error: oops", "lsdyna.solver.error"),
-    ("sim.drivers.ansa.driver", "AnsaDriver",
-     "ANSA error: bad mesh", "ansa.scripting.error"),
-    ("sim.drivers.matlab.driver", "MatlabDriver",
-     "??? Undefined function 'foo'", "matlab.script.error"),
-    ("sim.drivers.cfx.driver", "CfxDriver",
-     "-- ERROR -- boundary missing", "cfx.post.error"),
+    ("sim.drivers.workbench.driver", "WorkbenchDriver"),
+    ("sim.drivers.mechanical.driver", "MechanicalDriver"),
+    ("sim.drivers.mapdl.driver", "MapdlDriver"),
+    ("sim.drivers.lsdyna.driver", "LsDynaDriver"),
+    ("sim.drivers.ansa.driver", "AnsaDriver"),
+    ("sim.drivers.matlab.driver", "MatlabDriver"),
+    ("sim.drivers.cfx.driver", "CfxDriver"),
 ]
 
 
@@ -80,18 +76,9 @@ def _import_driver(module_path: str, class_name: str):
     return getattr(mod, class_name)
 
 
-def _drivers_with_marker():
-    """Pytest parametrize feed for the solver-specific marker test."""
-    return [
-        (mp, cn, marker, code)
-        for mp, cn, marker, code in _DRIVERS
-        if marker is not None
-    ]
-
-
-@pytest.mark.parametrize("module_path,class_name,_marker,_code", _DRIVERS)
+@pytest.mark.parametrize("module_path,class_name", _DRIVERS)
 def test_run_attaches_diagnostics(monkeypatch, tmp_path, module_path,
-                                  class_name, _marker, _code):
+                                  class_name):
     """run() must always populate diagnostics + artifacts as lists of dicts."""
     cls = _import_driver(module_path, class_name)
     drv = _make_driver(cls, tmp_path)
@@ -109,9 +96,9 @@ def test_run_attaches_diagnostics(monkeypatch, tmp_path, module_path,
         assert "code" in d, f"diagnostic missing 'code' field: {d}"
 
 
-@pytest.mark.parametrize("module_path,class_name,_marker,_code", _DRIVERS)
+@pytest.mark.parametrize("module_path,class_name", _DRIVERS)
 def test_process_meta_probe_fires(monkeypatch, tmp_path, module_path,
-                                  class_name, _marker, _code):
+                                  class_name):
     """ProcessMetaProbe should always emit exit_zero on success."""
     cls = _import_driver(module_path, class_name)
     drv = _make_driver(cls, tmp_path)
@@ -123,9 +110,9 @@ def test_process_meta_probe_fires(monkeypatch, tmp_path, module_path,
     assert "sim.process.exit_zero" in codes, codes
 
 
-@pytest.mark.parametrize("module_path,class_name,_marker,_code", _DRIVERS)
+@pytest.mark.parametrize("module_path,class_name", _DRIVERS)
 def test_process_meta_probe_failure(monkeypatch, tmp_path, module_path,
-                                    class_name, _marker, _code):
+                                    class_name):
     """On dispatch failure, exit_nonzero should fire."""
     cls = _import_driver(module_path, class_name)
     drv = _make_driver(cls, tmp_path)
@@ -137,9 +124,9 @@ def test_process_meta_probe_failure(monkeypatch, tmp_path, module_path,
     assert "sim.process.exit_nonzero" in codes, codes
 
 
-@pytest.mark.parametrize("module_path,class_name,_marker,_code", _DRIVERS)
+@pytest.mark.parametrize("module_path,class_name", _DRIVERS)
 def test_stdout_json_tail_probe_fires(monkeypatch, tmp_path, module_path,
-                                      class_name, _marker, _code):
+                                      class_name):
     """When dispatch's stdout ends with JSON, StdoutJsonTailProbe fires."""
     cls = _import_driver(module_path, class_name)
     drv = _make_driver(cls, tmp_path)
@@ -152,28 +139,51 @@ def test_stdout_json_tail_probe_fires(monkeypatch, tmp_path, module_path,
     assert "sim.stdout.json_tail" in codes, codes
 
 
-@pytest.mark.parametrize("module_path,class_name,marker,code",
-                         _drivers_with_marker())
-def test_solver_specific_rule_fires(monkeypatch, tmp_path, module_path,
-                                    class_name, marker, code):
-    """Driver-specific TextStreamRulesProbe should match its known patterns."""
+@pytest.mark.parametrize("module_path,class_name", _DRIVERS)
+def test_no_driver_level_rule_codes(monkeypatch, tmp_path, module_path,
+                                    class_name):
+    """Drivers must not emit solver-specific error/warning codes themselves.
+
+    Regex-based "this string = this error" judgements belong to the agent
+    or sim-skills layer, not the driver. Only fact-type probe codes
+    (sim.process.*, sim.stdout.*, sim.runtime.*, sim.workdir.*, traceback.*,
+    sdk:attr.*, gui.*) are allowed from driver-default probes.
+    """
     cls = _import_driver(module_path, class_name)
     drv = _make_driver(cls, tmp_path)
-    # Workbench scans stdout; Mechanical scans stdout; LS-DYNA scans stderr.
-    if class_name == "LsDynaDriver":
-        dispatch = _make_dispatch(stdout="", stderr=marker, ok=False)
-    else:
-        dispatch = _make_dispatch(stdout=marker, ok=False)
-    monkeypatch.setattr(cls, "_dispatch", dispatch)
+    # Feed the kind of text that the OLD rules would have matched for each
+    # driver — none of it should produce solver-specific diagnostic codes.
+    hostile = (
+        "ScriptingException: foo\n"
+        "Error: license checkout failed\n"
+        "*** Error: bad\n"
+        "ANSA error: bad mesh\n"
+        "??? Undefined function 'foo'\n"
+        "-- ERROR -- boundary missing\n"
+        "[ERROR] JVM failure\n"
+    )
+    monkeypatch.setattr(cls, "_dispatch",
+                        _make_dispatch(stdout=hostile, stderr=hostile, ok=False))
 
     out = drv.run("ignored")
-    codes = [d["code"] for d in out["diagnostics"]]
-    assert code in codes, f"expected {code} in {codes}"
+    bad_prefixes = (
+        "wb.", "mech.", "lsdyna.", "ansa.", "matlab.", "cfx.",
+        "comsol.java.", "comsol.jvm.", "comsol.solve.", "comsol.sdk.method",
+        "fluent.tui.", "fluent.scheme.", "fluent.solve.", "fluent.sdk.",
+        "fluent.rpc.", "generic.exception",
+    )
+    for d in out["diagnostics"]:
+        code = d.get("code", "")
+        for pref in bad_prefixes:
+            assert not code.startswith(pref), (
+                f"{class_name} emitted solver-specific rule code {code!r} — "
+                f"driver should not make semantic judgements. Full diag: {d}"
+            )
 
 
-@pytest.mark.parametrize("module_path,class_name,_marker,_code", _DRIVERS)
+@pytest.mark.parametrize("module_path,class_name", _DRIVERS)
 def test_diagnostics_serializable(monkeypatch, tmp_path, module_path,
-                                  class_name, _marker, _code):
+                                  class_name):
     """Diagnostics must round-trip through json so /exec can return them."""
     cls = _import_driver(module_path, class_name)
     drv = _make_driver(cls, tmp_path)

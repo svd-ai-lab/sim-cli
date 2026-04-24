@@ -12,119 +12,41 @@ from sim.driver import ConnectionInfo, Diagnostic, LintResult, SolverInstall
 from sim.drivers.fluent.queries import handle_query
 from sim.drivers.fluent.runtime import PyFluentRuntime
 from sim.inspect import (
-    DomainExceptionMapProbe,
     GuiDialogProbe,
     InspectCtx,
     ScreenshotProbe,
     SdkAttributeProbe,
-    TextStreamRulesProbe,
     collect_diagnostics,
     generic_probes,
 )
 from sim.runner import run_subprocess
 
 
-# Channel #2 — Fluent stderr rules (conservative).
-_FLUENT_STDERR_RULES: list[dict] = [
-    {"pattern": r"^\w+Error:", "severity": "error", "code": "generic.exception"},
-    {"pattern": r"^\w+Exception:", "severity": "error", "code": "generic.exception"},
-    {"pattern": r"RPC .* timeout", "severity": "error",
-     "code": "fluent.rpc.timeout", "message_template": "Fluent RPC timeout"},
-]
-
-# Channel #6 — Fluent TUI echo (stdout). pyfluent's scheme_eval / solver.tui
-# commands write to stdout via redirect_stdout. Watch for the canonical
-# Fluent error/warning/done prefixes.
-_FLUENT_TUI_STDOUT_RULES: list[dict] = [
-    {"pattern": r"^Error:", "severity": "error",
-     "code": "fluent.tui.error", "message_template": "TUI error: {match}"},
-    {"pattern": r"^Warning:", "severity": "warning",
-     "code": "fluent.tui.warning"},
-    {"pattern": r"^Error Object:", "severity": "error",
-     "code": "fluent.scheme.error_object"},
-    {"pattern": r"Divergence detected", "severity": "error",
-     "code": "fluent.solve.divergence"},
-    {"pattern": r"floating point exception", "severity": "error",
-     "code": "fluent.solve.fpe"},
-    {"pattern": r"reversed flow in \d+ faces", "severity": "warning",
-     "code": "fluent.solve.reversed_flow"},
-]
-
-# Channel #7 — Transcript file rules. Same kind of patterns as TUI but read
-# out of the .trn file the session wrote to disk (if the user / test opened
-# transcript logging via solver.file.start_transcript).
-_FLUENT_TRN_RULES: list[dict] = _FLUENT_TUI_STDOUT_RULES  # same vocabulary
-
-# Channel #4 — Default SDK attributes to probe on every run. These are the
-# settings agents most often need to "reason about the current state" over.
+# Default SDK attributes to probe on every run. These are observation —
+# the agent reads the raw value, not a pre-judged status. Reading raw
+# attributes is "extract facts", which is driver-layer work.
 _DEFAULT_FLUENT_SDK_ATTRS: list[str] = [
     "setup.models.viscous.model",
     "setup.models.energy.enabled",
 ]
 
 
-def _read_transcript(ctx: InspectCtx) -> str:
-    """Channel #7 text selector: read workdir/session.trn if it exists."""
-    trn = Path(ctx.workdir) / "session.trn"
-    try:
-        return trn.read_text(encoding="utf-8", errors="replace")
-    except (FileNotFoundError, OSError):
-        return ""
-
-
 def _default_fluent_probes(enable_gui: bool = False) -> list:
-    """Probes wired into every Fluent run() — generic base + Fluent-specific channels.
+    """Fluent probe list — generic_probes() + SDK readers + optional GUI.
 
-    Generic (from generic_probes()):
-      #1  ProcessMetaProbe         exit_code + wall_time
-      #1+ RuntimeTimeoutProbe      hung-snippet detection
-      #3  StdoutJsonTailProbe      last JSON line / _result fallback
-      #3+ PythonTracebackProbe     structured traceback parsing
-      #9  WorkdirDiffProbe         new files → Artifacts (always last)
-
-    Fluent-specific:
-      #2  TextStreamRulesProbe(stderr)      generic Python exception lines
-      #4  SdkAttributeProbe                viscous model, energy enabled
-      #5  DomainExceptionMapProbe           python.* → fluent.* code upgrade
-      #6  TextStreamRulesProbe(stdout:TUI)  TUI echo rule matching
-      #7  TextStreamRulesProbe(log:trn)     transcript file, if opened
-      #8a GuiDialogProbe                    cx/fluent/ansys windows (gui mode)
-      #8b ScreenshotProbe                   per-window PNG crops (gui mode)
-
-    Order matters: #5 must run AFTER #3+. WorkdirDiff is last.
+    No driver-layer semantic assertions: "what counts as an error" is the
+    agent's job, not the driver's. Probes here only extract facts.
+    SdkAttributeProbe reads raw pyfluent SDK attribute values (observation,
+    not judgement) — the agent decides whether the values are healthy.
     """
-    from sim.inspect import generic_probes
-    _g = {p.name: p for p in generic_probes()}
-    probes: list = [
-        _g["process-meta"],                                              # #1  通用
-        _g["runtime-timeout"],                                           # #1+ 通用
-        TextStreamRulesProbe(                                            # #2  Fluent 专用
-            source="stderr",
-            text_selector=lambda ctx: ctx.stderr,
-            rules=_FLUENT_STDERR_RULES,
-        ),
-        _g["stdout-json-tail"],                                          # #3  通用
-        _g["python-traceback"],                                          # #3+ 通用
-        SdkAttributeProbe(attr_paths=_DEFAULT_FLUENT_SDK_ATTRS),         # #4  Fluent 专用
-        TextStreamRulesProbe(                                            # #6  Fluent 专用
-            source="tui:stdout",
-            text_selector=lambda ctx: ctx.stdout,
-            rules=_FLUENT_TUI_STDOUT_RULES,
-        ),
-        TextStreamRulesProbe(                                            # #7  Fluent 专用
-            source="log:session.trn",
-            text_selector=_read_transcript,
-            rules=_FLUENT_TRN_RULES,
-        ),
-        DomainExceptionMapProbe(),                                       # #5  post-processor
-    ]
+    probes: list = list(generic_probes())
+    probes.append(SdkAttributeProbe(attr_paths=_DEFAULT_FLUENT_SDK_ATTRS))
     if enable_gui:
-        probes.append(GuiDialogProbe(                                    # #8a Fluent 专用
+        probes.append(GuiDialogProbe(
             process_name_substrings=("fluent", "ansys", "cx", "cortex")))
-        probes.append(ScreenshotProbe(                                   # #8b Fluent 专用
+        probes.append(ScreenshotProbe(
             filename_prefix="fluent_shot",
             process_name_substrings=("fluent", "ansys", "cx", "cortex")))
-    probes.append(_g["workdir-diff"])                                    # #9  通用（始终最后）
     return probes
 
 

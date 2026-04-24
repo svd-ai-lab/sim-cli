@@ -43,60 +43,25 @@ _GUI_ONLY_PATTERNS = (
 _SCAN_DRIVES = ("C", "D", "E", "F", "G")
 
 
-# ANSA stdout often surfaces Python exceptions thrown inside main() via the
-# IAP protocol. Most are caught by PythonTracebackProbe, but ANSA's own
-# scripting errors (e.g. base.* failures) print "ANSA error:" lines.
-_ANSA_STDOUT_RULES: list[dict] = [
-    {"pattern": r"ANSA error:", "severity": "error",
-     "code": "ansa.scripting.error"},
-    {"pattern": r"License checkout failed", "severity": "error",
-     "code": "ansa.license.checkout_failed"},
-]
-
-
 def _default_ansa_probes(enable_gui: bool = False) -> list:
-    """ANSA probe list — generic_probes() + ANSA-specific channels.
+    """ANSA probe list — generic_probes() + optional GUI observation.
 
-    Generic (via generic_probes()):
-      #1  ProcessMetaProbe      #1+ RuntimeTimeoutProbe
-      #3  StdoutJsonTailProbe   #3+ PythonTracebackProbe   #9 WorkdirDiffProbe
-
-    ANSA-specific:
-      #6  TextStreamRulesProbe(ansa:stdout) — ANSA error / license patterns
-      #5  DomainExceptionMapProbe — post-processor
-      #8a GuiDialogProbe — only when enable_gui (ANSA -listenport, no -nogui)
-      #8b ScreenshotProbe — only when enable_gui
-
-    NOT wired:
-      #2  stderr — ANSA's IAP funnels everything through stdout
-      #4  SdkAttributeProbe — IAP exec_snippet returns dict already
-      #7  log file — no per-session log
+    No driver-layer semantic assertions: "what counts as an error" is the
+    agent's job, not the driver's. Probes here only extract facts.
+    GUI probes report which top-level windows exist + attach a screenshot,
+    without labelling any of them as errors.
     """
     from sim.inspect import (                                            # noqa: PLC0415
-        DomainExceptionMapProbe, GuiDialogProbe, ScreenshotProbe,
-        TextStreamRulesProbe, generic_probes,
+        GuiDialogProbe, ScreenshotProbe, generic_probes,
     )
-    _g = {p.name: p for p in generic_probes()}
-    probes: list = [
-        _g["process-meta"],                                              # #1
-        _g["runtime-timeout"],                                           # #1+
-        TextStreamRulesProbe(                                            # #6
-            source="ansa:stdout",
-            text_selector=lambda ctx: ctx.stdout,
-            rules=_ANSA_STDOUT_RULES,
-        ),
-        _g["stdout-json-tail"],                                          # #3
-        _g["python-traceback"],                                          # #3+
-        DomainExceptionMapProbe(),                                        # #5
-    ]
+    probes: list = list(generic_probes())
     if enable_gui:
-        probes.append(GuiDialogProbe(                                    # #8a
+        probes.append(GuiDialogProbe(
             process_name_substrings=("ansa", "ansa64"),
             code_prefix="ansa.gui"))
-        probes.append(ScreenshotProbe(                                   # #8b
+        probes.append(ScreenshotProbe(
             filename_prefix="ansa_shot",
             process_name_substrings=("ansa", "ansa64")))
-    probes.append(_g["workdir-diff"])                                    # #9
     return probes
 
 

@@ -59,15 +59,6 @@ log = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-# IronPython error patterns on stdout (run_python_script return value).
-# Mechanical doesn't produce stderr through the gRPC interface.
-_MECH_STDOUT_RULES: list[dict] = [
-    {"pattern": r"\bError\b", "severity": "error", "code": "mech.scripting.error"},
-    {"pattern": r"\bWarning\b", "severity": "warning", "code": "mech.scripting.warning"},
-    # Ansys license errors surface in the run_python_script return string
-    {"pattern": r"Cannot checkout", "severity": "error", "code": "mech.license.checkout_failed"},
-]
-
 # IronPython identifiers that indicate a Mechanical scripting snippet.
 _MECH_SCRIPT_MARKERS = (
     "ExtAPI.",
@@ -89,51 +80,26 @@ _VERSION_DIR_RE = re.compile(r"v(\d{2})(\d)$")
 
 
 def _default_mechanical_probes(enable_gui: bool = True) -> list:
-    """Mechanical probe list — generic_probes() + Mechanical-specific channels.
+    """Mechanical probe list — generic_probes() + optional GUI observation.
 
-    Generic (via generic_probes()):
-      #1  ProcessMetaProbe      #1+ RuntimeTimeoutProbe
-      #3  StdoutJsonTailProbe   #3+ PythonTracebackProbe   #9 WorkdirDiffProbe
-
-    Mechanical-specific:
-      #6  TextStreamRulesProbe(mech:stdout) — Error/Warning in script return value
-      #5  DomainExceptionMapProbe           — post-processor
-      #8a GuiDialogProbe                    — Mechanical GUI / Script Error dialog
-      #8b ScreenshotProbe                   — GUI screenshot
-
-    NOT wired:
-      #2  stderr — always "" (run_python_script doesn't produce stderr)
-      #4  SdkAttributeProbe — get_product_info() is expensive, skip
-      #7  log — no per-session log accessible via gRPC
-
+    No driver-layer semantic assertions: "what counts as an error" is the
+    agent's job, not the driver's. Probes here only extract facts.
     enable_gui=True by default because Mechanical always launches with a
-    visible GUI window (batch=False is the driver's policy).
+    visible GUI window (batch=False is the driver's policy); the GUI probes
+    report which dialogs exist + a screenshot, without labelling any of
+    them as errors.
     """
     from sim.inspect import (                                          # noqa: PLC0415
-        DomainExceptionMapProbe, GuiDialogProbe, ScreenshotProbe,
-        TextStreamRulesProbe, generic_probes,
+        GuiDialogProbe, ScreenshotProbe, generic_probes,
     )
-    _g = {p.name: p for p in generic_probes()}
-    probes: list = [
-        _g["process-meta"],                                            # #1  通用
-        _g["runtime-timeout"],                                         # #1+ 通用
-        TextStreamRulesProbe(                                          # #6  via stdout
-            source="mech:stdout",
-            text_selector=lambda ctx: ctx.stdout,
-            rules=_MECH_STDOUT_RULES,
-        ),
-        _g["stdout-json-tail"],                                        # #3  通用
-        _g["python-traceback"],                                        # #3+ 通用
-        DomainExceptionMapProbe(),                                      # #5  post-processor
-    ]
+    probes: list = list(generic_probes())
     if enable_gui:
-        probes.append(GuiDialogProbe(                                  # #8a
+        probes.append(GuiDialogProbe(
             process_name_substrings=("AnsysWBU", "Mechanical", "ANSYS"),
             code_prefix="mech.gui"))
-        probes.append(ScreenshotProbe(                                 # #8b
+        probes.append(ScreenshotProbe(
             filename_prefix="mech_shot",
             process_name_substrings=("AnsysWBU", "Mechanical", "ANSYS")))
-    probes.append(_g["workdir-diff"])                                  # #9  通用（始终最后）
     return probes
 
 

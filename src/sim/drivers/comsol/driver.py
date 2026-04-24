@@ -29,95 +29,14 @@ from typing import Callable
 
 from sim.driver import ConnectionInfo, Diagnostic, LintResult, SolverInstall
 from sim.inspect import (
-    DomainExceptionMapProbe,
     GuiDialogProbe,
     InspectCtx,
     ScreenshotProbe,
     SdkAttributeProbe,
-    TextStreamRulesProbe,
     collect_diagnostics,
     generic_probes,
 )
 from sim.runner import run_subprocess
-
-
-# ── Channel #2 — JVM/JPype-oriented stderr rules (COMSOL-specific) ─────────────
-# pyfluent swallows stderr; COMSOL's JPype bridge does NOT, so real JVM
-# warnings/errors make it through.
-_COMSOL_STDERR_RULES: list[dict] = [
-    {"pattern": r"^\[ERROR\]", "severity": "error", "code": "comsol.jvm.error"},
-    {"pattern": r"^\[WARN\]", "severity": "warning", "code": "comsol.jvm.warning"},
-    {"pattern": r"com\.comsol\.util\.exceptions\.FlException",
-     "severity": "error", "code": "comsol.java.fl_exception"},
-    {"pattern": r"did not converge", "severity": "error",
-     "code": "comsol.solve.not_converged"},
-    {"pattern": r"^Exception in thread", "severity": "error",
-     "code": "comsol.jvm.exception"},
-    # JPype-wrapped NullPointerException (common when calling Java API with
-    # bad tag on uninitialized feature)
-    {"pattern": r"java\.lang\.NullPointerException",
-     "severity": "error", "code": "comsol.java.npe"},
-]
-
-
-# ── Channel #5 — COMSOL python.* → comsol.* exception upgrade rules ────────────
-_COMSOL_EXC_MAP_RULES: list[dict] = [
-    # Feature tag not found: Java throws "No feature with tag 'xyz'"
-    {
-        "code_in": ("python.Exception", "python.RuntimeError",
-                    "python.java.lang.IllegalArgumentException"),
-        "regex": r"No feature with tag '(\S+?)'",
-        "upgrade_code": "comsol.feature.not_found",
-        "message_template": "COMSOL feature tag not found: '{group1}'",
-    },
-    # JPype-exposed ModelClient surface: agent tries `model.feature(...)`
-    # but that method doesn't exist on the raw Java client (exists on MPh's
-    # Python wrapper only). This is a common agent typo pattern.
-    {
-        "code_in": ("python.AttributeError",),
-        "regex": r"'com\.comsol[^']*' object has no attribute '(\w+)'",
-        "upgrade_code": "comsol.sdk.method_not_found",
-        "message_template": (
-            "COMSOL Java client has no method '{group1}' — did you mean "
-            "an MPh-wrapper method? Drill into the API tree explicitly "
-            "(e.g. model.component('comp1').physics('solid').feature('xyz'))."
-        ),
-    },
-    # Generic FlException surfacing as Python exception (via JPype wrapper).
-    # pyfluent uses different patterns, but COMSOL's JPype bridge raises
-    # Python Exception with message "Java Exception" when propagating a
-    # server-side FlException — plus a second diag carrying the full Java
-    # class name in `code`. We match the first one on message=="Java Exception".
-    {
-        "code_in": ("python.Exception",),
-        "regex": r"^Java Exception$",
-        "upgrade_code": "comsol.java.fl_exception",
-        "message_template": (
-            "COMSOL Java exception propagated through JPype "
-            "(check prior traceback diag for the precise Java class)"
-        ),
-    },
-    {
-        "code_in": ("python.RuntimeError", "python.Exception"),
-        "regex": r"com\.comsol\.util\.exceptions\.FlException",
-        "upgrade_code": "comsol.java.fl_exception",
-        "message_template": "COMSOL Java FlException: {orig}",
-    },
-    # Solver didn't converge / failed to find solution
-    {
-        "code_in": ("python.RuntimeError", "python.Exception"),
-        "regex": r"(Failed to find a solution|did not converge)",
-        "upgrade_code": "comsol.solve.failed",
-        "message_template": "COMSOL solve failed: {match}",
-    },
-    # Null pointer when calling into un-initialized Java object
-    {
-        "code_in": ("python.RuntimeError", "python.AttributeError"),
-        "regex": r"java\.lang\.NullPointerException",
-        "upgrade_code": "comsol.java.null_pointer",
-        "message_template": "COMSOL Java NullPointerException — object uninitialized",
-    },
-]
 
 
 # ── Channel #4 — default SDK attribute readers (COMSOL / MPh Model Java API) ──
@@ -141,56 +60,28 @@ def _default_comsol_readers() -> list[tuple[str, object]]:
 
 
 def _default_comsol_probes(enable_gui: bool = False) -> list:
-    """COMSOL's probe list — generic base + COMSOL-specific channels.
+    """COMSOL's probe list — generic_probes() + SDK readers + optional GUI.
 
-    Generic (from generic_probes()):
-      #1  ProcessMetaProbe         exit_code + wall_time
-      #1+ RuntimeTimeoutProbe      hung-snippet detection
-      #3  StdoutJsonTailProbe      last JSON line / _result fallback
-      #3+ PythonTracebackProbe     structured traceback parsing
-      #9  WorkdirDiffProbe         new files → Artifacts (always last)
-
-    COMSOL-specific:
-      #2  TextStreamRulesProbe(stderr)  JVM/JPype-flavored error patterns
-      #4  SdkAttributeProbe(readers=)  Java-API style attribute readers
-      #5  DomainExceptionMapProbe       COMSOL-specific exception upgrade rules
-      #6  NOT wired — COMSOL session has no TUI concept
-      #7  NOT wired — COMSOL has no per-session transcript
-      #8a GuiDialogProbe               Cortex/COMSOL windows (gui mode)
-      #8b ScreenshotProbe              per-window PNG crops (gui mode)
+    No driver-layer semantic assertions: "what counts as an error" is the
+    agent's job, not the driver's. Probes here only extract facts.
+    SdkAttributeProbe reads raw Java-API attribute values (observation,
+    not judgement) — the agent decides whether the values are healthy.
     """
-    from sim.inspect import generic_probes
-    _g = {p.name: p for p in generic_probes()}
-    probes: list = [
-        _g["process-meta"],                                              # #1  通用
-        _g["runtime-timeout"],                                           # #1+ 通用
-        TextStreamRulesProbe(                                            # #2  COMSOL 专用
-            source="stderr",
-            text_selector=lambda ctx: ctx.stderr,
-            rules=_COMSOL_STDERR_RULES,
-        ),
-        _g["stdout-json-tail"],                                          # #3  通用
-        _g["python-traceback"],                                          # #3+ 通用
-        SdkAttributeProbe(                                               # #4  COMSOL 专用
-            readers=_default_comsol_readers(),
-            source_prefix="sdk:attr",
-            code_prefix="comsol.sdk.attr",
-        ),
-        # #6 TUI: intentionally not wired — COMSOL has no TUI in session mode
-        # #7 Log file: intentionally not wired — COMSOL has no per-session
-        #    transcript. Global %USERPROFILE%\.comsol\...\log is too noisy.
-        DomainExceptionMapProbe(rules=_COMSOL_EXC_MAP_RULES),            # #5  post-processor
-    ]
+    probes: list = list(generic_probes())
+    probes.append(SdkAttributeProbe(
+        readers=_default_comsol_readers(),
+        source_prefix="sdk:attr",
+        code_prefix="comsol.sdk.attr",
+    ))
     if enable_gui:
-        probes.append(GuiDialogProbe(                                    # #8a COMSOL 专用
+        probes.append(GuiDialogProbe(
             process_name_substrings=("comsol", "comsolui", "mphserver"),
             code_prefix="comsol.gui",
         ))
-        probes.append(ScreenshotProbe(                                   # #8b COMSOL 专用
+        probes.append(ScreenshotProbe(
             filename_prefix="comsol_shot",
             process_name_substrings=("comsol", "comsolui", "mphserver"),
         ))
-    probes.append(_g["workdir-diff"])                                    # #9  通用（始终最后）
     return probes
 
 

@@ -32,63 +32,15 @@ from sim.driver import ConnectionInfo, Diagnostic, LintResult, RunResult, Solver
 
 log = logging.getLogger(__name__)
 
-# CFX cfx5post -line emits error lines in the form ``-- ERROR -- <msg>``,
-# confirmed by e2e against VMFL015 (both CCL/Perl syntax errors and
-# unrecognised-name errors use this exact prefix). Matching bare ``ERROR``
-# produces false positives on object names like ``/INTERNAL TABLE:...``
-# and on banner text, so anchor the rule to the ``-- ERROR --`` prefix.
-# stderr is rarely populated — cfx5post buffers everything via its own log.
-_CFX_STDOUT_RULES: list[dict] = [
-    {"pattern": r"--\s*ERROR\s*--", "severity": "error",
-     "code": "cfx.post.error"},
-    {"pattern": r"License checkout failed", "severity": "error",
-     "code": "cfx.license.checkout_failed"},
-]
-
-
 def _default_cfx_probes(enable_gui: bool = False) -> list:
-    """CFX probe list — generic_probes() + cfx5post-specific channels.
+    """CFX probe list — generic_probes() only.
 
-    Generic (via generic_probes()):
-      #1  ProcessMetaProbe      #1+ RuntimeTimeoutProbe
-      #3  StdoutJsonTailProbe   #3+ PythonTracebackProbe   #9 WorkdirDiffProbe
-
-    CFX-specific:
-      #6  TextStreamRulesProbe(cfx:stdout) — ERROR / INTERNAL / license
-      #5  DomainExceptionMapProbe — post-processor
-
-    NOT wired:
-      #2  stderr — cfx5post -line keeps stderr empty
-      #4  SdkAttributeProbe — session.summary already exposes state
-      #7  log file — solver log lives next to .res, not a per-snippet log
-      #8  GUI — cfx5post -line is text-only; no window to probe
+    No driver-layer semantic assertions: "what counts as an error" is the
+    agent's job, not the driver's. Probes here only extract facts.
+    cfx5post -line has no GUI, so no dialog/screenshot probes either.
     """
-    from sim.inspect import (                                            # noqa: PLC0415
-        DomainExceptionMapProbe, GuiDialogProbe, ScreenshotProbe,
-        TextStreamRulesProbe, generic_probes,
-    )
-    _g = {p.name: p for p in generic_probes()}
-    probes: list = [
-        _g["process-meta"],                                              # #1
-        _g["runtime-timeout"],                                           # #1+
-        TextStreamRulesProbe(                                            # #6
-            source="cfx:stdout",
-            text_selector=lambda ctx: ctx.stdout,
-            rules=_CFX_STDOUT_RULES,
-        ),
-        _g["stdout-json-tail"],                                          # #3
-        _g["python-traceback"],                                          # #3+
-        DomainExceptionMapProbe(),                                        # #5
-    ]
-    if enable_gui:
-        probes.append(GuiDialogProbe(                                    # #8a
-            process_name_substrings=("cfx5", "ansys"),
-            code_prefix="cfx.gui"))
-        probes.append(ScreenshotProbe(                                   # #8b
-            filename_prefix="cfx_shot",
-            process_name_substrings=("cfx5", "ansys")))
-    probes.append(_g["workdir-diff"])                                    # #9
-    return probes
+    from sim.inspect import generic_probes  # noqa: PLC0415
+    return list(generic_probes())
 
 
 # ---------------------------------------------------------------------------

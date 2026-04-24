@@ -600,36 +600,14 @@ class SdkAttributeProbe:
         return ProbeResult(diagnostics=diags)
 
 
-_EXC_MAP_RULES: list[dict] = [
-    # 1. pyfluent SettingsObject KeyError / AttributeError for missing BC name,
-    #    missing attribute, etc. The "most similar names are: ..." hint comes
-    #    from pyfluent's own code — preserve it in the upgraded diag.
-    {
-        "code_in": ("python.KeyError", "python.AttributeError"),
-        "regex": r"has no attribute '([^']+)'",
-        "upgrade_code": "fluent.sdk.attr_not_found",
-        "message_template": (
-            "Fluent SDK attribute not found: '{group1}'. "
-            "Preserve pyfluent's hint if present."
-        ),
-    },
-    # 2. pyfluent RPC raises RuntimeError("Value is not allowed") when a
-    #    SettingsObject setter gets rejected at the server side.
-    {
-        "code_in": ("python.RuntimeError",),
-        "regex": r"Value is not allowed",
-        "upgrade_code": "fluent.sdk.value_not_allowed",
-        "message_template": "Fluent RPC rejected value assignment",
-    },
-    # 3. RPC timeout — covered both for when pyfluent raises it and when the
-    #    underlying grpc surfaces it as RPC error.
-    {
-        "code_in": ("python.TimeoutError", "python.RuntimeError"),
-        "regex": r"(RPC .*timeout|timed? out)",
-        "upgrade_code": "fluent.rpc.timeout",
-        "message_template": "Fluent RPC call timed out",
-    },
-]
+# Default exception-map rules for DomainExceptionMapProbe.
+#
+# Deliberately empty — solver-specific exception→domain-code mapping is a
+# semantic judgement ("this Python exception means a Fluent RPC timeout")
+# and that belongs to the agent / sim-skills layer, not the driver layer.
+# The class remains available so a skill or agent can pass its own rules
+# explicitly via DomainExceptionMapProbe(rules=[...]).
+_EXC_MAP_RULES: list[dict] = []
 
 
 class DomainExceptionMapProbe:

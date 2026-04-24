@@ -277,43 +277,60 @@ def test_sdk_attribute_probe_old_attr_paths_call_still_works():
 # ── Channel 5 DomainExceptionMapProbe ──────────────────────────────────────────
 
 
-def test_exception_map_probe_upgrades_attribute_missing():
-    """Post-processes existing python.* diagnostics and upgrades the code."""
+def test_exception_map_probe_default_rules_are_empty():
+    """Default rules must be empty: solver-specific exception→code mapping
+    is a semantic judgement that belongs to the agent/skill layer, not the
+    driver. DomainExceptionMapProbe remains available as a framework
+    capability — callers pass rules explicitly when they want them."""
     from sim.inspect import Diagnostic, DomainExceptionMapProbe
 
     prior = [Diagnostic(
         severity="error",
-        message=("'velocity_inlet' has no attribute 'inlet'.\n"
-                 "The most similar names are: hot-inlet, cold-inlet"),
+        message="'velocity_inlet' has no attribute 'inlet'.",
         source="traceback",
         code="python.KeyError",
     )]
-    ctx = _ctx(extras={"prior_diagnostics": prior})
-    p = DomainExceptionMapProbe()
-    r = p.probe(ctx)
-
-    # Must emit a NEW diag with upgraded code
-    upgraded = [d for d in r.diagnostics
-                if d.code.startswith("fluent.")]
-    assert len(upgraded) >= 1
-    d = upgraded[0]
-    assert d.code == "fluent.sdk.attr_not_found"
-    assert "velocity_inlet" in d.message or "inlet" in d.message
-    assert d.extra.get("upgraded_from") == "python.KeyError"
+    r = DomainExceptionMapProbe().probe(
+        _ctx(extras={"prior_diagnostics": prior})
+    )
+    assert r.diagnostics == [], (
+        "DomainExceptionMapProbe() with no explicit rules must not emit "
+        "any diagnostics — the default rule set is intentionally empty."
+    )
 
 
-def test_exception_map_probe_upgrades_value_not_allowed():
+def test_exception_map_probe_applies_explicit_rules():
+    """When the caller passes rules explicitly, the probe must apply them.
+    This guards the class's capability without wiring solver-specific
+    rules into the driver layer."""
     from sim.inspect import Diagnostic, DomainExceptionMapProbe
 
+    rules = [
+        {
+            "code_in": ("python.KeyError", "python.AttributeError"),
+            "regex": r"has no attribute '([^']+)'",
+            "upgrade_code": "fluent.sdk.attr_not_found",
+            "message_template": "attr not found: '{group1}'",
+        },
+        {
+            "code_in": ("python.RuntimeError",),
+            "regex": r"Value is not allowed",
+            "upgrade_code": "fluent.sdk.value_not_allowed",
+            "message_template": "value rejected",
+        },
+    ]
     prior = [
+        Diagnostic(severity="error",
+                   message="'velocity_inlet' has no attribute 'inlet'.",
+                   source="traceback", code="python.KeyError"),
         Diagnostic(severity="error", message="Value is not allowed",
                    source="traceback", code="python.RuntimeError"),
-        Diagnostic(severity="error",
-                   message="'model' has no attribute 'not-a-real-model'.",
-                   source="traceback", code="python.ValueError"),
     ]
-    r = DomainExceptionMapProbe().probe(_ctx(extras={"prior_diagnostics": prior}))
+    r = DomainExceptionMapProbe(rules=rules).probe(
+        _ctx(extras={"prior_diagnostics": prior})
+    )
     codes = [d.code for d in r.diagnostics]
+    assert "fluent.sdk.attr_not_found" in codes
     assert "fluent.sdk.value_not_allowed" in codes
 
 
