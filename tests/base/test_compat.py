@@ -258,9 +258,9 @@ class TestConnectIncludesSkillsBlock(unittest.TestCase):
         self._saved = os.environ.pop("SIM_SKILLS_ROOT", None)
         os.environ["SIM_SKILLS_ROOT"] = str(self.tmp)
 
-        # Reset server state between tests
+        # Reset server state between tests (multi-session registry)
         from sim import server
-        server._state = server.SessionState()
+        server._sessions.clear()
 
     def tearDown(self):
         shutil.rmtree(self.tmp)
@@ -269,7 +269,7 @@ class TestConnectIncludesSkillsBlock(unittest.TestCase):
         else:
             os.environ.pop("SIM_SKILLS_ROOT", None)
         from sim import server
-        server._state = server.SessionState()
+        server._sessions.clear()
 
     def test_connect_response_carries_skills_block(self):
         from fastapi.testclient import TestClient
@@ -315,7 +315,7 @@ class TestConnectIncludesSkillsBlock(unittest.TestCase):
             if original_get_driver is not None:
                 drivers_mod.get_driver = original_get_driver
             # Cleanup any lingering session
-            server._state = server.SessionState()
+            server._sessions.clear()
 
     def test_connect_response_skills_root_none_when_tree_absent(self):
         from fastapi.testclient import TestClient
@@ -349,7 +349,7 @@ class TestConnectIncludesSkillsBlock(unittest.TestCase):
             self.assertIn("hint", skills)
         finally:
             drivers_mod.get_driver = original
-            server._state = server.SessionState()
+            server._sessions.clear()
 
 
 if __name__ == "__main__":

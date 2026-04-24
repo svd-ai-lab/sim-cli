@@ -84,21 +84,22 @@ pytestmark = pytest.mark.integration
 
 @pytest.fixture(scope="module")
 def server_state_reset():
-    """Reset sim.server._state before and after the test so a stale
-    session from a prior run doesn't poison /connect."""
+    """Reset sim.server session registry before and after the test so a
+    stale session from a prior run doesn't poison /connect."""
     from sim import server
-    server._state = server.SessionState()
+    server._sessions.clear()
     yield
     # Best-effort teardown — ignore errors so the fixture cleanup never
     # masks the actual test failure.
     try:
         from fastapi.testclient import TestClient
         c = TestClient(server.app)
-        if c.get("/ps").json().get("connected"):
-            c.post("/disconnect")
+        ps = c.get("/ps").json()
+        for sess in ps.get("sessions", []):
+            c.post("/disconnect", headers={"X-Sim-Session": sess["session_id"]})
     except Exception:
         pass
-    server._state = server.SessionState()
+    server._sessions.clear()
 
 
 @pytest.fixture(scope="module")
