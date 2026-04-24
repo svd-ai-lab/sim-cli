@@ -356,7 +356,7 @@ class FlothermDriver:
             wall_time_s=wall,
             exit_code=0 if result.get("ok") else 1,
             driver_name=self.name,
-            session_ns={"_result": result},
+            session_ns={},
             workdir_before=before,
         )
         diags, arts = collect_diagnostics(self.probes, ctx)
