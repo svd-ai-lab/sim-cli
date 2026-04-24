@@ -1922,6 +1922,7 @@ dependencies = [
     { name = "lxml" },
     { name = "pillow" },
     { name = "pyyaml" },
+    { name = "sim-ltspice" },
     { name = "uvicorn" },
 ]
 
@@ -1957,9 +1958,19 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4" },
+    { name = "sim-ltspice", specifier = ">=0.1" },
     { name = "uvicorn", specifier = ">=0.34" },
 ]
 provides-extras = ["fluent", "matlab", "comsol", "pybamm", "dev"]
+
+[[package]]
+name = "sim-ltspice"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/db/c1/0692f2db98e72d7174419d2803a6bb5fd9f8a7ff434a856d930fa908ffb8/sim_ltspice-0.1.0.tar.gz", hash = "sha256:9f60fec0e9abc728ff2cc48e8896e24dd01c8524fb4cdb9fa4343e2d12a7ba78", size = 48466 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6f/a6/a8023441aa5b88d84a25cd9ad1df71af779ad4c9994aad06bc69d08f3bd9/sim_ltspice-0.1.0-py3-none-any.whl", hash = "sha256:1b64a244683f0ba40f83e0883ad2a49507da04dc74661d7e6b6e168e67ce2450", size = 32138 },
+]
 
 [[package]]
 name = "six"

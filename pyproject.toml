@@ -14,9 +14,10 @@ dependencies = [
     "httpx>=0.28",
     "fastapi>=0.115",
     "uvicorn>=0.34",
-    "pyyaml>=6.0",          # reads driver compatibility.yaml files
-    "Pillow>=10",           # sim screenshot endpoint uses PIL.ImageGrab
-    "lxml>=5.0",            # XSD validation for FloSCRIPT lint
+    "pyyaml>=6.0", # reads driver compatibility.yaml files
+    "Pillow>=10", # sim screenshot endpoint uses PIL.ImageGrab
+    "lxml>=5.0", # XSD validation for FloSCRIPT lint
+    "sim-ltspice>=0.1", # LTspice file formats + runtime — sim-cli's LTspice driver delegates here
 ]
 
 [project.optional-dependencies]
