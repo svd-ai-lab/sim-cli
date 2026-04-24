@@ -12,6 +12,11 @@ changes at milestone boundaries.
 
 ### Added
 
+- **Probe observability — 41/41 driver coverage + fact-only contract.** Every driver in the registry now attaches structured `diagnostics` + `artifacts` lists to every `run()` result. Coverage:
+  - **10 session drivers** (`fluent`, `comsol`, `flotherm`, `workbench`, `mechanical`, `mapdl`, `ls_dyna`, `ansa`, `matlab`, `cfx`) — each `__init__` sets `self.probes = _default_<solver>_probes()`; the execute-path is split into `_dispatch(code, label)` (raw subprocess behaviour, returns a dict) wrapped by `run(code, label)` (builds an `InspectCtx`, calls `collect_diagnostics(self.probes, ctx)`, attaches outputs).
+  - **31 one-shot drivers** (pybamm, openfoam, abaqus, starccm, icem, isaac, newton, calculix, gmsh, su2, lammps, scikit_fem, elmer, meshio, pyvista, pymfem, openseespy, sfepy, cantera, openmdao, fipy, pymoo, pyomo, simpy, trimesh, devito, coolprop, scikit_rf, pandapower, paraview, hypermesh) — covered uniformly via `runner.execute_script`, which calls `_attach_probes(result, solver)` → `generic_probes()` against the completed `RunResult`.
+  - **Active probes (fact-only):** `ProcessMetaProbe` (exit code + wall time), `RuntimeTimeoutProbe` (hung-snippet detection), `StdoutJsonTailProbe` (last JSON line on stdout / `_result` fallback), `PythonTracebackProbe` (structured traceback parsing), `WorkdirDiffProbe` (new files → Artifacts), plus optional `GuiDialogProbe` / `ScreenshotProbe` in GUI mode and `SdkAttributeProbe` reading raw SDK values where applicable.
+
 - **`sim.gui` subpackage — cross-driver GUI actuation (Phase 3 P0).** New actuation layer that every GUI-capable driver now injects into its `sim exec` namespace, separate from (and complementary to) the Phase 1-2 observation layer:
   - `sim/gui/_win32_dialog.py` — Win32 ctypes primitives (`enum_visible_windows`, `find_dialog_by_title`, `fill_file_dialog`, `close_window`, `dismiss_windows_by_title_fragment`), extracted from the flotherm driver so every driver can share them.
   - `sim/gui/_pywinauto_tools.py` — subprocess-isolated pywinauto UIA helpers (`find_window` / `click_by_name` / `send_text` / `close_window` / `activate_window` / `screenshot_window` / `snapshot_uia_tree` / `list_windows`). Each call runs in a fresh `python -c` subprocess to keep the main process's COM apartment clean (pywinauto has a history of COM pollution on repeated calls).
@@ -48,3 +53,27 @@ changes at milestone boundaries.
   - `pyvista` (VTK post-processing) — sphere area 0.76 % err, volume 1.37 % err (headless PNG)
   - `pymfem` 4.8 (Python bindings for LLNL's MFEM C++ FEM) — Poisson u_max = 0.07353 (0.2 % err via UMFPackSolver)
 - **MAPDL driver (Phase 1 + Phase 2).** New Ansys MAPDL driver covering both one-shot and persistent-session modes. Phase 1: subprocess execution of PyMAPDL scripts via `sim run script.py --solver mapdl`, with detect / lint / run_file / parse_output and 4-profile compatibility matrix (24.1–25.2). Phase 2: live `Mapdl` gRPC client held across `sim exec` calls; snippet namespace exposes `mapdl`, `np`, `launch_mapdl`, `workdir`, `_result`; query targets `session.summary` / `mesh.summary` / `workdir.files` / `results.summary` / `last.result` flow through the cross-driver inspect fallback. 16 tests (15 unit + 1 session integration). Phase 1 E2E: 2D I-beam (BEAM188, max UZ −0.0265 cm) + 3D notched plate (SOLID186, K_t=1.98 vs Roark 1.60). Phase 2 E2E: same 2D beam re-driven through 10-step session (4 exec + 4 inspect + connect / disconnect) — identical physics, full transcript saved. Headless PyVista contour PNGs throughout (no GUI scripting needed).
+
+### Changed
+
+- **Removed every solver-specific `TextStreamRulesProbe` / `DomainExceptionMapProbe` rule table baked into driver defaults.** Driver-layer rule assertions were semantic judgement dressed up as observation: every driver hardcoded a list of `(regex, severity, code)` triples, which drifted with solver versions and produced false positives on real output. Deleted:
+  - `fluent/driver.py` — `_FLUENT_STDERR_RULES` (3), `_FLUENT_TUI_STDOUT_RULES` (6), `_FLUENT_TRN_RULES` (alias), `_read_transcript` helper.
+  - `comsol/driver.py` — `_COMSOL_STDERR_RULES` (6), `_COMSOL_EXC_MAP_RULES` (6).
+  - `flotherm/driver.py` — `_FLOTHERM_STDERR_RULES` (2).
+  - `workbench/driver.py` — `_WB_STDOUT_RULES` (5).
+  - `mechanical/driver.py` — `_MECH_STDOUT_RULES` (3).
+  - `lsdyna/driver.py` — `_LSDYNA_STDERR_RULES` (3).
+  - `ansa/driver.py` — `_ANSA_STDOUT_RULES` (2).
+  - `matlab/driver.py` — `_MATLAB_STDERR_RULES` (2), `_MATLAB_STDOUT_RULES` (2).
+  - `cfx/driver.py` — `_CFX_STDOUT_RULES` (2).
+  - `sim/inspect.py` — default `_EXC_MAP_RULES` (3 Fluent-specific entries) emptied to `[]`.
+
+  Observable in real sessions: a plain CFX `list-objects` command went from 23 diagnostics (22 false-positive `cfx.post.internal_error` triggered by normal `/INTERNAL TABLE:` object names) down to 1 clean `sim.process.exit_zero`. Real errors still surface verbatim in `result["error"]` so an agent can read the actual text and decide.
+
+  `TextStreamRulesProbe` and `DomainExceptionMapProbe` remain exported from `sim.inspect` as framework capabilities — skills or agents that want the old behaviour instantiate them explicitly with their own rules. We just no longer bake rules into every driver.
+
+- **Test rewrites for the new contract.**
+  - `tests/inspect/test_driver_probe_wiring.py` — parametrised over all 7 newly-wired session drivers; the old `test_solver_specific_rule_fires` (which asserted the regex hits) is replaced by `test_no_driver_level_rule_codes`, which feeds hostile text matching every old rule pattern into every driver's `run()` and asserts that **no** solver-prefixed codes (`wb.*`, `mech.*`, `lsdyna.*`, `cfx.*`, `matlab.*`, `ansa.*`, `fluent.*`, `comsol.java.*`, …) appear in the resulting diagnostics. 42/42 in ~0.2 s.
+  - `tests/inspect/test_channel_3_4_5_9.py` — two Fluent-coupled assertions on `DomainExceptionMapProbe()` replaced with `test_exception_map_probe_default_rules_are_empty` (asserts zero output with default rules) and `test_exception_map_probe_applies_explicit_rules` (asserts the class still honours caller-supplied rules — guards the capability without wiring Fluent semantics in).
+
+- **Real-solver validation after rule removal.** Full unit suite: 838 passed (2 pre-existing UUID failures in `tests/base/test_run.py` unrelated to probes). Real CFX `cfx5post -line` e2e on VMFL015: false-positive count dropped 22 → 0, real errors still visible in `result["error"]`. Real COMSOL `surface_mount_package` e2e: PASS, launch 31.7 s, 6/6 steps, `Tmax = 50.0 °C`.
