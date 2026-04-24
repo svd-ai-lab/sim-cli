@@ -23,8 +23,11 @@ from sim.runner import execute_script
                    "Default: SIM_HOST env > config [server].host > localhost.")
 @click.option("--port", default=None, type=int,
               help="sim-server port. Default: SIM_PORT env > config [server].port > 7600.")
+@click.option("--session", "session_id", default=None,
+              help="Target session id (multi-session). "
+                   "Default: SIM_SESSION env > server's sole session.")
 @click.pass_context
-def main(ctx, output_json, host, port):
+def main(ctx, output_json, host, port, session_id):
     """sim — unified CLI for LLM agents to control CAD/CAE simulation software."""
     ctx.ensure_object(dict)
     ctx.obj["json"] = output_json
@@ -35,6 +38,7 @@ def main(ctx, output_json, host, port):
     # user explicitly asked.
     ctx.obj["host"] = host or os.environ.get("SIM_HOST") or "localhost"
     ctx.obj["port"] = port if port is not None else _cfg.resolve_server_port()
+    ctx.obj["session"] = session_id or os.environ.get("SIM_SESSION") or None
 
 
 # ── serve ────────────────────────────────────────────────────────────────────
@@ -366,7 +370,8 @@ def connect(ctx, solver, mode, ui_mode, processors):
     """Launch a solver and hold a persistent session."""
     from sim.session import SessionClient
 
-    client = SessionClient(host=ctx.obj["host"], port=ctx.obj["port"])
+    client = SessionClient(host=ctx.obj["host"], port=ctx.obj["port"],
+                           session_id=ctx.obj.get("session"))
     result = client.connect(
         solver=solver,
         mode=mode,
@@ -378,9 +383,12 @@ def connect(ctx, solver, mode, ui_mode, processors):
         click.echo(json_mod.dumps(result, indent=2, default=str))
     else:
         if result.get("ok"):
-            click.echo("[sim] connect: session ready")
-            if result.get("data"):
-                click.echo(json_mod.dumps(result["data"], indent=4, default=str))
+            data = result.get("data") or {}
+            sid = data.get("session_id", "?")
+            click.echo(f"[sim] connect: session ready (id={sid})")
+            click.echo(f"[sim] hint: use `sim --session {sid} ...` or set SIM_SESSION={sid}")
+            if data:
+                click.echo(json_mod.dumps(data, indent=4, default=str))
         else:
             click.echo(f"[sim] connect: failed - {result.get('error', 'unknown')}", err=True)
             sys.exit(1)
@@ -402,7 +410,8 @@ def exec_cmd(ctx, code, code_file, label):
         sys.exit(1)
 
     from sim.session import SessionClient
-    client = SessionClient(host=ctx.obj["host"], port=ctx.obj["port"])
+    client = SessionClient(host=ctx.obj["host"], port=ctx.obj["port"],
+                           session_id=ctx.obj.get("session"))
     result = client.run(code=code, label=label)
 
     if ctx.obj["json"]:
@@ -444,7 +453,8 @@ def inspect(ctx, name):
       ...
     """
     from sim.session import SessionClient
-    client = SessionClient(host=ctx.obj["host"], port=ctx.obj["port"])
+    client = SessionClient(host=ctx.obj["host"], port=ctx.obj["port"],
+                           session_id=ctx.obj.get("session"))
     result = client.query(name=name)
 
     if ctx.obj["json"]:
@@ -462,18 +472,39 @@ def inspect(ctx, name):
 @main.command()
 @click.pass_context
 def ps(ctx):
-    """List active sessions."""
+    """List active sessions.
+
+    Shape: {sessions: [...], default_session, server_pid}. The 'default'
+    session is the one that applies to per-session calls when neither
+    --session nor X-Sim-Session is set.
+    """
     from sim.session import SessionClient
-    client = SessionClient(host=ctx.obj["host"], port=ctx.obj["port"])
+    client = SessionClient(host=ctx.obj["host"], port=ctx.obj["port"],
+                           session_id=ctx.obj.get("session"))
     result = client.status()
 
     if ctx.obj["json"]:
         click.echo(json_mod.dumps(result, indent=2, default=str))
-    else:
-        if result.get("connected"):
-            click.echo(json_mod.dumps(result, indent=2, default=str))
-        else:
-            click.echo("[sim] no active session")
+        return
+
+    # Server may be unreachable (no 'sessions' key when an error dict is returned).
+    if "sessions" not in result:
+        click.echo(f"[sim] ps: {result.get('error', 'unreachable')}", err=True)
+        sys.exit(1)
+
+    sessions = result.get("sessions") or []
+    default = result.get("default_session")
+    if not sessions:
+        click.echo("[sim] no active sessions")
+        return
+    click.echo(f"[sim] {len(sessions)} session(s) — default: {default or '(none; set --session)'}")
+    for s in sessions:
+        marker = "*" if s["session_id"] == default else " "
+        click.echo(
+            f"  {marker} {s['session_id']:<10}  {s['solver']:<10}  "
+            f"mode={s.get('mode','-')}  ui={s.get('ui_mode','-')}  "
+            f"runs={s.get('run_count', 0)}  profile={s.get('profile') or '-'}"
+        )
 
 
 # ── disconnect ───────────────────────────────────────────────────────────────
@@ -495,7 +526,8 @@ def disconnect(ctx, stop_server):
     on its own).
     """
     from sim.session import SessionClient
-    client = SessionClient(host=ctx.obj["host"], port=ctx.obj["port"])
+    client = SessionClient(host=ctx.obj["host"], port=ctx.obj["port"],
+                           session_id=ctx.obj.get("session"))
     result = client.disconnect()
 
     if stop_server:
@@ -539,7 +571,8 @@ def stop(ctx):
     to call `sim disconnect` first.
     """
     from sim.session import SessionClient
-    client = SessionClient(host=ctx.obj["host"], port=ctx.obj["port"])
+    client = SessionClient(host=ctx.obj["host"], port=ctx.obj["port"],
+                           session_id=ctx.obj.get("session"))
     result = client.stop()
 
     if ctx.obj["json"]:
@@ -568,7 +601,8 @@ def screenshot(ctx, output):
     from pathlib import Path
 
     from sim.session import SessionClient
-    client = SessionClient(host=ctx.obj["host"], port=ctx.obj["port"])
+    client = SessionClient(host=ctx.obj["host"], port=ctx.obj["port"],
+                           session_id=ctx.obj.get("session"))
     result = client.screenshot()
 
     if not result.get("ok"):
