@@ -12,6 +12,14 @@ class TestMatlabDetect:
         driver = MatlabDriver()
         assert driver.detect(FIXTURES / "matlab_ok.m") is True
 
+    def test_detects_slx_model(self):
+        driver = MatlabDriver()
+        assert driver.detect(FIXTURES / "empty_model.slx") is True
+
+    def test_detects_mdl_model(self):
+        driver = MatlabDriver()
+        assert driver.detect(FIXTURES / "empty_model.mdl") is True
+
     def test_rejects_python_script(self):
         driver = MatlabDriver()
         assert driver.detect(FIXTURES.parent / "mock_solver.py") is False
@@ -53,6 +61,89 @@ class TestMatlabRunFile:
         assert result.exit_code == 0
         assert recorded["command"][0] == "/usr/local/bin/matlab"
         assert recorded["command"][1] == "-batch"
+
+    def test_slx_dispatches_via_sim_shim(self, monkeypatch, tmp_path):
+        """Issue #27 Phase A: `.slx` routes through load_system → sim_shim.run
+        → close_system, not through `run('...')`."""
+        monkeypatch.setattr(
+            "sim.drivers.matlab.driver.shutil.which",
+            lambda _: "/usr/local/bin/matlab",
+        )
+
+        recorded = {}
+
+        def fake_run(command, capture_output, text):
+            recorded["command"] = command
+            return SimpleNamespace(
+                returncode=0,
+                stdout='{"ok":true,"result_file":"/tmp/out.parquet","format":"parquet","signals":[]}\n',
+                stderr="",
+            )
+
+        monkeypatch.setattr("sim.runner.subprocess.run", fake_run)
+
+        model = tmp_path / "rc_circuit.slx"
+        model.touch()
+
+        driver = MatlabDriver()
+        result = driver.run_file(model)
+
+        assert result.exit_code == 0
+        expr = recorded["command"][2]
+        assert "load_system(" in expr
+        assert "sim_shim.run(" in expr
+        assert "close_system(" in expr
+        assert "addpath(" in expr
+        assert "rc_circuit" in expr
+        # Does not fall back to the `.m` top-level `run('...')` wrapper
+        assert not expr.startswith("run('")
+
+
+class TestSimulinkLint:
+    def test_slx_lint_is_info_only(self):
+        driver = MatlabDriver()
+        result = driver.lint(FIXTURES / "empty_model.slx")
+        assert result.ok is True
+        assert result.diagnostics
+        assert result.diagnostics[0].level == "info"
+
+
+class TestSimulinkProbe:
+    def test_simulink_flag_populated_from_filesystem(self, tmp_path, monkeypatch):
+        """detect_installed() should set extra.simulink_installed based on
+        whether toolbox/simulink/simulink exists under the MATLAB root."""
+        from sim.drivers.matlab import driver as drv
+
+        matlab_root = tmp_path / "R2024a"
+        (matlab_root / "bin").mkdir(parents=True)
+        (matlab_root / "bin" / "matlab").write_text("#!/bin/sh\n")
+        (matlab_root / "toolbox" / "simulink" / "simulink").mkdir(parents=True)
+
+        monkeypatch.setattr(
+            drv, "_INSTALL_FINDERS",
+            [lambda: [(matlab_root / "bin" / "matlab", "test:synth")]],
+        )
+
+        installs = drv._scan_matlab_installs()
+        assert len(installs) == 1
+        assert installs[0].extra["simulink_installed"] is True
+
+    def test_simulink_flag_false_when_toolbox_missing(self, tmp_path, monkeypatch):
+        from sim.drivers.matlab import driver as drv
+
+        matlab_root = tmp_path / "R2024a"
+        (matlab_root / "bin").mkdir(parents=True)
+        (matlab_root / "bin" / "matlab").write_text("#!/bin/sh\n")
+        # No toolbox/simulink/
+
+        monkeypatch.setattr(
+            drv, "_INSTALL_FINDERS",
+            [lambda: [(matlab_root / "bin" / "matlab", "test:synth")]],
+        )
+
+        installs = drv._scan_matlab_installs()
+        assert len(installs) == 1
+        assert installs[0].extra["simulink_installed"] is False
 
 
 class TestMatlabLint:

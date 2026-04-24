@@ -147,6 +147,22 @@ _INSTALL_FINDERS: list[Callable[[], list[tuple[Path, str]]]] = [
 """Strategy chain. APPEND new finders for new MATLAB layouts; do not edit."""
 
 
+def _probe_simulink_installed(matlab_root: Path) -> bool:
+    """Filesystem-level check for a Simulink toolbox install under a MATLAB root.
+
+    Does NOT launch MATLAB and does NOT check the license. This is the
+    "installed on disk" signal — a looser gate than `license('test','Simulink')`
+    (which itself is looser than `license('checkout','Simulink')`). See
+    `matlab_driver.md` for the rationale behind preferring installed-on-disk
+    over a license checkout (which would hold a seat for the process lifetime
+    and is hostile to shared MATLAB installs).
+    """
+    try:
+        return (matlab_root / "toolbox" / "simulink" / "simulink").is_dir()
+    except Exception:
+        return False
+
+
 def _scan_matlab_installs() -> list[SolverInstall]:
     found: dict[str, SolverInstall] = {}
     for finder in _INSTALL_FINDERS:
@@ -159,7 +175,13 @@ def _scan_matlab_installs() -> list[SolverInstall]:
             if inst is None:
                 continue
             key = str(Path(inst.path).resolve())
-            found.setdefault(key, inst)
+            if key in found:
+                continue
+            if _probe_simulink_installed(Path(inst.path)):
+                inst.extra["simulink_installed"] = True
+            else:
+                inst.extra["simulink_installed"] = False
+            found[key] = inst
     return sorted(found.values(), key=lambda i: i.version, reverse=True)
 
 
@@ -202,11 +224,31 @@ class MatlabDriver:
         return True
 
     def detect(self, script: Path) -> bool:
-        """Treat `.m` files as MATLAB scripts."""
-        return script.suffix.lower() == ".m"
+        """Treat `.m` scripts and `.slx`/`.mdl` Simulink models as MATLAB inputs.
+
+        Simulink models dispatch through a separate `run_file` branch that
+        wraps `load_system → sim_shim.run → close_system` (see Issue #27 Phase A).
+        """
+        return script.suffix.lower() in (".m", ".slx", ".mdl")
 
     def lint(self, script: Path) -> LintResult:
-        """Run MATLAB-native linting when MATLAB is available."""
+        """Run MATLAB-native linting when MATLAB is available.
+
+        `.m` files go through `checkcode`. `.slx`/`.mdl` models have no
+        equivalent static lint in the driver surface today; we report
+        an info-level diagnostic rather than an error so `sim lint
+        model.slx` exits cleanly.
+        """
+        suffix = script.suffix.lower()
+        if suffix in (".slx", ".mdl"):
+            return LintResult(
+                ok=True,
+                diagnostics=[Diagnostic(
+                    level="info",
+                    message="Simulink model lint is not implemented; "
+                            "skipping static checks",
+                )],
+            )
         if not self.detect(script):
             return LintResult(
                 ok=False,
@@ -268,11 +310,17 @@ class MatlabDriver:
                 message="No MATLAB installation detected on this host",
             )
         top = installs[0]
+        simulink = top.extra.get("simulink_installed")
+        simulink_note = ""
+        if simulink is True:
+            simulink_note = " (Simulink toolbox installed)"
+        elif simulink is False:
+            simulink_note = " (Simulink toolbox not found on disk)"
         return ConnectionInfo(
             solver="matlab",
             version=top.version,
             status="ok",
-            message=f"MATLAB {top.version} at {top.path}",
+            message=f"MATLAB {top.version} at {top.path}{simulink_note}",
             solver_version=top.version,
         )
 
@@ -304,17 +352,57 @@ class MatlabDriver:
         return {}
 
     def run_file(self, script: Path):
-        """Execute a MATLAB `.m` script using MATLAB batch mode."""
+        """Execute a MATLAB `.m` script or a Simulink `.slx`/`.mdl` model.
+
+        `.m` → `matlab -batch "run('<path>')"`.
+        `.slx` / `.mdl` → `addpath(<resources>); load_system('<path>');
+        sim_shim.run('<model>', '{}', '<out_dir>'); close_system('<model>', 0)`.
+        The `+sim_shim/run.m` helper (see Issue #27 Phase B) flattens the
+        resulting `Simulink.SimulationOutput` to Parquet (preferred) or MAT
+        and prints a JSON pointer as the final stdout line, consumed by
+        `parse_output`.
+        """
         matlab = shutil.which("matlab")
         if matlab is None:
             raise RuntimeError("matlab is not available on PATH")
 
-        expr = f"run('{_matlab_string(script.resolve())}')"
+        suffix = script.suffix.lower()
+        if suffix in (".slx", ".mdl"):
+            expr = self._simulink_batch_expr(script)
+        else:
+            expr = f"run('{_matlab_string(script.resolve())}')"
+
         return run_subprocess(
             [matlab, "-batch", expr],
             script=script,
             solver=self.name,
         )
+
+    def _simulink_batch_expr(self, script: Path) -> str:
+        """Build the MATLAB `-batch` expression for a Simulink model file.
+
+        The expression:
+          1. Adds `resources/` to path so the `+sim_shim/` package resolves
+          2. Loads the model from its absolute path
+          3. Invokes `sim_shim.run(<model>, '{}', <out_dir>)`
+          4. Always closes the model (via onCleanup) — even if sim() throws
+
+        The output directory is `<script parent>/.sim/<model>/` so artifacts
+        land beside the source model and out of the way of other runs.
+        """
+        abs_path = script.resolve()
+        model_name = abs_path.stem
+        out_dir = abs_path.parent / ".sim" / model_name
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        resources = Path(__file__).parent / "resources"
+        parts = [
+            f"addpath('{_matlab_string(resources)}')",
+            f"load_system('{_matlab_string(abs_path)}')",
+            f"cleanup__ = onCleanup(@() close_system('{model_name}', 0))",
+            f"sim_shim.run('{model_name}', '{{}}', '{_matlab_string(out_dir)}')",
+        ]
+        return "; ".join(parts)
 
     # ── Persistent session API ───────────────────────────────────────────────
 

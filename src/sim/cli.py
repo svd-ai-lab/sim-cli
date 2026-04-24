@@ -149,6 +149,11 @@ def _render_check(data: dict) -> None:
         click.echo(f"  - {solver} {inst['version']}")
         click.echo(f"      path:    {inst['path']}")
         click.echo(f"      source:  {inst['source']}")
+        simulink = inst.get("extra", {}).get("simulink_installed")
+        if simulink is True:
+            click.echo(f"      simulink: installed")
+        elif simulink is False:
+            click.echo(f"      simulink: not found on disk")
         if profile is None:
             if compat is None:
                 click.echo("      profile: (driver has no compatibility.yaml yet)")
