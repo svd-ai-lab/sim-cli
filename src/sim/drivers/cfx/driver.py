@@ -32,13 +32,15 @@ from sim.driver import ConnectionInfo, Diagnostic, LintResult, RunResult, Solver
 
 log = logging.getLogger(__name__)
 
-# CFX cfx5post -line emits "ERROR" / "INTERNAL" / "WARNING" lines on stdout.
-# stderr is rarely populated (cfx5post buffers everything via its own log).
+# CFX cfx5post -line emits error lines in the form ``-- ERROR -- <msg>``,
+# confirmed by e2e against VMFL015 (both CCL/Perl syntax errors and
+# unrecognised-name errors use this exact prefix). Matching bare ``ERROR``
+# produces false positives on object names like ``/INTERNAL TABLE:...``
+# and on banner text, so anchor the rule to the ``-- ERROR --`` prefix.
+# stderr is rarely populated — cfx5post buffers everything via its own log.
 _CFX_STDOUT_RULES: list[dict] = [
-    {"pattern": r"^\s*ERROR\b", "severity": "error",
+    {"pattern": r"--\s*ERROR\s*--", "severity": "error",
      "code": "cfx.post.error"},
-    {"pattern": r"\bINTERNAL\b", "severity": "error",
-     "code": "cfx.post.internal_error"},
     {"pattern": r"License checkout failed", "severity": "error",
      "code": "cfx.license.checkout_failed"},
 ]

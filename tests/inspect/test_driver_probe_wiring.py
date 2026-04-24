@@ -37,7 +37,7 @@ _DRIVERS = [
     ("sim.drivers.matlab.driver", "MatlabDriver",
      "??? Undefined function 'foo'", "matlab.script.error"),
     ("sim.drivers.cfx.driver", "CfxDriver",
-     "ERROR boundary missing", "cfx.post.error"),
+     "-- ERROR -- boundary missing", "cfx.post.error"),
 ]
 
 
