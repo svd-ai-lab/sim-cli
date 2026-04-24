@@ -41,6 +41,7 @@ tests/execution/logs/
 mylocal.ip
 *.sim
 __pycache__/
+tmp/
 
 # Solver-runtime temp files (Fluent cleanup scripts / COMSOL tetra scratch / misc .tmp)
 /cleanup-fluent-*.bat

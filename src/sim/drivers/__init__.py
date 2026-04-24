@@ -43,6 +43,7 @@ from sim.drivers.scikitrf import ScikitRfDriver
 from sim.drivers.pandapower import PandapowerDriver
 from sim.drivers.paraview import ParaViewDriver
 from sim.drivers.hypermesh import HyperMeshDriver
+from sim.drivers.ltspice import LTspiceDriver
 
 DRIVERS: list[DriverProtocol] = [
     PyBaMMLDriver(),
@@ -86,6 +87,7 @@ DRIVERS: list[DriverProtocol] = [
     PandapowerDriver(),
     ParaViewDriver(),
     HyperMeshDriver(),
+    LTspiceDriver(),
 ]
 
 

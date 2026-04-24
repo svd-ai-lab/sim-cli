@@ -1,0 +1,5 @@
+* Netlist with no analysis directive
+V1 in 0 1
+R1 in out 1k
+C1 out 0 100n
+.end
