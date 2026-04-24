@@ -12,6 +12,21 @@ changes at milestone boundaries.
 
 ### Added
 
+- **`sim check` without a solver aggregates across all drivers.** Calling
+  `sim check` with no solver argument (or with the explicit `--all` flag)
+  now enumerates every registered driver, calls `safe_detect_installed()`
+  on each, and returns one row per detected installation plus a
+  `not_installed` stub for drivers with nothing on the host. JSON output
+  conforms to `{"ok": true, "data": {"solvers": [...]}}` where each row
+  has `name` + `status ∈ {"ok","not_installed","error"}`; installed
+  rows inherit the existing `SolverInstall.to_dict()` shape. Human
+  output shows a one-line summary + installed table + error list +
+  not-installed driver names. Ordering is alphabetical by driver name
+  with version-descending for multiple installs of the same driver.
+  Enables sim-benchmark's solver-neutral prompts to discover the
+  environment in one call instead of 42 per-solver probes. Existing
+  `sim check <solver>` behaviour is unchanged.
+
 - **Probe observability — 41/41 driver coverage + fact-only contract.** Every driver in the registry now attaches structured `diagnostics` + `artifacts` lists to every `run()` result. Coverage:
   - **10 session drivers** (`fluent`, `comsol`, `flotherm`, `workbench`, `mechanical`, `mapdl`, `ls_dyna`, `ansa`, `matlab`, `cfx`) — each `__init__` sets `self.probes = _default_<solver>_probes()`; the execute-path is split into `_dispatch(code, label)` (raw subprocess behaviour, returns a dict) wrapped by `run(code, label)` (builds an `InspectCtx`, calls `collect_diagnostics(self.probes, ctx)`, attaches outputs).
   - **31 one-shot drivers** (pybamm, openfoam, abaqus, starccm, icem, isaac, newton, calculix, gmsh, su2, lammps, scikit_fem, elmer, meshio, pyvista, pymfem, openseespy, sfepy, cantera, openmdao, fipy, pymoo, pyomo, simpy, trimesh, devito, coolprop, scikit_rf, pandapower, paraview, hypermesh) — covered uniformly via `runner.execute_script`, which calls `_attach_probes(result, solver)` → `generic_probes()` against the completed `RunResult`.

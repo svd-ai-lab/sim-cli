@@ -167,11 +167,83 @@ def _render_check(data: dict) -> None:
         click.echo(f"  available profiles: {', '.join(p['name'] for p in compat['profiles'])}")
 
 
+def _check_all_local() -> dict:
+    """Aggregate safe_detect_installed() across every registered driver.
+
+    Returns a flat list of solver entries. Installed drivers emit one row
+    per detected installation (using SolverInstall.to_dict() shape, plus
+    status="ok"). Drivers with no installation emit a single stub row
+    with status="not_installed". Driver errors are captured as status="error".
+    """
+    from sim.compat import safe_detect_installed
+    from sim.drivers import DRIVERS
+
+    rows: list[dict] = []
+    for driver in DRIVERS:
+        name = getattr(driver, "name", driver.__class__.__name__)
+        try:
+            installs = safe_detect_installed(driver)
+        except Exception as e:  # should not happen — safe_* already swallows
+            rows.append({"name": name, "status": "error", "message": f"{type(e).__name__}: {e}"})
+            continue
+        if not installs:
+            rows.append({"name": name, "status": "not_installed"})
+            continue
+        for inst in installs:
+            entry = inst.to_dict()
+            entry["status"] = "ok"
+            rows.append(entry)
+
+    # Stable ordering: alphabetical by driver name, then version descending.
+    rows.sort(key=lambda r: (r["name"], _version_sort_key(r.get("version"))))
+    return {"ok": True, "data": {"solvers": rows}}
+
+
+def _version_sort_key(v: str | None) -> tuple:
+    """Sort key that places higher versions first (for same driver name)."""
+    if not v:
+        return (1, "")  # unversioned / not_installed entries go last
+    return (0, tuple(-int(p) if p.isdigit() else p for p in v.replace("v", "").split(".")))
+
+
+def _render_check_all(data: dict) -> None:
+    """Pretty-print the aggregated `sim check` output."""
+    rows = data.get("solvers", [])
+    installed = [r for r in rows if r.get("status") == "ok"]
+    missing = [r for r in rows if r.get("status") == "not_installed"]
+    errored = [r for r in rows if r.get("status") == "error"]
+
+    click.echo(f"[sim] check: scanned {len(set(r['name'] for r in rows))} drivers")
+    click.echo(f"  installed: {len(installed)}  not_installed: {len(missing)}  error: {len(errored)}")
+    click.echo()
+    if installed:
+        click.echo("  installed:")
+        for r in installed:
+            ver = r.get("version", "?")
+            src = r.get("source", "")
+            path = r.get("path", "")
+            click.echo(f"    {r['name']:<14} {ver:<12} {src:<28} {path}")
+        click.echo()
+    if errored:
+        click.echo("  errors:")
+        for r in errored:
+            click.echo(f"    {r['name']:<14} {r.get('message', '')}")
+        click.echo()
+    if missing:
+        click.echo(f"  not installed ({len(missing)}): {', '.join(r['name'] for r in missing)}")
+
+
 @main.command()
-@click.argument("solver")
+@click.argument("solver", required=False)
+@click.option("--all", "check_all", is_flag=True, default=False,
+              help="Explicitly aggregate across all drivers. Same as passing no solver argument.")
 @click.pass_context
-def check(ctx, solver):
+def check(ctx, solver, check_all):
     """Detect installed versions of a solver and resolve their profile.
+
+    With SOLVER given, checks that one driver (existing behaviour).
+    With no SOLVER (or --all), enumerates every registered driver and
+    returns the aggregated installation list.
 
     By default scans THIS host. With `--host <ip>` (top-level option),
     asks the remote sim serve to scan its own host.
@@ -179,6 +251,18 @@ def check(ctx, solver):
     host = ctx.obj["host"]
     port = ctx.obj["port"]
     is_local = _is_local_host(host)
+
+    if solver is None or check_all:
+        if not is_local:
+            click.echo("[sim] check --all: remote aggregation not yet implemented; "
+                       "pass a specific solver name to query a remote host.", err=True)
+            sys.exit(2)
+        resp = _check_all_local()
+        if ctx.obj["json"]:
+            click.echo(json_mod.dumps(resp, indent=2, default=str))
+            sys.exit(0 if resp.get("ok") else 1)
+        _render_check_all(resp["data"])
+        sys.exit(0)
 
     if is_local:
         resp = _check_local(solver)
