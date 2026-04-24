@@ -1,4 +1,11 @@
-"""Tier 1 protocol-compliance tests for the LTspice driver."""
+"""Protocol-compliance tests for the LTspice driver.
+
+The driver itself is now a thin adapter over ``sim_ltspice``; heavy
+file-format testing (log parsing, raw header parsing, install discovery)
+lives in the sim-ltspice repo. These tests exercise only the adapter
+surface that sim-cli is responsible for: `detect`, `lint`, `connect`,
+`parse_output`, and the glue in `run_file`.
+"""
 from __future__ import annotations
 
 from pathlib import Path
@@ -7,7 +14,6 @@ import pytest
 
 from sim.driver import SolverInstall
 from sim.drivers.ltspice import LTspiceDriver
-from sim.drivers.ltspice.driver import _parse_log, _read_log
 
 FIXTURES = Path(__file__).parent.parent.parent / "fixtures"
 
@@ -89,6 +95,29 @@ class TestConnect:
         assert info.version == "17.2.4"
 
 
+class TestDetectInstalled:
+    def test_maps_sim_ltspice_install_to_solver(self, monkeypatch):
+        """detect_installed delegates to sim_ltspice.find_ltspice and maps the
+        Install dataclass to sim-cli's SolverInstall shape."""
+        from sim_ltspice.install import Install
+
+        fake = Install(
+            exe=Path("/fake/LTspice"),
+            version="26.0.1",
+            path="/fake",
+            source="env:SIM_LTSPICE_EXE",
+        )
+        monkeypatch.setattr(
+            "sim.drivers.ltspice.driver.find_ltspice", lambda: [fake]
+        )
+        [inst] = LTspiceDriver().detect_installed()
+        assert isinstance(inst, SolverInstall)
+        assert inst.name == "ltspice"
+        assert inst.version == "26.0.1"
+        assert inst.source == "env:SIM_LTSPICE_EXE"
+        assert inst.extra["exe"] == "/fake/LTspice"
+
+
 class TestParseOutput:
     def setup_method(self):
         self.driver = LTspiceDriver()
@@ -100,87 +129,6 @@ class TestParseOutput:
 
     def test_no_json(self):
         assert self.driver.parse_output("nope") == {}
-
-
-class TestLogParser:
-    """_parse_log is the core of output extraction — cover it directly."""
-
-    def test_measure_with_from_to(self):
-        log = (
-            "solver = Normal\n"
-            "vout_pk: MAX(v(out))=0.999955 FROM 0 TO 0.005\n"
-            "Total elapsed time: 0.003 seconds.\n"
-        )
-        out = _parse_log(log)
-        assert out["measures"]["vout_pk"]["value"] == pytest.approx(0.999955)
-        assert out["measures"]["vout_pk"]["from"] == 0.0
-        assert out["measures"]["vout_pk"]["to"] == 0.005
-        assert out["elapsed_s"] == pytest.approx(0.003)
-        assert out["errors"] == []
-        assert out["warnings"] == []
-
-    def test_measure_with_suffix_unit(self):
-        log = "gain: V(out)/V(in)=2.5V\n"
-        out = _parse_log(log)
-        # regex strips trailing letters before float conversion
-        assert out["measures"]["gain"]["value"] == 2.5
-
-    def test_errors_detected(self):
-        log = (
-            "Error: convergence failed at step 1\n"
-            "Singular matrix\n"
-            "Total elapsed time: 0.001 seconds.\n"
-        )
-        out = _parse_log(log)
-        assert len(out["errors"]) >= 1
-        assert any("conv" in e.lower() or "singular" in e.lower() for e in out["errors"])
-
-    def test_warnings_detected(self):
-        log = "WARNING: node N001 floating\nOK otherwise\n"
-        out = _parse_log(log)
-        assert len(out["warnings"]) == 1
-        assert "floating" in out["warnings"][0]
-
-    def test_windows_log_with_drive_letter_path(self):
-        """Windows LTspice 26 emits 'Files loaded:\\n<C:\\path>' — don't let
-        the `C:` drive letter masquerade as a measure name."""
-        log = (
-            "LTspice 26.0.1 for Windows\n"
-            "Files loaded:\n"
-            "C:\\Users\\jiwei\\tmp\\rc.net\n"
-            "\n"
-            "vout_pk: MAX(V(out))=0.999954938889 FROM 0 TO 0.005\n"
-            "Total elapsed time: 0.061 seconds.\n"
-        )
-        out = _parse_log(log)
-        assert list(out["measures"].keys()) == ["vout_pk"]
-        assert out["measures"]["vout_pk"]["value"] == pytest.approx(0.999955, rel=1e-4)
-        assert out["measures"]["vout_pk"]["expr"] == "MAX(V(out))"
-
-
-class TestReadLog:
-    """Both encodings seen in the wild — macOS 17.x is UTF-16 LE, Windows 26.x is UTF-8."""
-
-    def test_utf16_le_no_bom(self, tmp_path):
-        log = tmp_path / "mac.log"
-        text = "vout_pk: MAX(v(out))=0.999 FROM 0 TO 0.005\n"
-        log.write_bytes(text.encode("utf-16-le"))
-        assert "vout_pk" in _read_log(log)
-
-    def test_utf8_windows(self, tmp_path):
-        log = tmp_path / "win.log"
-        log.write_text(
-            "LTspice 26.0.1 for Windows\n"
-            "vout_pk: MAX(V(out))=0.999 FROM 0 TO 0.005\n",
-            encoding="utf-8",
-        )
-        assert "vout_pk" in _read_log(log)
-
-    def test_utf8_bom(self, tmp_path):
-        log = tmp_path / "bom.log"
-        log.write_bytes("\ufeffvout_pk: MAX(v(out))=1.0\n".encode("utf-8"))
-        out = _read_log(log)
-        assert out.startswith("vout_pk"), out
 
 
 class TestRunFile:
@@ -204,3 +152,83 @@ class TestRunFile:
         monkeypatch.setattr(d, "detect_installed", lambda: [])
         with pytest.raises(RuntimeError, match="(?i)ltspice"):
             d.run_file(FIXTURES / "ltspice_good.net")
+
+    def test_folds_sim_ltspice_result_into_json_summary(self, monkeypatch):
+        """run_file translates sim_ltspice.RunResult into a sim-cli RunResult
+        with the JSON summary appended to stdout."""
+        from sim_ltspice import RunResult as LtRunResult
+        from sim_ltspice.log import LogResult, Measure
+
+        d = LTspiceDriver()
+        monkeypatch.setattr(
+            d, "detect_installed",
+            lambda: [SolverInstall(
+                name="ltspice", version="17.2.4", path="/x", source="test",
+                extra={"exe": "/x/LTspice"},
+            )],
+        )
+
+        script = FIXTURES / "ltspice_good.net"
+        log_path = script.with_suffix(".log")
+        raw_path = script.with_suffix(".raw")
+
+        fake_log = LogResult(
+            measures={
+                "vout_pk": Measure(expr="MAX(V(out))", value=0.999955,
+                                   window_from=0.0, window_to=0.005)
+            },
+            errors=[],
+            warnings=["WARNING: node N001 floating"],
+            elapsed_s=0.003,
+        )
+        fake_lt = LtRunResult(
+            exit_code=0, stdout="", stderr="",
+            duration_s=0.12, script=script, started_at="",
+            log=fake_log,
+            log_path=log_path, raw_path=raw_path,
+            raw_traces=["time", "V(out)", "V(in)"],
+        )
+        monkeypatch.setattr(
+            "sim.drivers.ltspice.driver.run_net", lambda _s: fake_lt
+        )
+
+        result = d.run_file(script)
+        assert result.exit_code == 0
+        parsed = d.parse_output(result.stdout)
+        assert parsed["measures"]["vout_pk"]["value"] == pytest.approx(0.999955)
+        assert parsed["measures"]["vout_pk"]["from"] == 0.0
+        assert parsed["measures"]["vout_pk"]["to"] == 0.005
+        assert parsed["traces"] == ["time", "V(out)", "V(in)"]
+        assert parsed["warnings"] == ["WARNING: node N001 floating"]
+        assert parsed["log"] == str(log_path)
+        assert parsed["raw"] == str(raw_path)
+
+    def test_log_errors_promote_exit_code(self, monkeypatch):
+        """Errors found in the .log file force exit_code != 0 even when
+        LTspice itself exited cleanly."""
+        from sim_ltspice import RunResult as LtRunResult
+        from sim_ltspice.log import LogResult
+
+        d = LTspiceDriver()
+        monkeypatch.setattr(
+            d, "detect_installed",
+            lambda: [SolverInstall(
+                name="ltspice", version="17.2.4", path="/x", source="test",
+                extra={"exe": "/x/LTspice"},
+            )],
+        )
+        fake_log = LogResult(
+            errors=["Error: convergence failed"],
+        )
+        script = FIXTURES / "ltspice_good.net"
+        fake_lt = LtRunResult(
+            exit_code=0, stdout="", stderr="",
+            duration_s=0.01, script=script, started_at="",
+            log=fake_log, log_path=None, raw_path=None, raw_traces=[],
+        )
+        monkeypatch.setattr(
+            "sim.drivers.ltspice.driver.run_net", lambda _s: fake_lt
+        )
+        result = d.run_file(script)
+        assert result.exit_code == 1
+        assert any("convergence" in e.lower() for e in result.errors)
