@@ -8,16 +8,9 @@ from pathlib import Path
 
 import click
 
-from sim import __version__
-from sim.driver import RunResult
+from sim import __version__, config as _cfg, history as _history
 from sim.drivers import get_driver
 from sim.runner import execute_script
-from sim.store import RunStore
-
-
-def _get_store() -> RunStore:
-    root = os.environ.get("SIM_DIR", str(Path.cwd() / ".sim"))
-    return RunStore(Path(root))
 
 
 # ── Top-level group ──────────────────────────────────────────────────────────
@@ -25,17 +18,23 @@ def _get_store() -> RunStore:
 @click.group()
 @click.version_option(version=__version__)
 @click.option("--json", "output_json", is_flag=True, help="JSON output for all commands.")
-@click.option("--host", envvar="SIM_HOST", default=None,
-              help="Remote sim-server host (e.g. 100.90.110.79). Default: localhost (auto-start).")
-@click.option("--port", envvar="SIM_PORT", default=7600, type=int,
-              help="sim-server port (default: 7600).")
+@click.option("--host", default=None,
+              help="Remote sim-server host (e.g. 100.90.110.79). "
+                   "Default: SIM_HOST env > config [server].host > localhost.")
+@click.option("--port", default=None, type=int,
+              help="sim-server port. Default: SIM_PORT env > config [server].port > 7600.")
 @click.pass_context
 def main(ctx, output_json, host, port):
     """sim — unified CLI for LLM agents to control CAD/CAE simulation software."""
     ctx.ensure_object(dict)
     ctx.obj["json"] = output_json
-    ctx.obj["host"] = host or "localhost"
-    ctx.obj["port"] = port
+    # Flag > env > config > default. --host on the CLI wins because it is
+    # the most immediate caller intent. For the host side, "localhost" is
+    # the conventional default that triggers auto-start behavior in
+    # session.py; don't change that when config says otherwise unless the
+    # user explicitly asked.
+    ctx.obj["host"] = host or os.environ.get("SIM_HOST") or "localhost"
+    ctx.obj["port"] = port if port is not None else _cfg.resolve_server_port()
 
 
 # ── serve ────────────────────────────────────────────────────────────────────
@@ -325,12 +324,20 @@ def run(ctx, script, solver):
         sys.exit(1)
 
     result = execute_script(Path(script), solver=solver, driver=driver)
-
-    parsed = {}
     parsed = driver.parse_output(result.stdout)
 
-    store = _get_store()
-    run_id = store.save(result, parsed_output=parsed)
+    run_id = _history.append({
+        "cwd": str(Path.cwd()),
+        "solver": solver,
+        "session_id": "",   # one-shot runs have no session
+        "kind": "run",
+        "label": Path(script).name,
+        "script": str(script),
+        "ok": result.exit_code == 0,
+        "duration_ms": int(result.duration_s * 1000),
+        "error": (result.stderr or None) if result.exit_code != 0 else None,
+        "parsed_output": parsed,
+    })
 
     if ctx.obj["json"]:
         data = result.to_dict()
@@ -575,23 +582,103 @@ def screenshot(ctx, output):
     click.echo(f"[sim] screenshot saved: {out_path} ({w}x{h})")
 
 
+# ── config ───────────────────────────────────────────────────────────────────
+
+
+@main.group()
+def config():
+    """Inspect and manage the two-tier sim config.
+
+    Resolution order: env var > .sim/config.toml > ~/.sim/config.toml > default.
+    With no config files present, behavior is unchanged from pre-config sim.
+    """
+
+
+@config.command("path")
+@click.pass_context
+def config_path(ctx):
+    """Print the paths of both config files (whether they exist or not)."""
+    paths = {
+        "global": str(_cfg.global_config_path()),
+        "project": str(_cfg.project_config_path()),
+        "global_exists": _cfg.global_config_path().is_file(),
+        "project_exists": _cfg.project_config_path().is_file(),
+        "history": str(_cfg.history_path()),
+    }
+    if ctx.obj["json"]:
+        click.echo(json_mod.dumps(paths, indent=2))
+    else:
+        mark = lambda b: "(exists)" if b else "(absent)"  # noqa: E731
+        click.echo(f"  global:  {paths['global']}  {mark(paths['global_exists'])}")
+        click.echo(f"  project: {paths['project']}  {mark(paths['project_exists'])}")
+        click.echo(f"  history: {paths['history']}")
+
+
+@config.command("show")
+@click.pass_context
+def config_show(ctx):
+    """Print the merged (effective) config."""
+    _cfg.clear_cache()
+    merged = _cfg.load_config()
+    if ctx.obj["json"]:
+        click.echo(json_mod.dumps({
+            "merged": merged,
+            "server_port": _cfg.resolve_server_port(),
+            "server_host": _cfg.resolve_server_host(),
+        }, indent=2))
+    else:
+        click.echo(f"  server.host: {_cfg.resolve_server_host()}")
+        click.echo(f"  server.port: {_cfg.resolve_server_port()}")
+        solvers = _cfg.list_solver_pins()
+        if solvers:
+            click.echo("  solver pins:")
+            for name, pin in solvers.items():
+                parts = [f"{k}={v!r}" for k, v in pin.items()]
+                click.echo(f"    {name}: {', '.join(parts)}")
+        else:
+            click.echo("  solver pins: (none)")
+
+
+@config.command("init")
+@click.option("--scope", default="project", type=click.Choice(["project", "global"]),
+              help="Which config file to create (default: project).")
+@click.pass_context
+def config_init(ctx, scope):
+    """Create a stub config file. Safe: does not overwrite existing files."""
+    path = _cfg.init_config_file(scope)
+    if ctx.obj["json"]:
+        click.echo(json_mod.dumps({"ok": True, "path": str(path), "scope": scope}))
+    else:
+        click.echo(f"[sim] config: wrote {scope} stub at {path}")
+
+
 # ── logs (run history) ───────────────────────────────────────────────────────
 
 @main.command()
 @click.argument("target", required=False)
-@click.option("--field", help="Extract a specific field from run output.")
+@click.option("--field", help="Extract a specific field from run parsed output.")
+@click.option("--solver", "filter_solver", help="Only show runs of this solver.")
+@click.option("--session", "filter_session", help="Only show runs of this session id.")
+@click.option("--all", "show_all", is_flag=True,
+              help="Show runs across all projects (default: current cwd only).")
+@click.option("--limit", default=50, type=int, help="Max rows to show (default 50).")
 @click.pass_context
-def logs(ctx, target, field):
-    """Browse run history. Optionally show a specific run: sim logs last"""
-    store = _get_store()
+def logs(ctx, target, field, filter_solver, filter_session, show_all, limit):
+    """Browse global run history at ~/.sim/history.jsonl.
+
+    By default lists runs recorded from the current project (cwd filter).
+    Pass --all for a global view, or filter with --solver / --session.
+    Use `sim logs last` to see the most recent run; `sim logs <run_id>`
+    for a specific one.
+    """
+    cwd_filter = None if show_all else str(Path.cwd())
 
     if target:
-        try:
-            record = store.get(target)
-        except FileNotFoundError as e:
-            click.echo(f"[sim] error: {e}", err=True)
+        record = _history.get_by_id(target, cwd=cwd_filter)
+        if record is None:
+            click.echo(f"[sim] error: no run '{target}' found", err=True)
             sys.exit(1)
-        parsed = record.get("parsed_output", {})
+        parsed = record.get("parsed_output") or {}
         if field:
             if field not in parsed:
                 click.echo(f"[sim] error: field '{field}' not found", err=True)
@@ -606,20 +693,28 @@ def logs(ctx, target, field):
             else:
                 for k, v in parsed.items():
                     click.echo(f"  {k}: {v}")
-    else:
-        runs = store.list()
-        if not runs:
-            if ctx.obj["json"]:
-                click.echo("[]")
-            else:
-                click.echo("[sim] no runs recorded")
-            return
+        return
+
+    runs = _history.read(
+        cwd=cwd_filter,
+        solver=filter_solver,
+        session_id=filter_session,
+        limit=limit,
+    )
+    if not runs:
         if ctx.obj["json"]:
-            click.echo(json_mod.dumps(runs, indent=2))
+            click.echo("[]")
         else:
-            for r in runs:
-                status = "ok" if r.get("exit_code", 1) == 0 else "fail"
-                click.echo(
-                    f"  #{r.get('id', '?')}  {r.get('timestamp', '?')[:19]}  "
-                    f"{r.get('solver', '?')}  {status}  {r.get('script', '?')}"
-                )
+            click.echo("[sim] no runs recorded")
+        return
+    if ctx.obj["json"]:
+        click.echo(json_mod.dumps(runs, indent=2))
+    else:
+        for r in runs:
+            status = "ok" if r.get("ok") else "fail"
+            ts = (r.get("ts") or "")[:19]
+            rid = r.get("run_id", "?")
+            solver = r.get("solver") or "-"
+            kind = r.get("kind", "-")
+            label = r.get("script") or r.get("label") or ""
+            click.echo(f"  #{rid}  {ts}  {solver:<10} {kind:<5} {status:<4} {label}")

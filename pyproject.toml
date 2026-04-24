@@ -18,6 +18,7 @@ dependencies = [
     "Pillow>=10", # sim screenshot endpoint uses PIL.ImageGrab
     "lxml>=5.0", # XSD validation for FloSCRIPT lint
     "sim-ltspice>=0.2", # LTspice file formats + runtime — sim-cli's LTspice driver delegates here
+    "tomli>=2.0; python_version<'3.11'", # TOML parser for config.py; stdlib tomllib is 3.11+
 ]
 
 [project.optional-dependencies]
