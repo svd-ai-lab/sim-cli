@@ -43,7 +43,9 @@ sim check fluent                      # solver availability
 sim lint script.py                    # validate before running
 ```
 
-Environment variables: `SIM_HOST`, `SIM_PORT` (CLI client), `SIM_DIR` (run history dir, default `.sim/`).
+Environment variables: `SIM_HOST`, `SIM_PORT` (CLI client, also `[server]` in config), `SIM_HOME` (global config + history dir, default `~/.sim/`), `SIM_DIR` (project dir, default `./.sim/`).
+
+Config files (issue #5): `~/.sim/config.toml` (global) + `.sim/config.toml` (project). Resolution order `env > project > global > default`. With no config files present, behavior is unchanged from pre-config sim. Run `sim config path | show | init` to manage. See `docs/architecture/multi-session-and-config.md` for the full schema.
 
 ## Architecture
 
@@ -111,8 +113,8 @@ LS-DYNA is a special case: the *solver* is one-shot (no live process to connect 
 ### Execution pipeline — one-shot (`run`)
 1. `cli.run` → `runner.execute_script(script, solver, driver)` → subprocess, captures stdout/stderr/duration
 2. `driver.parse_output(stdout)` → extract structured fields
-3. `store.RunStore.save(result, parsed_output)` → write `.sim/runs/NNN.json`, return numeric `run_id`
-4. `sim logs <id>` reads back via `RunStore.get`
+3. `history.append({cwd, solver, session_id, run_id, ...})` → single jsonl line in `~/.sim/history.jsonl`
+4. `sim logs <id>` reads back via `history.get_by_id`; `sim logs --solver X --all` filters
 
 ### Execution pipeline — persistent session (`exec`)
 1. `cli.connect` → HTTP `POST /connect` to server → `driver.launch(...)` → `_state.session` populated
@@ -190,7 +192,7 @@ Tests that need a real solver are gated by import-availability flags (e.g. `HAS_
 
 ## Notes
 
-- Run storage lives in `.sim/runs/` (overridable via `SIM_DIR`); git-ignored
+- Global run history lives in `~/.sim/history.jsonl` (append-only; override dir via `SIM_HOME`); git-ignored
 - The server holds **one** session at a time (single global `_state`) — multi-tenant is not yet implemented
 - Project uses `uv` for dependency locking (`uv.lock`)
 - Companion knowledge / skills / workflows live in the sibling `sim-skills/` tree, one folder per solver
