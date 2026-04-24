@@ -101,8 +101,9 @@ class TestDetectInstalled:
         Install dataclass to sim-cli's SolverInstall shape."""
         from sim_ltspice.install import Install
 
+        fake_exe = Path("/fake/LTspice")
         fake = Install(
-            exe=Path("/fake/LTspice"),
+            exe=fake_exe,
             version="26.0.1",
             path="/fake",
             source="env:SIM_LTSPICE_EXE",
@@ -115,7 +116,8 @@ class TestDetectInstalled:
         assert inst.name == "ltspice"
         assert inst.version == "26.0.1"
         assert inst.source == "env:SIM_LTSPICE_EXE"
-        assert inst.extra["exe"] == "/fake/LTspice"
+        # str(Path(...)) emits OS-native separators — compare portably
+        assert inst.extra["exe"] == str(fake_exe)
 
 
 class TestParseOutput:
