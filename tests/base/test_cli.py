@@ -102,7 +102,33 @@ def test_run_failure_lists_workspace_delta(tmp_path, monkeypatch):
     assert result.exit_code != 0
     assert "[sim] workspace files written" in result.output
     assert "solver.log" in result.output
-    # follow-up hint section should mention the largest file
+    assert "for more detail" in result.output
+
+
+def test_run_success_also_lists_workspace_delta(tmp_path, monkeypatch):
+    """On SUCCESS the agent still needs to see what was written —
+    otherwise it has to `ls` blindly to find time directories,
+    log files, postProcessing outputs. Gating workspace delta on
+    failure forces successful agents into guessing loops."""
+    monkeypatch.setenv("SIM_HOME", str(tmp_path / "sim_home"))
+    monkeypatch.chdir(tmp_path)
+    script = tmp_path / "writes_then_succeeds.py"
+    script.write_text(
+        "import os; os.makedirs('postProcessing/sample/100', exist_ok=True)\n"
+        "open('postProcessing/sample/100/U.csv', 'w').write('0.5,-0.21\\n')\n"
+        "open('log.simpleFoam', 'w').write('Final residual = 1e-6\\n')\n"
+        "print('done')\n"
+    )
+    runner = CliRunner()
+    result = runner.invoke(main, ["run", "--solver", "pybamm", str(script)])
+    assert result.exit_code == 0
+    assert "[sim] status: converged" in result.output
+    # Workspace delta MUST appear on success — that's the whole point of
+    # the fix. Without it the agent doesn't know where the solver wrote.
+    assert "[sim] workspace files written" in result.output
+    assert "log.simpleFoam" in result.output
+    assert "postProcessing/sample/100/U.csv" in result.output
+    # Drill-in hints also fire on success.
     assert "for more detail" in result.output
 
 

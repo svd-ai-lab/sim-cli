@@ -368,10 +368,17 @@ def run(ctx, script, solver):
         click.echo(f"[sim] run:    {script} via {solver}")
         click.echo(f"[sim] status: {status} ({result.duration_s}s)")
         click.echo(f"[sim] log:    saved as #{run_id}")
+        # Workspace delta: tell the agent which files this run produced
+        # (mesh, time directories, log.simpleFoam, postProcessing, …).
+        # ALWAYS print, not just on failure: agents need this to know
+        # where to look for KPIs even when the run succeeded. Gating it
+        # on failure forces successful agents to guess and `ls` blindly.
+        _print_workspace_delta(result.workspace_delta)
         if result.exit_code != 0:
-            # Show tail output so the agent can debug without a separate
-            # `sim logs` round-trip. CFD scripts routinely print errors via
-            # `print(...)` rather than to stderr — surface stdout tail too.
+            # Stdout/stderr tail is debugging info; surfaces inline only
+            # on failure so successful runs don't dump 10K log lines
+            # into the agent's context. Full content is in the raw files
+            # listed by _print_followup_hints below either way.
             tail_lines = 20
             if result.stderr:
                 stderr_tail = "\n".join(result.stderr.splitlines()[-tail_lines:])
@@ -379,15 +386,13 @@ def run(ctx, script, solver):
             if result.stdout:
                 stdout_tail = "\n".join(result.stdout.splitlines()[-tail_lines:])
                 click.echo(f"[sim] stdout (last {tail_lines} lines):\n{stdout_tail}")
-            # Workspace delta: tell the agent which files the solver
-            # actually wrote (e.g. log.simpleFoam, log.checkMesh, mesh
-            # outputs) — those typically hold the real diagnostic detail
-            # and live entirely outside sim's stdout/stderr capture.
-            _print_workspace_delta(result.workspace_delta)
-            # Hint section: tell the agent how to fetch full content
-            # without remembering CLI flags.
-            _print_followup_hints(run_id, stdout_path, stderr_path,
-                                  result.workspace_delta)
+        # Drill-in hints: where to find the full run record + any
+        # workspace files that look like solver logs. ALWAYS print:
+        # successful runs need to point the agent at log.simpleFoam
+        # (for KPI extraction) just as much as failed ones do (for
+        # debugging). Same hint, different motivation.
+        _print_followup_hints(run_id, stdout_path, stderr_path,
+                              result.workspace_delta)
     sys.exit(result.exit_code)
 
 
