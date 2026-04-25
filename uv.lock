@@ -1912,8 +1912,21 @@ wheels = [
 ]
 
 [[package]]
-name = "sim-cli"
+name = "sim-ltspice"
 version = "0.2.0"
+source = { registry = "https://mirrors.ustc.edu.cn/pypi/simple" }
+dependencies = [
+    { name = "numpy", version = "2.2.6", source = { registry = "https://mirrors.ustc.edu.cn/pypi/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "numpy", version = "2.4.3", source = { registry = "https://mirrors.ustc.edu.cn/pypi/simple" }, marker = "python_full_version >= '3.11'" },
+]
+sdist = { url = "https://mirrors.ustc.edu.cn/pypi/packages/5f/52/73416f7afa64c579f6c41e813746219dd5f882f811fc322eac493cb6cf63/sim_ltspice-0.2.0.tar.gz", hash = "sha256:868dbe4f45bb3c292e1698943c6f2de1ac4ffe8c3b642864b41789b70f0475b1", size = 171494 }
+wheels = [
+    { url = "https://mirrors.ustc.edu.cn/pypi/packages/06/34/8c5630f602c682ec5a3fad07ae794a882652fcb5f1f148dfc909661d241f/sim_ltspice-0.2.0-py3-none-any.whl", hash = "sha256:14d5c459ec246546005d82473a82a9c7c2d1db3e14a6c5d89769056ffc8424da", size = 42838 },
+]
+
+[[package]]
+name = "sim-runtime"
+version = "0.2.2"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
@@ -1964,19 +1977,6 @@ requires-dist = [
     { name = "uvicorn", specifier = ">=0.34" },
 ]
 provides-extras = ["fluent", "matlab", "comsol", "pybamm", "dev"]
-
-[[package]]
-name = "sim-ltspice"
-version = "0.2.0"
-source = { registry = "https://mirrors.ustc.edu.cn/pypi/simple" }
-dependencies = [
-    { name = "numpy", version = "2.2.6", source = { registry = "https://mirrors.ustc.edu.cn/pypi/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "numpy", version = "2.4.3", source = { registry = "https://mirrors.ustc.edu.cn/pypi/simple" }, marker = "python_full_version >= '3.11'" },
-]
-sdist = { url = "https://mirrors.ustc.edu.cn/pypi/packages/5f/52/73416f7afa64c579f6c41e813746219dd5f882f811fc322eac493cb6cf63/sim_ltspice-0.2.0.tar.gz", hash = "sha256:868dbe4f45bb3c292e1698943c6f2de1ac4ffe8c3b642864b41789b70f0475b1", size = 171494 }
-wheels = [
-    { url = "https://mirrors.ustc.edu.cn/pypi/packages/06/34/8c5630f602c682ec5a3fad07ae794a882652fcb5f1f148dfc909661d241f/sim_ltspice-0.2.0-py3-none-any.whl", hash = "sha256:14d5c459ec246546005d82473a82a9c7c2d1db3e14a6c5d89769056ffc8424da", size = 42838 },
-]
 
 [[package]]
 name = "six"

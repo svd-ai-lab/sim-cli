@@ -1,10 +1,32 @@
 [project]
 name = "sim-runtime"
-version = "0.2.2"
+version = "0.2.3"
 description = "Make every engineering tool agent-native — a CLI runtime that lets LLM agents launch, drive, and observe CAD/CAE software"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
+authors = [{ name = "Weiqi Ji", email = "jiweiqi10@gmail.com" }]
+keywords = [
+    "simulation", "cae", "cad", "cfd", "fea",
+    "llm", "agent", "agentic",
+    "ansys", "fluent", "mechanical", "mapdl", "workbench",
+    "comsol", "matlab", "openfoam", "flotherm", "pybamm",
+    "abaqus", "starccm", "ls-dyna", "ltspice",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+]
+
 # sim-cli runs every solver in its own process; the SDK (pyfluent, mph,
 # matlabengine, …) is installed alongside sim-cli into the same env. Pick
 # the SDK that matches the solver version you actually have. compat.yaml
@@ -33,6 +55,13 @@ matlab  = ["matlabengine"]
 comsol  = ["mph>=1.2,<2.0"]
 pybamm  = ["pybamm>=24.0"]
 dev     = ["pytest>=8.0", "ruff>=0.4"]
+
+[project.urls]
+Homepage      = "https://github.com/svd-ai-lab/sim-cli"
+Repository    = "https://github.com/svd-ai-lab/sim-cli"
+Issues        = "https://github.com/svd-ai-lab/sim-cli/issues"
+Documentation = "https://github.com/svd-ai-lab/sim-cli#readme"
+Changelog     = "https://github.com/svd-ai-lab/sim-cli/blob/main/CHANGELOG.md"
 
 [project.scripts]
 sim = "sim.cli:main"
