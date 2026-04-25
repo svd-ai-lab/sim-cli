@@ -79,6 +79,8 @@ Vollständiges Driver-Protokoll, Server-Endpunkte und Execution-Pipeline siehe [
 
 ## 🚀 Schnellstart
 
+> **Namen auf einen Blick:** Repo `svd-ai-lab/sim-cli` · PyPI-Distribution `sim-runtime` · CLI-Befehl `sim` · Import `import sim`. Ja, drei verschiedene Strings — der Repo-Name ist älter als der erste PyPI-Release; der Rest folgt Python-Paketierungs-Konvention.
+
 ```bash
 # 1. Auf der Maschine mit dem Solver (z. B. einer Fluent-Workstation),
 #    erst nur sim core installieren — noch keine SDK-Wahl:

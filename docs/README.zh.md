@@ -79,6 +79,8 @@ LLM 智能体早已知道怎么写 PyFluent、MATLAB、COMSOL、OpenFOAM 脚本 
 
 ## 🚀 快速开始
 
+> **名字一览：** 仓库 `svd-ai-lab/sim-cli` · PyPI 分发名 `sim-runtime` · 命令行 `sim` · 导入 `import sim`。是的，三个不同的字符串 —— 仓库名比第一次 PyPI 发布更早；其余的遵循 Python 打包惯例。
+
 ```bash
 # 1. 在装有求解器的机器上（如一台 Fluent 工作站），先装 sim 核心 ——
 #    此时不用选 SDK：
