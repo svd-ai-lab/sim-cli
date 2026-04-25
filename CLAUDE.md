@@ -199,3 +199,46 @@ Tests that need a real solver are gated by import-availability flags (e.g. `HAS_
 - The server supports multiple concurrent sessions keyed by `X-Sim-Session` header; a solver name can only be live once per server process (driver instances are module-level singletons)
 - Project uses `uv` for dependency locking (`uv.lock`)
 - Companion knowledge / skills / workflows live in the sibling `sim-skills/` tree, one folder per solver
+
+## Releases
+
+- **PyPI distribution name:** `sim-runtime` (not `sim-cli` — that was rejected as too similar to the existing `simcli` placeholder).
+- **Console script + import name:** `sim`. The PyPI dist name and the import name intentionally differ; `src/sim/__init__.py` looks up `version("sim-runtime")` (wrapped in `try/except PackageNotFoundError` for source/editable installs).
+- **Trusted publisher:** GitHub OIDC, repo `svd-ai-lab/sim-cli`, workflow `.github/workflows/publish.yml`, environment `pypi`. Configured at https://pypi.org/manage/project/sim-runtime/settings/publishing/.
+- **Tag format:** `v<MAJOR.MINOR.PATCH>` matching `pyproject.toml` `version` exactly. Always tag from `main` after PR-merging a release branch.
+- **Don't skip the clean-venv smoke test before tagging.** 0.2.1 shipped broken (`__init__.py` referenced `version("sim-cli")` after the rename) because no one ran `sim --version` in a fresh venv before pushing the tag. Twine check verifies packaging, not import.
+
+## Public-artifact privacy / license safety
+
+When writing anything that lands in a *public* place — GitHub issues,
+PR titles/bodies/comments, public commit messages, public docs — keep
+**engineering-relevant** facts and drop **diary-style disclosure**
+that ties a specific commercial-software install to a specific
+machine or account. The two are easy to confuse.
+
+**Keep:**
+- The bug, the error message, the exit code, the reproducing input.
+- Version info that is a genuine reproduction prereq — *"this bug
+  reproduces on MATLAB R2024+ because `addpath` rejects `resources/`
+  in that release"*. The version is part of the engineering claim.
+- Platform when behavior is platform-gated (Linux vs Windows
+  filesystem casing, COM availability, etc.).
+
+**Drop / replace:**
+- Personal usernames and hostnames → "a Windows test host", "a
+  development machine", or elide.
+- Personal IPs (including Tailscale `100.90.x.x`) → elide.
+- Personal filesystem paths (`C:\Users\<you>\...`,
+  `~/Documents/GitHub/...`, `C:\Python<NN>\...`,
+  `C:\Program Files\<Vendor>\<version>\...`) → "a local clone",
+  "the editable install", or elide.
+- Specific commercial-software *versions tied to a personal machine*
+  — e.g. *"MATLAB R2025b on my Windows host at `C:\Program
+  Files\MATLAB\R2025b`"*. Vendor compliance teams use these as
+  license-audit signals even when the version alone would be fine.
+- Tailscale tailnet names, OS account SIDs, MAC/serial numbers.
+
+Sanitize existing artifacts by editing PR/issue/comment bodies
+(`gh pr edit`, `gh issue comment --edit-last`). Avoid force-pushing
+to rewrite commit-message history unless the disclosure is severe
+*and* the branch is unmerged *and* not being collaborated on.
