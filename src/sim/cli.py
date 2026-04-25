@@ -346,12 +346,22 @@ def run(ctx, script, solver):
         "duration_ms": int(result.duration_s * 1000),
         "error": (result.stderr or None) if result.exit_code != 0 else None,
         "parsed_output": parsed,
+        "workspace_delta": result.workspace_delta,
     })
+
+    # Persist raw stdout/stderr to disk so the agent can use grep/tail/awk
+    # directly without going through `sim logs --field`. Path is
+    # deterministic (`<sim_home>/runs/<id>.{stdout,stderr}`) so
+    # `sim logs <id> --field stdout` can find it without us storing the
+    # path in history.jsonl.
+    stdout_path, stderr_path = _write_run_outputs(run_id, result)
 
     if ctx.obj["json"]:
         data = result.to_dict()
         data["id"] = run_id
         data["parsed_output"] = parsed
+        data["stdout_path"] = str(stdout_path) if stdout_path else None
+        data["stderr_path"] = str(stderr_path) if stderr_path else None
         click.echo(json_mod.dumps(data, indent=2))
     else:
         status = "converged" if result.ok else "failed"
@@ -361,9 +371,7 @@ def run(ctx, script, solver):
         if result.exit_code != 0:
             # Show tail output so the agent can debug without a separate
             # `sim logs` round-trip. CFD scripts routinely print errors via
-            # `print(...)` rather than to stderr (e.g. wrappers around
-            # subprocess that print "blockMesh failed!" then exit 1) — so
-            # we surface stdout tail too, not just stderr.
+            # `print(...)` rather than to stderr — surface stdout tail too.
             tail_lines = 20
             if result.stderr:
                 stderr_tail = "\n".join(result.stderr.splitlines()[-tail_lines:])
@@ -371,7 +379,72 @@ def run(ctx, script, solver):
             if result.stdout:
                 stdout_tail = "\n".join(result.stdout.splitlines()[-tail_lines:])
                 click.echo(f"[sim] stdout (last {tail_lines} lines):\n{stdout_tail}")
+            # Workspace delta: tell the agent which files the solver
+            # actually wrote (e.g. log.simpleFoam, log.checkMesh, mesh
+            # outputs) — those typically hold the real diagnostic detail
+            # and live entirely outside sim's stdout/stderr capture.
+            _print_workspace_delta(result.workspace_delta)
+            # Hint section: tell the agent how to fetch full content
+            # without remembering CLI flags.
+            _print_followup_hints(run_id, stdout_path, stderr_path,
+                                  result.workspace_delta)
     sys.exit(result.exit_code)
+
+
+def _write_run_outputs(run_id: str, result):
+    """Persist full stdout/stderr to disk for grep-friendly access.
+
+    Files land under ``<sim_home>/runs/<id>.{stdout,stderr}``. Empty
+    streams are not written (returns None for that side). Failures here
+    are swallowed — file persistence must not break the run reporting.
+    """
+    from sim.config import sim_home
+    runs_dir = sim_home() / "runs"
+    try:
+        runs_dir.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return None, None
+    stdout_path = stderr_path = None
+    if result.stdout:
+        stdout_path = runs_dir / f"{run_id}.stdout"
+        try:
+            stdout_path.write_text(result.stdout, encoding="utf-8")
+        except OSError:
+            stdout_path = None
+    if result.stderr:
+        stderr_path = runs_dir / f"{run_id}.stderr"
+        try:
+            stderr_path.write_text(result.stderr, encoding="utf-8")
+        except OSError:
+            stderr_path = None
+    return stdout_path, stderr_path
+
+
+def _print_workspace_delta(delta, max_inline: int = 10):
+    """Print up to ``max_inline`` workspace changes; mention overflow."""
+    if not delta:
+        return
+    click.echo(f"[sim] workspace files written ({len(delta)}):")
+    for entry in delta[:max_inline]:
+        kb = entry["size"] / 1024
+        size = f"{kb:.1f} KB" if kb >= 1 else f"{entry['size']} B"
+        click.echo(f"        {entry['kind']:8s}  {entry['path']}  ({size})")
+    if len(delta) > max_inline:
+        click.echo(f"        ... and {len(delta) - max_inline} more")
+
+
+def _print_followup_hints(run_id, stdout_path, stderr_path, delta):
+    """Tell the agent how to drill in further without guessing CLI flags."""
+    click.echo("[sim] for more detail:")
+    if stdout_path:
+        click.echo(f"        cat {stdout_path}                 # full stdout (grep-friendly)")
+    if stderr_path:
+        click.echo(f"        cat {stderr_path}                 # full stderr")
+    click.echo(f"        sim logs {run_id}                          # all fields summary")
+    click.echo(f"        sim logs {run_id} --field workspace        # full file list")
+    if delta:
+        # Suggest the largest workspace file as a likely diagnostic source.
+        click.echo(f"        cat {delta[0]['path']}     # likely solver log (largest write)")
 
 
 # ── connect (persistent session) ────────────────────────────────────────────
@@ -730,13 +803,37 @@ def logs(ctx, target, field, filter_solver, filter_session, show_all, limit):
             sys.exit(1)
         parsed = record.get("parsed_output") or {}
         if field:
-            if field not in parsed:
-                click.echo(f"[sim] error: field '{field}' not found", err=True)
-                sys.exit(1)
-            if ctx.obj["json"]:
-                click.echo(json_mod.dumps({field: parsed[field]}))
+            # Resolution order:
+            #   1. stdout / stderr → read raw file at <sim_home>/runs/<id>.<field>
+            #      (we don't inline these into history.jsonl — too big)
+            #   2. top-level record key (covers workspace_delta, ok, etc.)
+            #   3. parsed_output key (per-driver fields)
+            # Synonym: `workspace` → `workspace_delta` for ergonomics.
+            value = _MISSING = object()
+            if field in ("stdout", "stderr"):
+                from sim.config import sim_home
+                p = sim_home() / "runs" / f"{record.get('run_id')}.{field}"
+                if p.is_file():
+                    value = p.read_text(encoding="utf-8")
+                else:
+                    value = ""  # empty stream OR pre-v3 record without files
             else:
-                click.echo(parsed[field])
+                top_alias = {"workspace": "workspace_delta"}
+                key = top_alias.get(field, field)
+                if key in record:
+                    value = record[key]
+                elif field in parsed:
+                    value = parsed[field]
+                else:
+                    click.echo(f"[sim] error: field '{field}' not found", err=True)
+                    sys.exit(1)
+            if ctx.obj["json"]:
+                click.echo(json_mod.dumps({field: value}, default=str))
+            else:
+                if isinstance(value, (list, dict)):
+                    click.echo(json_mod.dumps(value, indent=2, default=str))
+                else:
+                    click.echo(value)
         else:
             if ctx.obj["json"]:
                 click.echo(json_mod.dumps(parsed, indent=2))

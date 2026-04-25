@@ -78,11 +78,84 @@ def test_run_failure_surfaces_stdout_tail(tmp_path):
         "import sys; sys.exit(1)\n"
     )
     runner = CliRunner()
-    # `pybamm` is the smallest registered driver and accepts arbitrary scripts;
-    # use it as a generic Python-script runner.
     result = runner.invoke(main, ["run", "--solver", "pybamm", str(script)])
     assert result.exit_code != 0
-    # Both the user-visible status line and the stdout tail must appear.
     assert "[sim] status: failed" in result.output
-    assert "blockMesh failed" in result.output  # the error from script's stdout
+    assert "blockMesh failed" in result.output
     assert "[sim] stdout (last" in result.output
+
+
+def test_run_failure_lists_workspace_delta(tmp_path, monkeypatch):
+    """Files written by the script during the run must show up under
+    `workspace files written` so the agent knows where solver-side log
+    files (log.simpleFoam etc.) live."""
+    monkeypatch.setenv("SIM_HOME", str(tmp_path / "sim_home"))
+    monkeypatch.chdir(tmp_path)
+    script = tmp_path / "writes_log.py"
+    script.write_text(
+        "with open('solver.log', 'w') as f:\n"
+        "    f.write('FOAM FATAL ERROR: missing 0/p\\n')\n"
+        "import sys; sys.exit(1)\n"
+    )
+    runner = CliRunner()
+    result = runner.invoke(main, ["run", "--solver", "pybamm", str(script)])
+    assert result.exit_code != 0
+    assert "[sim] workspace files written" in result.output
+    assert "solver.log" in result.output
+    # follow-up hint section should mention the largest file
+    assert "for more detail" in result.output
+
+
+def test_run_persists_stdout_to_grep_friendly_file(tmp_path, monkeypatch):
+    """sim_home/runs/<id>.stdout should hold the full stdout for grep."""
+    monkeypatch.setenv("SIM_HOME", str(tmp_path / "sim_home"))
+    monkeypatch.chdir(tmp_path)
+    script = tmp_path / "noisy.py"
+    script.write_text(
+        "for i in range(50): print(f'line {i}: residual = 1e-{i}')\n"
+    )
+    runner = CliRunner()
+    result = runner.invoke(main, ["run", "--solver", "pybamm", str(script)])
+    assert result.exit_code == 0
+    runs_dir = tmp_path / "sim_home" / "runs"
+    files = list(runs_dir.glob("*.stdout"))
+    assert files, "no .stdout file was written"
+    content = files[0].read_text()
+    assert "line 0:" in content and "line 49:" in content
+
+
+def test_logs_field_workspace_returns_delta(tmp_path, monkeypatch):
+    """`sim logs <id> --field workspace` returns the file delta as JSON."""
+    monkeypatch.setenv("SIM_HOME", str(tmp_path / "sim_home"))
+    monkeypatch.chdir(tmp_path)
+    script = tmp_path / "writer.py"
+    script.write_text("open('a.dat','w').write('x'); open('b.dat','w').write('y')\n")
+    runner = CliRunner()
+    r1 = runner.invoke(main, ["run", "--solver", "pybamm", str(script)])
+    assert r1.exit_code == 0
+    # Pull the run_id from the "saved as #N" line.
+    rid = None
+    for line in r1.output.splitlines():
+        if "saved as #" in line:
+            rid = line.split("#", 1)[1].strip()
+            break
+    assert rid is not None
+    r2 = runner.invoke(main, ["logs", rid, "--field", "workspace"])
+    assert r2.exit_code == 0
+    assert "a.dat" in r2.output and "b.dat" in r2.output
+
+
+def test_logs_field_stdout_reads_persisted_file(tmp_path, monkeypatch):
+    """`sim logs <id> --field stdout` should read the raw file (since
+    history.jsonl doesn't store stdout inline)."""
+    monkeypatch.setenv("SIM_HOME", str(tmp_path / "sim_home"))
+    monkeypatch.chdir(tmp_path)
+    script = tmp_path / "shout.py"
+    script.write_text("print('UNIQUE_NEEDLE_SENTINEL')\n")
+    runner = CliRunner()
+    r1 = runner.invoke(main, ["run", "--solver", "pybamm", str(script)])
+    assert r1.exit_code == 0
+    rid = next(l.split("#", 1)[1].strip() for l in r1.output.splitlines() if "saved as #" in l)
+    r2 = runner.invoke(main, ["logs", rid, "--field", "stdout"])
+    assert r2.exit_code == 0
+    assert "UNIQUE_NEEDLE_SENTINEL" in r2.output

@@ -63,6 +63,11 @@ class RunResult:
     errors: list[str] = field(default_factory=list)
     diagnostics: list[dict] = field(default_factory=list)
     artifacts: list[dict] = field(default_factory=list)
+    workspace_delta: list[dict] = field(default_factory=list)
+    """Files added/modified under cwd during the run; each entry is
+    ``{"path": str, "kind": "added"|"modified", "size": int}``. Captured
+    by snapshotting cwd mtimes before and after the subprocess. Solver-
+    neutral: doesn't matter what the solver wrote — sim sees the diff."""
 
     @property
     def ok(self) -> bool:
@@ -82,6 +87,7 @@ class RunResult:
             "timestamp": self.timestamp,
             "diagnostics": self.diagnostics,
             "artifacts": self.artifacts,
+            "workspace_delta": self.workspace_delta,
         }
 
 

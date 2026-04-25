@@ -81,20 +81,85 @@ def execute_script(
     solver: str = "unknown",
     driver=None,
 ) -> RunResult:
-    """Execute a script, delegating to the solver driver when available."""
+    """Execute a script, delegating to the solver driver when available.
+
+    Wraps the actual run with a workspace mtime snapshot so the resulting
+    ``RunResult.workspace_delta`` lists files added/modified under cwd
+    during the run. Solver-neutral: works for any subprocess that writes
+    to disk (CFD log files, postProcessing dirs, mesh output, etc.).
+    """
+    cwd = Path.cwd()
+    before = _snapshot_workspace(cwd)
+
     if driver is not None:
-        return driver.run_file(script)
+        result = driver.run_file(script)
+    else:
+        if python is None:
+            python = sys.executable
+        result = run_subprocess(
+            [python, str(script)],
+            script=script,
+            solver=solver,
+        )
+        _attach_probes(result, solver)
 
-    if python is None:
-        python = sys.executable
-
-    result = run_subprocess(
-        [python, str(script)],
-        script=script,
-        solver=solver,
-    )
-    _attach_probes(result, solver)
+    after = _snapshot_workspace(cwd)
+    result.workspace_delta = _diff_workspace(before, after)
     return result
+
+
+# ── Workspace observation ──────────────────────────────────────────────
+# Solver-neutral capture of "what did this run do to the filesystem".
+# Snapshots cwd recursively before+after the subprocess and reports new /
+# modified files. Any solver that writes to disk (every CFD/CAE solver
+# does) gets visibility for free; sim doesn't have to know per-solver
+# file conventions.
+
+_WORKSPACE_MAX_FILES = 50000  # cap to keep snapshot bounded on huge dirs
+
+
+def _snapshot_workspace(root: Path) -> dict[str, tuple[float, int]]:
+    """Recursively walk ``root``; return {path: (mtime, size)}.
+
+    Bounded by ``_WORKSPACE_MAX_FILES``; on overflow we silently stop
+    enumerating — better partial visibility than blocking the run.
+    Inaccessible files are skipped (not raised).
+    """
+    out: dict[str, tuple[float, int]] = {}
+    if not root.is_dir():
+        return out
+    try:
+        for p in root.rglob("*"):
+            if not p.is_file():
+                continue
+            try:
+                st = p.stat()
+            except OSError:
+                continue
+            out[str(p)] = (st.st_mtime, st.st_size)
+            if len(out) >= _WORKSPACE_MAX_FILES:
+                break
+    except OSError:
+        pass
+    return out
+
+
+def _diff_workspace(
+    before: dict[str, tuple[float, int]],
+    after: dict[str, tuple[float, int]],
+) -> list[dict]:
+    """Return list of new/modified files. Stable files don't appear."""
+    delta: list[dict] = []
+    for path, (mt, sz) in after.items():
+        old = before.get(path)
+        if old is None:
+            delta.append({"path": path, "kind": "added", "size": sz})
+        elif old[0] != mt or old[1] != sz:
+            delta.append({"path": path, "kind": "modified", "size": sz})
+    # Sort by size desc so the agent sees the biggest writes first
+    # (typically the most informative — solver logs, mesh output, etc.).
+    delta.sort(key=lambda d: -d["size"])
+    return delta
 
 
 def _attach_probes(result: RunResult, solver: str) -> None:
