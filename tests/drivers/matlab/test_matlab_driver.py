@@ -97,6 +97,15 @@ class TestMatlabRunFile:
         assert "rc_circuit" in expr
         # Does not fall back to the `.m` top-level `run('...')` wrapper
         assert not expr.startswith("run('")
+        # Regression: MATLAB silently refuses to put a folder named
+        # `resources` on the path (reserved name alongside `private`
+        # and `@<class>`). The shim package parent must use a
+        # non-reserved name, otherwise `which('sim_shim.run')` returns
+        # empty inside MATLAB and dispatch fails with
+        # "Unable to resolve the name 'sim_shim.run'." See PR fixing
+        # the reserved-name bug discovered on win1.
+        assert "/resources'" not in expr
+        assert "matlab_pkg" in expr
 
 
 class TestSimulinkLint:

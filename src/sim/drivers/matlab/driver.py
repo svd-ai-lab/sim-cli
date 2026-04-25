@@ -355,7 +355,7 @@ class MatlabDriver:
         """Execute a MATLAB `.m` script or a Simulink `.slx`/`.mdl` model.
 
         `.m` → `matlab -batch "run('<path>')"`.
-        `.slx` / `.mdl` → `addpath(<resources>); load_system('<path>');
+        `.slx` / `.mdl` → `addpath(<matlab_pkg>); load_system('<path>');
         sim_shim.run('<model>', '{}', '<out_dir>'); close_system('<model>', 0)`.
         The `+sim_shim/run.m` helper (see Issue #27 Phase B) flattens the
         resulting `Simulink.SimulationOutput` to Parquet (preferred) or MAT
@@ -382,7 +382,10 @@ class MatlabDriver:
         """Build the MATLAB `-batch` expression for a Simulink model file.
 
         The expression:
-          1. Adds `resources/` to path so the `+sim_shim/` package resolves
+          1. Adds `matlab_pkg/` to path so the `+sim_shim/` package resolves
+             (we deliberately do NOT name this folder `resources/` —
+             MATLAB reserves that name and silently refuses to put it
+             on the path, which makes `+sim_shim` invisible)
           2. Loads the model from its absolute path
           3. Invokes `sim_shim.run(<model>, '{}', <out_dir>)`
           4. Always closes the model (via onCleanup) — even if sim() throws
@@ -395,9 +398,14 @@ class MatlabDriver:
         out_dir = abs_path.parent / ".sim" / model_name
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        resources = Path(__file__).parent / "resources"
+        # NOTE: name is `matlab_pkg`, not `resources`. MATLAB reserves
+        # the name `resources` (alongside `private` and `@<class>`) and
+        # silently refuses to put folders with those names on the path —
+        # `addpath` only emits a warning, then `which('sim_shim.run')`
+        # comes up empty. See MATLAB R2024+ path() doc.
+        matlab_pkg = Path(__file__).parent / "matlab_pkg"
         parts = [
-            f"addpath('{_matlab_string(resources)}')",
+            f"addpath('{_matlab_string(matlab_pkg)}')",
             f"load_system('{_matlab_string(abs_path)}')",
             f"cleanup__ = onCleanup(@() close_system('{model_name}', 0))",
             f"sim_shim.run('{model_name}', '{{}}', '{_matlab_string(out_dir)}')",
