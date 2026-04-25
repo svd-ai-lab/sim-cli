@@ -275,13 +275,45 @@ class OpenFOAMDriver:
         return {}
 
     def run_file(self, script: Path) -> RunResult:
-        """Execute a local Python script (fallback for local OF installs)."""
+        """Execute a local script with the OpenFOAM environment sourced.
+
+        ``--solver openfoam`` is supposed to mean "run this in an OpenFOAM
+        environment". Without sourcing ``etc/bashrc`` the agent's script
+        sees an empty PATH/WM_PROJECT_DIR and gets a confusing
+        ``blockMesh: not found`` from the wrong layer. We source bashrc
+        once and then exec the script so the OF tooling is reachable.
+
+        Falls back to bare ``python3 SCRIPT`` only if no OF install is
+        detected (caller will fail downstream anyway).
+        """
         from sim.runner import run_subprocess
-        return run_subprocess(
-            [sys.executable, str(script)],
-            script=script,
-            solver=self.name,
-        )
+
+        installs = self.detect_installed()
+        bashrc = None
+        for inst in installs:
+            candidate = Path(inst.path) / "etc" / "bashrc"
+            if candidate.is_file():
+                bashrc = candidate
+                break
+
+        if bashrc is None:
+            return run_subprocess(
+                [sys.executable, str(script)],
+                script=script,
+                solver=self.name,
+            )
+
+        # Wrap so the OF env is in place before the script runs. exec
+        # replaces the bash shell so the PID seen by the runner is the
+        # script's, not bash's.
+        import shlex
+        runner = "python3" if script.suffix == ".py" else "bash"
+        cmd = [
+            "bash", "-c",
+            f"source {shlex.quote(str(bashrc))} && "
+            f"exec {runner} {shlex.quote(str(script))}",
+        ]
+        return run_subprocess(cmd, script=script, solver=self.name)
 
     # -- Phase 2: Remote session via sim-server --------------------------------
 
