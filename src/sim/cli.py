@@ -358,8 +358,19 @@ def run(ctx, script, solver):
         click.echo(f"[sim] run:    {script} via {solver}")
         click.echo(f"[sim] status: {status} ({result.duration_s}s)")
         click.echo(f"[sim] log:    saved as #{run_id}")
-        if result.exit_code != 0 and result.stderr:
-            click.echo(f"[sim] stderr: {result.stderr}")
+        if result.exit_code != 0:
+            # Show tail output so the agent can debug without a separate
+            # `sim logs` round-trip. CFD scripts routinely print errors via
+            # `print(...)` rather than to stderr (e.g. wrappers around
+            # subprocess that print "blockMesh failed!" then exit 1) — so
+            # we surface stdout tail too, not just stderr.
+            tail_lines = 20
+            if result.stderr:
+                stderr_tail = "\n".join(result.stderr.splitlines()[-tail_lines:])
+                click.echo(f"[sim] stderr (last {tail_lines} lines):\n{stderr_tail}")
+            if result.stdout:
+                stdout_tail = "\n".join(result.stdout.splitlines()[-tail_lines:])
+                click.echo(f"[sim] stdout (last {tail_lines} lines):\n{stdout_tail}")
     sys.exit(result.exit_code)
 
 

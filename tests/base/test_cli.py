@@ -65,3 +65,24 @@ def test_check_all_flag_same_as_no_arg():
     r2 = runner.invoke(main, ["--json", "check", "--all"])
     assert r1.exit_code == 0 and r2.exit_code == 0
     assert json.loads(r1.output) == json.loads(r2.output)
+
+
+def test_run_failure_surfaces_stdout_tail(tmp_path):
+    """When a sim run script crashes with errors on stdout (not stderr),
+    the CLI should print the stdout tail so the agent can debug without
+    a separate `sim logs` round-trip."""
+    script = tmp_path / "crash.py"
+    script.write_text(
+        "print('starting blockMesh...')\n"
+        "print('Error: blockMesh failed!')\n"
+        "import sys; sys.exit(1)\n"
+    )
+    runner = CliRunner()
+    # `pybamm` is the smallest registered driver and accepts arbitrary scripts;
+    # use it as a generic Python-script runner.
+    result = runner.invoke(main, ["run", "--solver", "pybamm", str(script)])
+    assert result.exit_code != 0
+    # Both the user-visible status line and the stdout tail must appear.
+    assert "[sim] status: failed" in result.output
+    assert "blockMesh failed" in result.output  # the error from script's stdout
+    assert "[sim] stdout (last" in result.output
