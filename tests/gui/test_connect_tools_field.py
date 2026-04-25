@@ -62,8 +62,7 @@ def client(monkeypatch):
     monkeypatch.setattr(srv, "_resolve_profile", lambda driver, solver: None)
 
     # Reset global state in case another test left something
-    srv._state.session_id = None
-    srv._state.driver = None
+    srv._sessions.clear()
 
     return TestClient(srv.app)
 

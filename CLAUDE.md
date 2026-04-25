@@ -54,17 +54,18 @@ Click app with subcommands: `serve`, `check`, `lint`, `run`, `connect`, `exec`, 
 
 ### HTTP server (`src/sim/server.py`)
 FastAPI app exposing:
-- `POST /connect` — launch a solver, hold session in module-level `_state`
-- `POST /exec` — `exec()` a Python snippet against the live `session`/`meshing`/`solver` namespace, capture stdout/stderr/return value, append to `_state.runs`
-- `GET /inspect/<name>` — query `session.summary`, `session.mode`, `last.result`, `workflow.summary`
+- `POST /connect` — launch a solver, register a new session in `_sessions: dict[str, SessionState]` keyed by session_id
+- `POST /exec` — `exec()` a Python snippet against the live `session`/`meshing`/`solver` namespace for the session selected by `X-Sim-Session` header (or the single live session if unambiguous); capture stdout/stderr/return value, append to that session's runs
+- `GET /inspect/<name>` — query `session.summary`, `session.mode`, `last.result`, `workflow.summary` (session-scoped)
 - `POST /run` — one-shot script execution (no session required)
-- `GET /ps` — current session status
+- `GET /ps` — list of all live sessions + default_session (set only when exactly one live)
 - `GET /screenshot` — base64 PNG of the server's desktop
-- `POST /disconnect` — tear down the session
+- `POST /disconnect` — tear down the session selected by `X-Sim-Session` (or the sole live session)
+- `POST /shutdown` — tear down all sessions, exit the server process
 
-The server keeps a single global `_state: SessionState` (one session per server process).
+The server supports multiple concurrent sessions keyed by session_id. Each `SessionState` carries its own `threading.Lock` so exec/inspect against different sessions can run in parallel. A single solver name can only be live once (driver instances are module-level singletons).
 
-**`sim serve --reload` drops the session on any source change under the watched tree.** uvicorn's reload watchdog observes file mtimes in `src/sim/**`; any edit (git pull, scp of a modified driver, even touching an unrelated module) restarts the worker, wiping `_state`. Child solver processes (Flotherm GUI, Fluent, etc.) survive the reload because they're spawned separately, but the session handle to them is gone — you have to `connect` again. Driver temp files (written to the solver's workspace, e.g. `flouser/_sim_*.xml`) live outside `src/` so they don't retrigger. Practical rules:
+**`sim serve --reload` drops all sessions on any source change under the watched tree.** uvicorn's reload watchdog observes file mtimes in `src/sim/**`; any edit (git pull, scp of a modified driver, even touching an unrelated module) restarts the worker, wiping `_sessions`. Child solver processes (Flotherm GUI, Fluent, etc.) survive the reload because they're spawned separately, but the session handles to them are gone — you have to `connect` again. Driver temp files (written to the solver's workspace, e.g. `flouser/_sim_*.xml`) live outside `src/` so they don't retrigger. Practical rules:
 
 - Don't edit driver code mid-experiment; finish the run, then edit.
 - For long autonomous experiments where you're editing driver code iteratively, launch **without** `--reload` and restart manually when you want the new code picked up.
@@ -117,10 +118,12 @@ LS-DYNA is a special case: the *solver* is one-shot (no live process to connect 
 4. `sim logs <id>` reads back via `history.get_by_id`; `sim logs --solver X --all` filters
 
 ### Execution pipeline — persistent session (`exec`)
-1. `cli.connect` → HTTP `POST /connect` to server → `driver.launch(...)` → `_state.session` populated
-2. `cli.exec` → HTTP `POST /exec` with code → server `_execute_snippet()` runs `exec(code, namespace)` where `namespace` has `session`, `meshing`/`solver`, `_result`
-3. `cli.inspect <name>` → HTTP `GET /inspect/<name>` → driver- or session-specific query
-4. `cli.disconnect` → HTTP `POST /disconnect` → driver-specific teardown, clear `_state`
+1. `cli.connect` → HTTP `POST /connect` to server → `driver.launch(...)` → new `SessionState` added to `_sessions`; response carries the session_id which the client stores
+2. `cli.exec` → HTTP `POST /exec` with code + `X-Sim-Session: <id>` → server routes to that session, then `_execute_snippet()` runs `exec(code, namespace)` where `namespace` has `session`, `meshing`/`solver`, `_result`
+3. `cli.inspect <name>` → HTTP `GET /inspect/<name>` (session-scoped) → driver- or session-specific query
+4. `cli.disconnect` → HTTP `POST /disconnect` (session-scoped) → driver-specific teardown, remove from `_sessions`
+
+Session routing rules: an explicit `X-Sim-Session` header wins (404 if unknown); otherwise the server falls back to the sole live session; otherwise `/exec` returns 400. Clients can also set `SIM_SESSION` env var or pass `sim --session <id> ...` to scope a whole CLI invocation.
 
 ## Adding a new driver
 
@@ -193,6 +196,6 @@ Tests that need a real solver are gated by import-availability flags (e.g. `HAS_
 ## Notes
 
 - Global run history lives in `~/.sim/history.jsonl` (append-only; override dir via `SIM_HOME`); git-ignored
-- The server holds **one** session at a time (single global `_state`) — multi-tenant is not yet implemented
+- The server supports multiple concurrent sessions keyed by `X-Sim-Session` header; a solver name can only be live once per server process (driver instances are module-level singletons)
 - Project uses `uv` for dependency locking (`uv.lock`)
 - Companion knowledge / skills / workflows live in the sibling `sim-skills/` tree, one folder per solver
