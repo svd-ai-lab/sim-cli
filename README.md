@@ -75,7 +75,7 @@ For the full driver protocol, server endpoints, and execution pipeline see [CLAU
 ```bash
 # 1. On the box that has the solver (e.g. a Fluent workstation), install
 #    sim core only — no SDK choices yet:
-uv pip install "git+https://github.com/svd-ai-lab/sim-cli.git"
+uv pip install sim-runtime
 
 # 2. Tell sim to look at this machine and pick the right SDK profile:
 sim check fluent
@@ -208,7 +208,7 @@ You don't usually have to. `sim check <solver>` tells you which profile your ins
 
 - **Pin a specific profile:** `sim connect --solver fluent --profile pyfluent_0_37_legacy`
 - **Skip the profile env entirely (legacy / tests):** `sim connect --solver fluent --inline`
-- **Power-user single-env install:** `pip install 'sim-cli[fluent-pyfluent-0-38]'` puts the SDK directly into your current venv. Skips `sim env` entirely; OK when you only need one Fluent version on this machine.
+- **Power-user single-env install:** `pip install 'sim-runtime[fluent]'` puts the SDK directly into your current venv. Skips `sim env` entirely; OK when you only need one Fluent version on this machine.
 
 The full design is in [`docs/architecture/version-compat.md`](docs/architecture/version-compat.md).
 
@@ -235,12 +235,12 @@ See [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) for setup, project layout, addi
 
 ## 🌐 Remote deployment
 
-When the solver lives on a different machine (a Fluent workstation, an HPC login node, a lab box) and you want to drive it from your laptop, a notebook, or an LLM agent — install `sim-cli` on **both** ends and run `sim serve` on the remote.
+When the solver lives on a different machine (a Fluent workstation, an HPC login node, a lab box) and you want to drive it from your laptop, a notebook, or an LLM agent — install `sim-runtime` on **both** ends and run `sim serve` on the remote.
 
 ```bash
 # On the solver host (the machine with Fluent / COMSOL / OpenFOAM / ... installed)
 ssh user@solver-host
-pip install git+https://github.com/svd-ai-lab/sim-cli.git
+pip install sim-runtime
 sim serve --host 0.0.0.0 --port 7600     # bind to all interfaces
 
 # On your local control machine
@@ -251,7 +251,7 @@ sim --host <solver-host-ip> disconnect
 sim --host <solver-host-ip> stop          # shut down the remote server when done
 ```
 
-That is the entire setup — same `sim-cli` package on both sides, same wire protocol whether it is talking to a local or a remote server. Bind `--host 0.0.0.0` only on networks you trust (Tailscale, VPN, LAN behind a firewall); there is **no auth layer** on `/connect` and `/exec` execute arbitrary Python.
+That is the entire setup — same `sim-runtime` package on both sides, same wire protocol whether it is talking to a local or a remote server. Bind `--host 0.0.0.0` only on networks you trust (Tailscale, VPN, LAN behind a firewall); there is **no auth layer** on `/connect` and `/exec` execute arbitrary Python.
 
 ---
 
