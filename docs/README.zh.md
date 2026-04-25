@@ -82,7 +82,7 @@ LLM 智能体早已知道怎么写 PyFluent、MATLAB、COMSOL、OpenFOAM 脚本 
 ```bash
 # 1. 在装有求解器的机器上（如一台 Fluent 工作站），先装 sim 核心 ——
 #    此时不用选 SDK：
-uv pip install "git+https://github.com/svd-ai-lab/sim-cli.git"
+uv pip install sim-runtime
 
 # 2. 让 sim 看一眼你的机器，自动选出合适的 SDK profile：
 sim check fluent
@@ -183,7 +183,7 @@ sim --host <server-ip> disconnect
 
 - **指定 profile：** `sim connect --solver fluent --profile pyfluent_0_37_legacy`
 - **完全跳过 profile env（旧路径 / 测试）：** `sim connect --solver fluent --inline`
-- **进阶：单 env 直接装：** `pip install 'sim-cli[fluent-pyfluent-0-38]'` 把 SDK 直接装到当前 venv，跳过 `sim env`。同一台机器只需要一个 Fluent 版本时合适。
+- **进阶：单 env 直接装：** `pip install 'sim-runtime[fluent]'` 把 SDK 直接装到当前 venv，跳过 `sim env`。同一台机器只需要一个 Fluent 版本时合适。
 
 完整设计：[`docs/architecture/version-compat.md`](architecture/version-compat.md)。
 

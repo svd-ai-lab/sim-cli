@@ -82,7 +82,7 @@ Vollständiges Driver-Protokoll, Server-Endpunkte und Execution-Pipeline siehe [
 ```bash
 # 1. Auf der Maschine mit dem Solver (z. B. einer Fluent-Workstation),
 #    erst nur sim core installieren — noch keine SDK-Wahl:
-uv pip install "git+https://github.com/svd-ai-lab/sim-cli.git"
+uv pip install sim-runtime
 
 # 2. sim die Maschine ansehen lassen und das passende Profil wählen:
 sim check fluent
@@ -185,7 +185,7 @@ Meistens muss man nichts wählen. `sim check <solver>` sagt dir, zu welchem Prof
 
 - **Profil festsetzen:** `sim connect --solver fluent --profile pyfluent_0_37_legacy`
 - **Profil-Env überspringen (Legacy / Tests):** `sim connect --solver fluent --inline`
-- **Power-User Single-Env-Install:** `pip install 'sim-cli[fluent-pyfluent-0-38]'` legt das SDK direkt in die aktuelle venv. Überspringt `sim env`; sinnvoll, wenn du auf dieser Maschine nur eine Fluent-Version brauchst.
+- **Power-User Single-Env-Install:** `pip install 'sim-runtime[fluent]'` legt das SDK direkt in die aktuelle venv. Überspringt `sim env`; sinnvoll, wenn du auf dieser Maschine nur eine Fluent-Version brauchst.
 
 Vollständiges Design: [`docs/architecture/version-compat.md`](architecture/version-compat.md).
 
