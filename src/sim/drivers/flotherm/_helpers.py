@@ -1,6 +1,9 @@
-"""Internal helpers for the Flotherm driver.
+"""Internal runtime helpers for the Flotherm driver.
 
-Installation detection, linting, FloSCRIPT generation, and status monitoring.
+Installation detection, process polling, and workspace state monitoring.
+File-format / lint / FloSCRIPT generation moved to `sim.drivers.flotherm.lib`
+so they can be unit-tested on macOS / Linux without Flotherm installed.
+
 This module is not part of the public API — use FlothermDriver instead.
 """
 from __future__ import annotations
@@ -10,15 +13,10 @@ import os
 import re
 import shutil
 import subprocess
-import time
-import zipfile
 from contextlib import suppress
 from pathlib import Path
-from xml.dom import minidom
-from xml.etree import ElementTree
-from xml.etree.ElementTree import Element, SubElement, tostring
 
-from sim.driver import Diagnostic, LintResult
+from sim.drivers.flotherm.lib.error_log import read_floerror_log
 
 # ---------------------------------------------------------------------------
 # Installation detection
@@ -37,7 +35,6 @@ def find_installation() -> dict | None:
     2. System PATH (shutil.which "flotherm")
     3. Common install dirs on lettered drives (glob)
     """
-    # 1. FLOTHERM_ROOT env var
     env_root = os.environ.get("FLOTHERM_ROOT", "").strip()
     if env_root:
         bat = os.path.join(env_root, "WinXP", "bin", "flotherm.bat")
@@ -47,7 +44,6 @@ def find_installation() -> dict | None:
             return {"bat_path": bat, "floserv_path": serv,
                     "install_root": env_root, "version": version}
 
-    # 2. PATH
     bat_on_path = shutil.which("flotherm")
     if bat_on_path:
         root = str(Path(bat_on_path).parent.parent.parent)
@@ -56,7 +52,6 @@ def find_installation() -> dict | None:
         return {"bat_path": bat_on_path, "floserv_path": serv,
                 "install_root": root, "version": version}
 
-    # 3. Glob common install dirs
     for drive in _SCAN_DRIVES:
         for prog_dir in (
             fr"{drive}:\Program Files (x86)\Siemens\SimcenterFlotherm",
@@ -90,24 +85,6 @@ def extract_version(path: str) -> str | None:
     return None
 
 
-def pack_project_dir(pack: Path) -> str | None:
-    """Return the top-level project directory name from inside a .pack ZIP."""
-    try:
-        with zipfile.ZipFile(pack) as z:
-            names = z.namelist()
-        dirs = {e.split("/")[0] for e in names if e.split("/")[0]}
-        if dirs:
-            return sorted(dirs)[0]
-    except Exception:
-        pass
-    return None
-
-
-def pack_project_name(proj_dir: str) -> str:
-    """Extract short project name from directory (before the GUID dot)."""
-    return proj_dir.split(".")[0] if "." in proj_dir else proj_dir
-
-
 def default_flouser(install_root: str) -> str:
     """Return the default FLOUSERDIR for an installation."""
     env = os.environ.get("FLOUSERDIR", "").strip()
@@ -117,236 +94,13 @@ def default_flouser(install_root: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Linting
-# ---------------------------------------------------------------------------
-
-_FLOSCRIPT_ROOT = "xml_log_file"
-_FLOXML_ROOTS = ("xml_case", "sm_xml_case")
-_SOLVE_COMMANDS = ("solve_all", "solve_scenario", "start")
-
-
-def lint_pack(pack: Path) -> LintResult:
-    """Validate a .pack project archive."""
-    diagnostics: list[Diagnostic] = []
-    try:
-        data = pack.read_bytes()
-    except OSError as e:
-        return LintResult(ok=False, diagnostics=[
-            Diagnostic(level="error", message=f"Cannot read file: {e}")])
-    if not data:
-        return LintResult(ok=False, diagnostics=[
-            Diagnostic(level="error", message="Pack file is empty")])
-    try:
-        with zipfile.ZipFile(pack) as z:
-            names = z.namelist()
-    except zipfile.BadZipFile as e:
-        return LintResult(ok=False, diagnostics=[
-            Diagnostic(level="error", message=f"Invalid ZIP/pack file: {e}")])
-    top_level_dirs = {n.split("/")[0] for n in names if "/" in n}
-    if not top_level_dirs:
-        diagnostics.append(Diagnostic(
-            level="warning", message="Pack file contains no project directory."))
-    return LintResult(ok=True, diagnostics=diagnostics)
-
-
-def lint_floscript(
-    script: Path,
-    *,
-    schema_dir: Path | None = None,
-    require_solve: bool = True,
-) -> LintResult:
-    """Validate a FloSCRIPT XML file.
-
-    Parameters
-    ----------
-    script : Path
-        Path to the FloSCRIPT .xml file.
-    schema_dir : Path, optional
-        Directory containing FloSCRIPTSchema.xsd and its includes.
-        When provided, full XSD validation is performed via lxml.
-        When None, only basic structural checks are done.
-    require_solve : bool
-        When True (default), emit a warning if no solve/start command
-        is found.  Set to False for model-building scripts that
-        intentionally omit solve commands.
-    """
-    diagnostics: list[Diagnostic] = []
-    try:
-        text = script.read_text(encoding="utf-8", errors="replace")
-    except OSError as e:
-        return LintResult(ok=False, diagnostics=[
-            Diagnostic(level="error", message=f"Cannot read file: {e}")])
-    if not text.strip():
-        return LintResult(ok=False, diagnostics=[
-            Diagnostic(level="error", message="Script is empty")])
-    try:
-        root = ElementTree.fromstring(text)
-    except ElementTree.ParseError as e:
-        return LintResult(ok=False, diagnostics=[
-            Diagnostic(level="error", message=f"XML parse error: {e}")])
-    if root.tag != _FLOSCRIPT_ROOT:
-        diagnostics.append(Diagnostic(
-            level="error",
-            message=f"Expected root <xml_log_file>, got <{root.tag}>."))
-        return LintResult(ok=False, diagnostics=diagnostics)
-
-    # XSD validation when schema is available
-    if schema_dir is not None:
-        xsd_diagnostics = _validate_xsd(text, schema_dir)
-        if xsd_diagnostics:
-            diagnostics.extend(xsd_diagnostics)
-            has_errors = any(d.level == "error" for d in xsd_diagnostics)
-            if has_errors:
-                return LintResult(ok=False, diagnostics=diagnostics)
-
-    # Check for solve commands (direct or inside external_command)
-    if require_solve:
-        has_solve = False
-        for child in root:
-            if child.tag in _SOLVE_COMMANDS:
-                has_solve = True
-                break
-            if child.tag == "external_command":
-                for gc in child:
-                    if gc.tag in _SOLVE_COMMANDS:
-                        has_solve = True
-                        break
-        if not has_solve:
-            diagnostics.append(Diagnostic(
-                level="warning",
-                message="No solve/start command found \u2014 "
-                        "script may configure but not run a simulation."))
-    return LintResult(ok=True, diagnostics=diagnostics)
-
-
-def lint_floxml(script: Path) -> LintResult:
-    """Validate a Flotherm FloXML authoring file (`<xml_case>` / `<sm_xml_case>` root).
-
-    FloXML is the vendor-blessed model-exchange format. Unlike FloSCRIPT,
-    sim-skills does not yet ship a public XSD for FloXML, so this lint is
-    structural-only: well-formed XML + a recognized root tag. When/if an
-    XSD becomes available it can hook in via the same path as FloSCRIPT.
-    """
-    diagnostics: list[Diagnostic] = []
-    try:
-        text = script.read_text(encoding="utf-8", errors="replace")
-    except OSError as e:
-        return LintResult(ok=False, diagnostics=[
-            Diagnostic(level="error", message=f"Cannot read file: {e}")])
-    if not text.strip():
-        return LintResult(ok=False, diagnostics=[
-            Diagnostic(level="error", message="FloXML file is empty")])
-    try:
-        root = ElementTree.fromstring(text)
-    except ElementTree.ParseError as e:
-        return LintResult(ok=False, diagnostics=[
-            Diagnostic(level="error", message=f"XML parse error: {e}")])
-    if root.tag not in _FLOXML_ROOTS:
-        return LintResult(ok=False, diagnostics=[Diagnostic(
-            level="error",
-            message=f"Expected FloXML root <xml_case> or <sm_xml_case>, got <{root.tag}>.")])
-    return LintResult(ok=True, diagnostics=diagnostics)
-
-
-def _validate_xsd(xml_text: str, schema_dir: Path) -> list[Diagnostic]:
-    """Run XSD validation and return diagnostics with line numbers."""
-    from lxml import etree
-
-    diagnostics: list[Diagnostic] = []
-    schema_path = schema_dir / "FloSCRIPTSchema.xsd"
-    if not schema_path.is_file():
-        diagnostics.append(Diagnostic(
-            level="warning",
-            message=f"XSD schema not found at {schema_path} — "
-                    "skipping schema validation."))
-        return diagnostics
-    try:
-        schema_doc = etree.parse(str(schema_path))
-        schema = etree.XMLSchema(schema_doc)
-    except etree.XMLSchemaParseError as e:
-        diagnostics.append(Diagnostic(
-            level="warning",
-            message=f"Failed to load XSD schema: {e} — "
-                    "skipping schema validation."))
-        return diagnostics
-    try:
-        doc = etree.fromstring(xml_text.encode("utf-8"))
-    except etree.XMLSyntaxError as e:
-        diagnostics.append(Diagnostic(
-            level="error", message=f"lxml XML parse error: {e}"))
-        return diagnostics
-
-    if not schema.validate(doc):
-        for error in schema.error_log:
-            diagnostics.append(Diagnostic(
-                level="error",
-                message=f"Line {error.line}: {error.message}"))
-    return diagnostics
-
-
-# ---------------------------------------------------------------------------
-# FloSCRIPT generation
-# ---------------------------------------------------------------------------
-
-
-def _pretty_xml(root: Element) -> str:
-    raw = tostring(root, encoding="unicode")
-    dom = minidom.parseString(raw)
-    return dom.toprettyxml(indent="    ", encoding=None)
-
-
-def build_solve_and_save(project_name: str) -> str:
-    """Build FloSCRIPT: unlock → load → solve → save (Drawing Board syntax)."""
-    root = Element("xml_log_file", version="1.0")
-    SubElement(root, "project_unlock", project_name=project_name)
-    SubElement(root, "project_load", project_name=project_name)
-    SubElement(root, "start", start_type="solver")
-    return _pretty_xml(root)
-
-
-def build_solve_scenario(project_name: str, scenario_id: str) -> str:
-    """Build FloSCRIPT to solve a specific scenario."""
-    root = Element("xml_log_file", version="1.0")
-    SubElement(root, "project_unlock", project_name=project_name)
-    SubElement(root, "project_load", project_name=project_name)
-    ext = SubElement(root, "external_command", process="CommandCentre")
-    solve = SubElement(ext, "solve_scenario")
-    SubElement(solve, "scenario_id", scenario_id=scenario_id)
-    return _pretty_xml(root)
-
-
-def build_custom(commands: list[dict]) -> str:
-    """Build FloSCRIPT from a list of command specs."""
-    root = Element("xml_log_file", version="1.0")
-    for cmd in commands:
-        _add_command(root, cmd)
-    return _pretty_xml(root)
-
-
-def _add_command(parent: Element, spec: dict) -> None:
-    process = spec.get("process")
-    if process:
-        wrapper = SubElement(parent, "external_command", process=process)
-        inner_spec = {k: v for k, v in spec.items() if k != "process"}
-        _add_command(wrapper, inner_spec)
-        return
-    attrs = spec.get("attrs", {})
-    elem = SubElement(parent, spec["command"], **attrs)
-    for child in spec.get("children", []):
-        _add_command(elem, child)
-
-
-# ---------------------------------------------------------------------------
-# Status detection
+# Status detection (runtime polling against a live workspace)
 # ---------------------------------------------------------------------------
 
 FIELD_NAMES = (
     "Temperature", "Pressure", "Speed",
     "XVelocity", "YVelocity", "ZVelocity", "TurbVis",
 )
-
-_FATAL_PATTERNS = ("E/11029", "E/9012")
-_WARNING_PATTERNS = ("registerStart runTable exception",)
 
 
 def snapshot_result_files(field_dir: str) -> dict[str, float]:
@@ -373,21 +127,6 @@ def diff_result_files(
         if new_mt is not None and new_mt > old_mt:
             modified.append(fp)
     return modified
-
-
-def read_floerror_log(workspace: str) -> tuple[str, list[str], list[str]]:
-    """Read floerror.log; return (full_content, fatal_errors, warnings)."""
-    logpath = os.path.join(workspace, "floerror.log")
-    if not os.path.isfile(logpath):
-        return "", [], []
-    with suppress(OSError):
-        content = open(logpath, encoding="utf-8", errors="replace").read()
-        fatals = [l.strip() for l in content.splitlines()
-                  if any(p in l for p in _FATAL_PATTERNS)]
-        warns = [l.strip() for l in content.splitlines()
-                 if any(p in l for p in _WARNING_PATTERNS)]
-        return content, fatals, warns
-    return "", [], []
 
 
 def is_process_alive(pid: int | None) -> bool:
@@ -422,7 +161,6 @@ def detect_job_state(
     """
     reasons: list[str] = []
 
-    # Signal 1: Field file changes
     field_dir = os.path.join(workspace, project_dir, "DataSets", "BaseSolution")
     post_snapshot = snapshot_result_files(field_dir)
 
@@ -441,7 +179,6 @@ def detect_job_state(
     elif has_baseline:
         reasons.append("No field files modified")
 
-    # Signal 2: floerror.log (only NEW errors since baseline)
     log_content, all_fatals, warns = read_floerror_log(workspace)
     if floerror_baseline:
         new_fatals = [f for f in all_fatals if f not in floerror_baseline]
@@ -454,19 +191,16 @@ def detect_job_state(
     elif all_fatals and not has_fatal:
         reasons.append(f"Historical errors (ignored): {len(all_fatals)}")
 
-    # Signal 3: Process alive
     proc_alive = is_process_alive(process_pid)
     if proc_alive:
         reasons.append(f"Process PID {process_pid} still alive")
     elif process_pid is not None:
         reasons.append(f"Process PID {process_pid} exited")
 
-    # Signal 4: Timeout
     timed_out = elapsed_s >= timeout_s
     if timed_out:
         reasons.append(f"Timeout: {elapsed_s:.0f}s >= {timeout_s:.0f}s")
 
-    # Decision logic (priority: fatal > fields > process > timeout)
     if has_fatal:
         return "failed", reasons
     if fields_changed:
