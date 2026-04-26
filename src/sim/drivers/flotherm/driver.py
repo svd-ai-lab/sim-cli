@@ -42,6 +42,7 @@ from sim.drivers.flotherm._helpers import (
     detect_job_state,
     find_installation,
     lint_floscript,
+    lint_floxml,
     lint_pack,
     pack_project_dir,
     pack_project_name,
@@ -170,13 +171,19 @@ class FlothermDriver:
         return False
 
     def lint(self, script: Path) -> LintResult:
-        """Validate a .pack or FloSCRIPT .xml file. No Flotherm required.
+        """Validate a .pack, FloSCRIPT, or FloXML file. No Flotherm required.
 
-        When sim-skills is available, FloSCRIPT files are validated against
-        the XSD schema for the detected Flotherm version.
+        FloSCRIPT (`<xml_log_file>`) gets full XSD validation when sim-skills
+        ships the schema for the detected version. FloXML (`<xml_case>` /
+        `<sm_xml_case>`) is structural-only — sim-skills doesn't yet ship a
+        FloXML XSD; that's a follow-up.
         """
         ext = script.suffix.lower()
         if ext == ".xml":
+            blob = _XML_COMMENT_RE.sub(b"", script.read_bytes()[:_DETECT_SCAN_BYTES])
+            header = blob.decode("utf-8", errors="replace")
+            if any(m in header for m in ("<xml_case", "<sm_xml_case")):
+                return lint_floxml(script)
             return lint_floscript(
                 script, schema_dir=self._find_schema_dir())
         if ext == ".pack":
