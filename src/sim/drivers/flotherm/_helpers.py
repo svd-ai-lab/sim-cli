@@ -121,6 +121,7 @@ def default_flouser(install_root: str) -> str:
 # ---------------------------------------------------------------------------
 
 _FLOSCRIPT_ROOT = "xml_log_file"
+_FLOXML_ROOTS = ("xml_case", "sm_xml_case")
 _SOLVE_COMMANDS = ("solve_all", "solve_scenario", "start")
 
 
@@ -215,6 +216,35 @@ def lint_floscript(
                 level="warning",
                 message="No solve/start command found \u2014 "
                         "script may configure but not run a simulation."))
+    return LintResult(ok=True, diagnostics=diagnostics)
+
+
+def lint_floxml(script: Path) -> LintResult:
+    """Validate a Flotherm FloXML authoring file (`<xml_case>` / `<sm_xml_case>` root).
+
+    FloXML is the vendor-blessed model-exchange format. Unlike FloSCRIPT,
+    sim-skills does not yet ship a public XSD for FloXML, so this lint is
+    structural-only: well-formed XML + a recognized root tag. When/if an
+    XSD becomes available it can hook in via the same path as FloSCRIPT.
+    """
+    diagnostics: list[Diagnostic] = []
+    try:
+        text = script.read_text(encoding="utf-8", errors="replace")
+    except OSError as e:
+        return LintResult(ok=False, diagnostics=[
+            Diagnostic(level="error", message=f"Cannot read file: {e}")])
+    if not text.strip():
+        return LintResult(ok=False, diagnostics=[
+            Diagnostic(level="error", message="FloXML file is empty")])
+    try:
+        root = ElementTree.fromstring(text)
+    except ElementTree.ParseError as e:
+        return LintResult(ok=False, diagnostics=[
+            Diagnostic(level="error", message=f"XML parse error: {e}")])
+    if root.tag not in _FLOXML_ROOTS:
+        return LintResult(ok=False, diagnostics=[Diagnostic(
+            level="error",
+            message=f"Expected FloXML root <xml_case> or <sm_xml_case>, got <{root.tag}>.")])
     return LintResult(ok=True, diagnostics=diagnostics)
 
 

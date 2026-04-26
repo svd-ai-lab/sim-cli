@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import signal
 import subprocess
 import time
@@ -41,6 +42,7 @@ from sim.drivers.flotherm._helpers import (
     detect_job_state,
     find_installation,
     lint_floscript,
+    lint_floxml,
     lint_pack,
     pack_project_dir,
     pack_project_name,
@@ -48,7 +50,18 @@ from sim.drivers.flotherm._helpers import (
     snapshot_result_files,
 )
 
-_FLOSCRIPT_MARKER = "<xml_log_file"
+# Flotherm authoring/exchange XML formats sim-cli claims for `detect()`:
+#   - FloSCRIPT (`<xml_log_file>`)         — command recordings, played via Macro > Play FloSCRIPT
+#   - Project FloXML (`<xml_case>`)        — vendor-blessed model exchange format
+#   - SmartPart FloXML (`<sm_xml_case>`)   — SmartPart-scoped FloXML
+_FLOTHERM_XML_MARKERS = ("<xml_log_file", "<xml_case", "<sm_xml_case")
+
+# FloXML files routinely carry multi-paragraph descriptive comments before
+# the root element (geometry tables, phase notes, etc.) that can push the
+# root tag well past 512 bytes. Scan a generous window and strip comments
+# before searching for a marker.
+_DETECT_SCAN_BYTES = 16384
+_XML_COMMENT_RE = re.compile(rb"<!--.*?-->", re.DOTALL)
 
 
 def _default_flotherm_probes(enable_gui: bool = True) -> list:
@@ -144,26 +157,33 @@ class FlothermDriver:
         return True
 
     def detect(self, script: Path) -> bool:
-        """Return True for Flotherm files (.pack, FloSCRIPT .xml)."""
+        """Return True for Flotherm files (.pack, FloSCRIPT or FloXML .xml)."""
         ext = script.suffix.lower()
         if ext == ".pack":
             return True
         if ext == ".xml":
             try:
-                header = script.read_bytes()[:512].decode("utf-8", errors="replace")
-                return _FLOSCRIPT_MARKER in header
+                blob = _XML_COMMENT_RE.sub(b"", script.read_bytes()[:_DETECT_SCAN_BYTES])
+                header = blob.decode("utf-8", errors="replace")
+                return any(m in header for m in _FLOTHERM_XML_MARKERS)
             except OSError:
                 return False
         return False
 
     def lint(self, script: Path) -> LintResult:
-        """Validate a .pack or FloSCRIPT .xml file. No Flotherm required.
+        """Validate a .pack, FloSCRIPT, or FloXML file. No Flotherm required.
 
-        When sim-skills is available, FloSCRIPT files are validated against
-        the XSD schema for the detected Flotherm version.
+        FloSCRIPT (`<xml_log_file>`) gets full XSD validation when sim-skills
+        ships the schema for the detected version. FloXML (`<xml_case>` /
+        `<sm_xml_case>`) is structural-only — sim-skills doesn't yet ship a
+        FloXML XSD; that's a follow-up.
         """
         ext = script.suffix.lower()
         if ext == ".xml":
+            blob = _XML_COMMENT_RE.sub(b"", script.read_bytes()[:_DETECT_SCAN_BYTES])
+            header = blob.decode("utf-8", errors="replace")
+            if any(m in header for m in ("<xml_case", "<sm_xml_case")):
+                return lint_floxml(script)
             return lint_floscript(
                 script, schema_dir=self._find_schema_dir())
         if ext == ".pack":

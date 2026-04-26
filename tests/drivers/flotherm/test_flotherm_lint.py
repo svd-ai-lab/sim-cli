@@ -1,10 +1,11 @@
-"""Tests for Flotherm FloSCRIPT linting with XSD validation."""
+"""Tests for Flotherm FloSCRIPT and FloXML linting."""
 from pathlib import Path
 import textwrap
 
 import pytest
 
-from sim.drivers.flotherm._helpers import lint_floscript
+from sim.drivers.flotherm._helpers import lint_floscript, lint_floxml
+from sim.drivers.flotherm.driver import FlothermDriver
 
 # XSD schemas in sim-skills (may not be available in CI)
 _SCHEMA_DIR = (
@@ -187,4 +188,69 @@ class TestXSDValidation:
         """)
         # bogus_command won't be caught without XSD
         result = lint_floscript(p, schema_dir=None)
+        assert result.ok is True
+
+
+# ── FloXML linting ──────────────────────────────────────────────────
+
+
+class TestFloxmlLint:
+    def test_xml_case_minimal(self, tmp_path):
+        p = _write_xml(tmp_path, """\
+            <?xml version="1.0" encoding="UTF-8" standalone="no"?>
+            <xml_case>
+              <name>HBM_demo</name>
+            </xml_case>
+        """)
+        result = lint_floxml(p)
+        assert result.ok is True
+
+    def test_sm_xml_case_minimal(self, tmp_path):
+        p = _write_xml(tmp_path, """\
+            <?xml version="1.0"?>
+            <sm_xml_case>
+              <name>SmartPart</name>
+            </sm_xml_case>
+        """)
+        result = lint_floxml(p)
+        assert result.ok is True
+
+    def test_wrong_root(self, tmp_path):
+        p = _write_xml(tmp_path, "<not_floxml/>")
+        result = lint_floxml(p)
+        assert result.ok is False
+        assert "xml_case" in result.diagnostics[0].message
+
+    def test_empty_file(self, tmp_path):
+        p = _write_xml(tmp_path, "")
+        result = lint_floxml(p)
+        assert result.ok is False
+
+    def test_invalid_xml(self, tmp_path):
+        p = _write_xml(tmp_path, "<xml_case><not closed")
+        result = lint_floxml(p)
+        assert result.ok is False
+
+
+class TestDriverLintRouting:
+    """`FlothermDriver.lint` must dispatch FloSCRIPT vs FloXML by root tag."""
+
+    def test_routes_floscript(self, tmp_path):
+        p = _write_xml(tmp_path, """\
+            <?xml version="1.0"?>
+            <xml_log_file version="1.0">
+              <start start_type="solver"/>
+            </xml_log_file>
+        """)
+        result = FlothermDriver().lint(p)
+        assert result.ok is True
+
+    def test_routes_floxml(self, tmp_path):
+        p = _write_xml(tmp_path, """\
+            <?xml version="1.0"?>
+            <xml_case>
+              <name>X</name>
+            </xml_case>
+        """)
+        result = FlothermDriver().lint(p)
         assert result.ok is True
