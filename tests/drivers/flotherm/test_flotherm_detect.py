@@ -56,6 +56,26 @@ class TestDetectXml:
         )
         assert driver.detect(p) is False
 
+    def test_floxml_with_long_leading_comment(self, driver, tmp_path):
+        """Real FloXML files (e.g. hbm-flotherm/build/hbm_3block.xml) carry
+        a multi-paragraph descriptive comment before the root, which can push
+        the `<xml_case>` element past byte 512. detect() must look further
+        and/or strip comments."""
+        # Generate >1 KB of comment content to push root past the old 512-byte window.
+        comment_body = "\n".join(
+            f"  Phase note line {i}: lorem ipsum dolor sit amet "
+            "consectetur adipiscing elit." for i in range(40)
+        )
+        p = tmp_path / "model.xml"
+        p.write_text(
+            '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n'
+            f"<!--\n{comment_body}\n-->\n"
+            "<xml_case>\n  <name>HBM</name>\n</xml_case>\n",
+            encoding="utf-8",
+        )
+        assert p.stat().st_size > 1024  # sanity: comment really is past 512 bytes
+        assert driver.detect(p) is True
+
 
 class TestDetectPack:
     def test_pack_extension_claimed(self, driver, tmp_path):

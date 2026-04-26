@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import signal
 import subprocess
 import time
@@ -53,6 +54,13 @@ from sim.drivers.flotherm._helpers import (
 #   - Project FloXML (`<xml_case>`)        — vendor-blessed model exchange format
 #   - SmartPart FloXML (`<sm_xml_case>`)   — SmartPart-scoped FloXML
 _FLOTHERM_XML_MARKERS = ("<xml_log_file", "<xml_case", "<sm_xml_case")
+
+# FloXML files routinely carry multi-paragraph descriptive comments before
+# the root element (geometry tables, phase notes, etc.) that can push the
+# root tag well past 512 bytes. Scan a generous window and strip comments
+# before searching for a marker.
+_DETECT_SCAN_BYTES = 16384
+_XML_COMMENT_RE = re.compile(rb"<!--.*?-->", re.DOTALL)
 
 
 def _default_flotherm_probes(enable_gui: bool = True) -> list:
@@ -154,7 +162,8 @@ class FlothermDriver:
             return True
         if ext == ".xml":
             try:
-                header = script.read_bytes()[:512].decode("utf-8", errors="replace")
+                blob = _XML_COMMENT_RE.sub(b"", script.read_bytes()[:_DETECT_SCAN_BYTES])
+                header = blob.decode("utf-8", errors="replace")
                 return any(m in header for m in _FLOTHERM_XML_MARKERS)
             except OSError:
                 return False
