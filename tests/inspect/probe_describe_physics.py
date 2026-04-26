@@ -27,10 +27,23 @@ import urllib.request
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-SKILLS_ROOT = (
-    REPO_ROOT.parent / "sim-skills" / "comsol" / "base" / "workflows"
-    / "block_with_hole"
-)
+
+
+def _resolve_skills_root() -> Path:
+    """The sim-skills layout differs across hosts. Probe both known shapes."""
+    candidates = [
+        REPO_ROOT.parent / "sim-skills" / "comsol" / "base" / "workflows" / "block_with_hole",
+        REPO_ROOT.parent / "sim-skills" / "comsol" / "workflows" / "block_with_hole",
+    ]
+    for c in candidates:
+        if c.is_dir():
+            return c
+    raise FileNotFoundError(
+        f"block_with_hole workflow not found in any of: {[str(c) for c in candidates]}"
+    )
+
+
+SKILLS_ROOT = _resolve_skills_root()
 OUT_DIR = REPO_ROOT / "tests" / "inspect" / "_run_outputs"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 OUT_FILE = OUT_DIR / "probe_describe_physics.json"
@@ -87,7 +100,7 @@ def main() -> int:
     if not r.get("ok", True):
         print(f"  CONNECT FAILED: {r}")
         return 1
-    print(f"  ok — model_tag={data.get('model_tag')}")
+    print(f"  ok -- model_tag={data.get('model_tag')}")
 
     rc = 0
     try:
@@ -135,12 +148,12 @@ def main() -> int:
 
         OUT_FILE.write_text(json.dumps(summary, indent=2))
         print(f"\n[saved] {OUT_FILE}")
-        print("\nPASS — describe(model) matches unit-test fixture against live model.")
+        print("\nPASS -- describe(model) matches unit-test fixture against live model.")
     except AssertionError as exc:
-        print(f"\nFAIL — assertion: {exc}")
+        print(f"\nFAIL -- assertion: {exc}")
         rc = 1
     except Exception as exc:
-        print(f"\nFAIL — {type(exc).__name__}: {exc}")
+        print(f"\nFAIL -- {type(exc).__name__}: {exc}")
         rc = 1
     finally:
         print("\n[disconnect]")
