@@ -4,7 +4,7 @@ import textwrap
 
 import pytest
 
-from sim.drivers.flotherm._helpers import lint_floscript, lint_floxml
+from sim.drivers.flotherm.lib import lint_floscript, lint_floxml
 from sim.drivers.flotherm.driver import FlothermDriver
 
 # XSD schemas in sim-skills (may not be available in CI)

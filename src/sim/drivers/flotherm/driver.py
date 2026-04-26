@@ -36,18 +36,20 @@ from sim.inspect import (
     generic_probes,
 )
 from sim.drivers.flotherm._helpers import (
-    build_solve_and_save,
     collect_artifacts,
     default_flouser,
     detect_job_state,
     find_installation,
+    snapshot_result_files,
+)
+from sim.drivers.flotherm.lib import (
+    build_solve_and_save,
     lint_floscript,
     lint_floxml,
     lint_pack,
     pack_project_dir,
     pack_project_name,
     read_floerror_log,
-    snapshot_result_files,
 )
 
 # Flotherm authoring/exchange XML formats sim-cli claims for `detect()`:
