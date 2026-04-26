@@ -77,7 +77,7 @@ _result = {"summary": summary, "text": text}
 
 
 def main() -> int:
-    print(f"[connect] {BASE}/connect → comsol server-only")
+    print(f"[connect] {BASE}/connect -> comsol server-only")
     r = post(
         "/connect",
         {"solver": "comsol", "mode": "solver", "ui_mode": "server", "processors": 2},
