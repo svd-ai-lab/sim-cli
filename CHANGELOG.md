@@ -12,6 +12,17 @@ changes at milestone boundaries.
 
 ### Added
 
+- **`sim.drivers.comsol.lib.describe(model, what="physics")`** — typed
+  walk over the COMSOL Java model tree returning a structured Python
+  dict (and a compact `format_text()` plain-text rendering) of all
+  physics interfaces and their features. Replaces hand-rolled tree
+  introspection in `sim exec` snippets — agents can now answer "what's
+  in this model" with one helper call. Pure-Python; lives in
+  `comsol/lib/` mirroring the `flotherm/lib/` deferred-package
+  convention. 18 unit tests on macOS use a hand-rolled stand-in for
+  the JPype tree; live verification gate at
+  `tests/inspect/probe_describe_physics.py`.
+
 - **LTspice driver accepts `.asc` schematics.** `LTspiceDriver.detect`,
   `lint`, and `run_file` now route `.asc` inputs through
   `sim_ltspice.run_asc`, which flattens the schematic to a sibling `.net`
