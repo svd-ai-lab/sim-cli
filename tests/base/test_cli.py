@@ -1,6 +1,8 @@
 """Basic CLI smoke tests."""
 
 import json
+import subprocess
+import sys
 
 from click.testing import CliRunner
 
@@ -21,6 +23,28 @@ def test_help():
     result = runner.invoke(main, ["--help"])
     assert result.exit_code == 0
     assert "sim" in result.output
+
+
+def test_python_m_sim_invocation():
+    """``python -m sim --version`` must reach the same Click group as the
+    ``sim`` console script. CliRunner-based tests don't exercise the module-
+    execution path; this is the regression test for ``src/sim/__main__.py``,
+    which exists so dev users can launch ``sim serve`` without holding a
+    Windows file lock on ``Scripts/sim.exe`` during ``uv sync``.
+    """
+    from importlib.metadata import version
+
+    result = subprocess.run(
+        [sys.executable, "-m", "sim", "--version"],
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    assert result.returncode == 0, result.stderr
+    # Click reports prog_name as "python -m sim" here (sys.argv[0] is the
+    # module path); accept either form alongside the actual version string.
+    assert "version" in result.stdout
+    assert version("sim-runtime") in result.stdout
 
 
 def test_check_all_json_shape():
