@@ -22,6 +22,16 @@ from sim.drivers.flotherm.lib.floscript import (
     lint_floscript,
 )
 from sim.drivers.flotherm.lib.floxml import lint_floxml
+from sim.drivers.flotherm.lib.floxml_builder import (
+    Ambient,
+    Cuboid,
+    FixedTemperature,
+    Fluid,
+    HeatSource,
+    IsotropicMaterial,
+    Project,
+    SolutionDomain,
+)
 from sim.drivers.flotherm.lib.msp_field import (
     MspFieldError,
     list_fields,
@@ -35,7 +45,15 @@ from sim.drivers.flotherm.lib.pack import (
 )
 
 __all__ = [
+    "Ambient",
+    "Cuboid",
+    "FixedTemperature",
+    "Fluid",
+    "HeatSource",
+    "IsotropicMaterial",
     "MspFieldError",
+    "Project",
+    "SolutionDomain",
     "build_custom",
     "build_solve_and_save",
     "build_solve_scenario",
