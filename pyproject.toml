@@ -39,7 +39,7 @@ dependencies = [
     "pyyaml>=6.0", # reads driver compatibility.yaml files
     "Pillow>=10", # sim screenshot endpoint uses PIL.ImageGrab
     "lxml>=5.0", # XSD validation for FloSCRIPT lint
-    "sim-ltspice>=0.2", # LTspice file formats + runtime — sim-cli's LTspice driver delegates here
+    "sim-ltspice>=0.2.2", # LTspice file formats + runtime — sim-cli's LTspice driver delegates here. >=0.2.2 for run_asc.
     "tomli>=2.0; python_version<'3.11'", # TOML parser for config.py; stdlib tomllib is 3.11+
     "pywinauto>=0.6.8; sys_platform == 'win32'", # GUI automation backend for Flotherm (and other solvers without a batch API). Spawned in a subprocess via sys.executable, so must live in the same venv as sim-server.
 ]
