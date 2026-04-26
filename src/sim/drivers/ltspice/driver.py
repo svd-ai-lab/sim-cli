@@ -100,7 +100,6 @@ class LTspiceDriver:
             return False
 
     def lint(self, script: Path) -> LintResult:
-        diagnostics: list[Diagnostic] = []
         suffix = script.suffix.lower()
         if suffix not in _ACCEPTED_SUFFIXES:
             return LintResult(
