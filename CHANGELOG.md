@@ -12,6 +12,17 @@ changes at milestone boundaries.
 
 ### Added
 
+- **LTspice driver accepts `.asc` schematics.** `LTspiceDriver.detect`,
+  `lint`, and `run_file` now route `.asc` inputs through
+  `sim_ltspice.run_asc`, which flattens the schematic to a sibling `.net`
+  via the pure-Python `schematic_to_netlist` path before LTspice runs.
+  The GUI is no longer needed to author or transform a schematic — only
+  to render waveforms (already replaceable via `sim-ltspice.raw`). Lint
+  for `.asc` checks the `Version ` header and that at least one
+  `TEXT … !.<analysis>` directive is present. `FlattenError` from the
+  flattener surfaces as `RuntimeError` through the driver protocol.
+  Requires `sim-ltspice>=0.2.2`.
+
 - **`python -m sim` invocation (equivalent to the `sim` console script).**
   Adds `src/sim/__main__.py` so `python -m sim ...` reaches the same Click
   group as the installed `sim` entry point. Lets developers launch

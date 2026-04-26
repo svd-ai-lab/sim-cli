@@ -1,12 +1,13 @@
 """LTspice driver for sim — thin adapter over ``sim_ltspice``.
 
 The heavy work (install discovery, subprocess invocation, `.log`
-encoding sniffing, `.raw` header parsing) lives in the standalone
-``sim-ltspice`` package on PyPI. This module only bridges between that
-library and sim-cli's ``DriverProtocol``.
+encoding sniffing, `.raw` header parsing, `.asc` flattening) lives in
+the standalone ``sim-ltspice`` package on PyPI. This module only
+bridges between that library and sim-cli's ``DriverProtocol``.
 
-Scope v1 still accepts ``.net``, ``.cir``, ``.sp`` netlists. ``.asc``
-schematic support lands once ``sim_ltspice`` grows ``run_asc``.
+Accepts ``.net`` / ``.cir`` / ``.sp`` netlists and ``.asc``
+schematics. Schematics are flattened to a sibling netlist via
+``sim_ltspice.run_asc`` before the actual solve.
 """
 from __future__ import annotations
 
@@ -18,7 +19,13 @@ from pathlib import Path
 from sim_ltspice import NETLIST_SUFFIXES, find_ltspice
 from sim_ltspice import RunResult as LtRunResult
 from sim_ltspice.install import Install
-from sim_ltspice.runner import LtspiceNotInstalled, UnsupportedInput, run_net
+from sim_ltspice.netlist import FlattenError
+from sim_ltspice.runner import (
+    LtspiceNotInstalled,
+    UnsupportedInput,
+    run_asc,
+    run_net,
+)
 
 from sim.driver import (
     ConnectionInfo,
@@ -29,8 +36,17 @@ from sim.driver import (
 )
 
 
+_ASC_SUFFIX = ".asc"
+_ACCEPTED_SUFFIXES = NETLIST_SUFFIXES + (_ASC_SUFFIX,)
+
 _ANALYSIS_RE = re.compile(
     r"^\s*\.(tran|ac|dc|op|noise|tf|four|fft|meas)\b",
+    re.MULTILINE | re.IGNORECASE,
+)
+# In .asc schematics, analysis directives live inside TEXT ... ! lines:
+#   TEXT 0 200 Left 2 !.tran 0 5m 0 1u
+_ASC_ANALYSIS_RE = re.compile(
+    r"^\s*TEXT\b.*!\s*\.(tran|ac|dc|op|noise|tf|four|fft|meas)\b",
     re.MULTILINE | re.IGNORECASE,
 )
 
@@ -79,21 +95,20 @@ class LTspiceDriver:
 
     def detect(self, script: Path) -> bool:
         try:
-            return script.suffix.lower() in NETLIST_SUFFIXES and script.is_file()
+            return script.suffix.lower() in _ACCEPTED_SUFFIXES and script.is_file()
         except OSError:
             return False
 
     def lint(self, script: Path) -> LintResult:
-        diagnostics: list[Diagnostic] = []
         suffix = script.suffix.lower()
-        if suffix not in NETLIST_SUFFIXES:
+        if suffix not in _ACCEPTED_SUFFIXES:
             return LintResult(
                 ok=False,
                 diagnostics=[Diagnostic(
                     level="error",
                     message=(
                         f"Unsupported file type: {suffix} "
-                        f"(expected one of {', '.join(NETLIST_SUFFIXES)})"
+                        f"(expected one of {', '.join(_ACCEPTED_SUFFIXES)})"
                     ),
                 )],
             )
@@ -105,6 +120,12 @@ class LTspiceDriver:
                 diagnostics=[Diagnostic(level="error", message=f"Cannot read: {exc}")],
             )
 
+        if suffix == _ASC_SUFFIX:
+            return self._lint_asc(text)
+        return self._lint_netlist(text)
+
+    def _lint_netlist(self, text: str) -> LintResult:
+        diagnostics: list[Diagnostic] = []
         if not text.strip():
             return LintResult(
                 ok=False,
@@ -128,6 +149,29 @@ class LTspiceDriver:
                 message="Looks like an LTspice .asc schematic, not a netlist",
             ))
 
+        ok = not any(d.level == "error" for d in diagnostics)
+        return LintResult(ok=ok, diagnostics=diagnostics)
+
+    def _lint_asc(self, text: str) -> LintResult:
+        diagnostics: list[Diagnostic] = []
+        if not text.strip():
+            return LintResult(
+                ok=False,
+                diagnostics=[Diagnostic(level="error", message="Schematic is empty")],
+            )
+        if not text.lstrip().startswith("Version "):
+            diagnostics.append(Diagnostic(
+                level="error",
+                message="Missing 'Version ' header — file is not an LTspice schematic",
+            ))
+        if not _ASC_ANALYSIS_RE.search(text):
+            diagnostics.append(Diagnostic(
+                level="error",
+                message=(
+                    "No SPICE analysis directive found in TEXT lines "
+                    "(.tran / .ac / .dc / .op / .noise / .tf / .four)"
+                ),
+            ))
         ok = not any(d.level == "error" for d in diagnostics)
         return LintResult(ok=ok, diagnostics=diagnostics)
 
@@ -167,9 +211,10 @@ class LTspiceDriver:
         return {}
 
     def run_file(self, script: Path) -> RunResult:
-        if script.suffix.lower() not in NETLIST_SUFFIXES:
+        suffix = script.suffix.lower()
+        if suffix not in _ACCEPTED_SUFFIXES:
             raise RuntimeError(
-                f"ltspice driver only accepts {NETLIST_SUFFIXES} "
+                f"ltspice driver only accepts {_ACCEPTED_SUFFIXES} "
                 f"(got {script.suffix})"
             )
         # Mirror the driver-protocol contract: raise RuntimeError if
@@ -181,11 +226,16 @@ class LTspiceDriver:
             )
 
         try:
-            lt: LtRunResult = run_net(script)
+            if suffix == _ASC_SUFFIX:
+                lt: LtRunResult = run_asc(script)
+            else:
+                lt = run_net(script)
         except LtspiceNotInstalled as exc:
             raise RuntimeError(str(exc)) from exc
         except UnsupportedInput as exc:
             raise RuntimeError(str(exc)) from exc
+        except FlattenError as exc:
+            raise RuntimeError(f"Cannot flatten schematic: {exc}") from exc
 
         # Fold sim_ltspice's structured log + trace list into the JSON
         # summary so parse_output() can pick it up from stdout.

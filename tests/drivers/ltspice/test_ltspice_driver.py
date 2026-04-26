@@ -35,6 +35,11 @@ class TestDetect:
         p.write_text("* hi\nV1 1 0 1\n.end\n")
         assert self.driver.detect(p) is True
 
+    def test_asc_suffix(self, tmp_path):
+        p = tmp_path / "x.asc"
+        p.write_text("Version 4\nSHEET 1 880 680\n")
+        assert self.driver.detect(p) is True
+
     def test_wrong_suffix(self, tmp_path):
         p = tmp_path / "x.py"
         p.write_text("print('hi')\n")
@@ -70,6 +75,41 @@ class TestLint:
         p = tmp_path / "x.txt"
         p.write_text("* V1 1 0 1\n.tran 1m\n.end\n")
         assert self.driver.lint(p).ok is False
+
+
+class TestLintAsc:
+    def setup_method(self):
+        self.driver = LTspiceDriver()
+
+    def test_good_asc(self, tmp_path):
+        p = tmp_path / "rc.asc"
+        p.write_text(
+            "Version 4\nSHEET 1 880 680\n"
+            "SYMBOL res 0 0 R0\nSYMATTR InstName R1\n"
+            "TEXT 0 200 Left 2 !.tran 0 5m\n"
+        )
+        assert self.driver.lint(p).ok is True
+
+    def test_empty_asc(self, tmp_path):
+        p = tmp_path / "x.asc"
+        p.write_text("")
+        r = self.driver.lint(p)
+        assert r.ok is False
+        assert any("empty" in d.message.lower() for d in r.diagnostics)
+
+    def test_missing_version_header(self, tmp_path):
+        p = tmp_path / "x.asc"
+        p.write_text("not a real schematic\nTEXT 0 0 Left 2 !.tran 1m\n")
+        r = self.driver.lint(p)
+        assert r.ok is False
+        assert any("version" in d.message.lower() for d in r.diagnostics)
+
+    def test_no_analysis_directive(self, tmp_path):
+        p = tmp_path / "x.asc"
+        p.write_text("Version 4\nSHEET 1 880 680\nSYMBOL res 0 0 R0\n")
+        r = self.driver.lint(p)
+        assert r.ok is False
+        assert any("analysis" in d.message.lower() for d in r.diagnostics)
 
 
 class TestConnect:
@@ -234,3 +274,66 @@ class TestRunFile:
         result = d.run_file(script)
         assert result.exit_code == 1
         assert any("convergence" in e.lower() for e in result.errors)
+
+    def test_asc_dispatches_to_run_asc(self, monkeypatch, tmp_path):
+        """A `.asc` input must reach run_asc, not run_net."""
+        from sim_ltspice import RunResult as LtRunResult
+        from sim_ltspice.log import LogResult
+
+        d = LTspiceDriver()
+        monkeypatch.setattr(
+            d, "detect_installed",
+            lambda: [SolverInstall(
+                name="ltspice", version="17.2.4", path="/x", source="test",
+                extra={"exe": "/x/LTspice"},
+            )],
+        )
+
+        asc = tmp_path / "rc.asc"
+        asc.write_text("Version 4\nSHEET 1 880 680\n")
+
+        called: dict[str, object] = {}
+
+        def fake_asc(script):
+            called["asc"] = Path(script)
+            return LtRunResult(
+                exit_code=0, stdout="", stderr="",
+                duration_s=0.01, script=Path(script), started_at="",
+                log=LogResult(), log_path=None, raw_path=None, raw_traces=[],
+            )
+
+        def fake_net(_script):
+            called["net"] = True
+            raise AssertionError("run_net must not be called for .asc")
+
+        monkeypatch.setattr("sim.drivers.ltspice.driver.run_asc", fake_asc)
+        monkeypatch.setattr("sim.drivers.ltspice.driver.run_net", fake_net)
+
+        result = d.run_file(asc)
+        assert called["asc"] == asc
+        assert "net" not in called
+        assert result.exit_code == 0
+        assert result.solver == "ltspice"
+
+    def test_flatten_error_maps_to_runtime_error(self, monkeypatch, tmp_path):
+        """A FlattenError from sim_ltspice must surface as RuntimeError."""
+        from sim_ltspice.netlist import FlattenError as LtFlattenError
+
+        d = LTspiceDriver()
+        monkeypatch.setattr(
+            d, "detect_installed",
+            lambda: [SolverInstall(
+                name="ltspice", version="17.2.4", path="/x", source="test",
+                extra={"exe": "/x/LTspice"},
+            )],
+        )
+
+        asc = tmp_path / "x.asc"
+        asc.write_text("Version 4\nSHEET 1 880 680\n")
+
+        def boom(_script):
+            raise LtFlattenError("symbol 'no_such' not found in catalog")
+
+        monkeypatch.setattr("sim.drivers.ltspice.driver.run_asc", boom)
+        with pytest.raises(RuntimeError, match="(?i)flatten"):
+            d.run_file(asc)
