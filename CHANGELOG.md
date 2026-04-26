@@ -12,6 +12,15 @@ changes at milestone boundaries.
 
 ### Added
 
+- **`python -m sim` invocation (equivalent to the `sim` console script).**
+  Adds `src/sim/__main__.py` so `python -m sim ...` reaches the same Click
+  group as the installed `sim` entry point. Lets developers launch
+  `sim serve --reload` without holding a Windows file lock on
+  `.venv\Scripts\sim.exe` — `uv sync` then re-prepares the editable install
+  (which rewrites `Scripts/sim.exe`) without the `os error 32` collision
+  that aborts the sync when the server is up. End-user PyPI workflow is
+  unchanged; the `sim` console script remains the canonical entry point.
+
 - **`sim check` without a solver aggregates across all drivers.** Calling
   `sim check` with no solver argument (or with the explicit `--all` flag)
   now enumerates every registered driver, calls `safe_detect_installed()`
