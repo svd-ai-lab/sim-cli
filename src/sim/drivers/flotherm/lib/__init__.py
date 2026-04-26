@@ -22,6 +22,12 @@ from sim.drivers.flotherm.lib.floscript import (
     lint_floscript,
 )
 from sim.drivers.flotherm.lib.floxml import lint_floxml
+from sim.drivers.flotherm.lib.msp_field import (
+    MspFieldError,
+    list_fields,
+    read_mesh_dims,
+    read_msp_field,
+)
 from sim.drivers.flotherm.lib.pack import (
     lint_pack,
     pack_project_dir,
@@ -29,13 +35,17 @@ from sim.drivers.flotherm.lib.pack import (
 )
 
 __all__ = [
+    "MspFieldError",
     "build_custom",
     "build_solve_and_save",
     "build_solve_scenario",
     "lint_floscript",
     "lint_floxml",
     "lint_pack",
+    "list_fields",
     "pack_project_dir",
     "pack_project_name",
     "read_floerror_log",
+    "read_mesh_dims",
+    "read_msp_field",
 ]
