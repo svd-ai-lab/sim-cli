@@ -48,7 +48,11 @@ from sim.drivers.flotherm._helpers import (
     snapshot_result_files,
 )
 
-_FLOSCRIPT_MARKER = "<xml_log_file"
+# Flotherm authoring/exchange XML formats sim-cli claims for `detect()`:
+#   - FloSCRIPT (`<xml_log_file>`)         — command recordings, played via Macro > Play FloSCRIPT
+#   - Project FloXML (`<xml_case>`)        — vendor-blessed model exchange format
+#   - SmartPart FloXML (`<sm_xml_case>`)   — SmartPart-scoped FloXML
+_FLOTHERM_XML_MARKERS = ("<xml_log_file", "<xml_case", "<sm_xml_case")
 
 
 def _default_flotherm_probes(enable_gui: bool = True) -> list:
@@ -144,14 +148,14 @@ class FlothermDriver:
         return True
 
     def detect(self, script: Path) -> bool:
-        """Return True for Flotherm files (.pack, FloSCRIPT .xml)."""
+        """Return True for Flotherm files (.pack, FloSCRIPT or FloXML .xml)."""
         ext = script.suffix.lower()
         if ext == ".pack":
             return True
         if ext == ".xml":
             try:
                 header = script.read_bytes()[:512].decode("utf-8", errors="replace")
-                return _FLOSCRIPT_MARKER in header
+                return any(m in header for m in _FLOTHERM_XML_MARKERS)
             except OSError:
                 return False
         return False

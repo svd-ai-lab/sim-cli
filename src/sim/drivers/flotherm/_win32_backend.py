@@ -21,6 +21,7 @@ from __future__ import annotations
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 from sim.gui._win32_dialog import (
     dismiss_windows_by_title_fragment,
@@ -28,6 +29,16 @@ from sim.gui._win32_dialog import (
     find_dialog_by_title as _find_dialog,
     user32,
 )
+
+
+def _drain(pipe) -> str:
+    """Read whatever is buffered on a subprocess pipe without blocking forever."""
+    if pipe is None:
+        return ""
+    try:
+        return pipe.read().decode("utf-8", errors="replace").strip()
+    except Exception:
+        return ""
 
 _UIA_MENU_TRIGGER = """\
 import time
@@ -140,6 +151,11 @@ def play_floscript(script_path: str, timeout: float = 15) -> dict:
     if user32 is None:
         return {"ok": False, "error": "Not on Windows"}
 
+    # Flotherm's standard file-open dialog rejects forward-slash separators
+    # ("The file name is not valid"). The FloSCRIPT body itself accepts /,
+    # but the WM_SETTEXT into the dialog edit control needs native form.
+    script_path = str(Path(script_path))
+
     # Dismiss any existing popups
     dismissed = _dismiss_popups()
 
@@ -160,15 +176,25 @@ def play_floscript(script_path: str, timeout: float = 15) -> dict:
     except subprocess.TimeoutExpired:
         proc.kill()
 
+    # Surface subprocess output so silent failures (missing pywinauto, COM
+    # error, Qt mismatch) don't reduce to a generic "dialog not found".
+    sub_stderr = _drain(proc.stderr)
+    sub_stdout = _drain(proc.stdout)
+
     # Step 2: Find the Play FloSCRIPT file dialog.
     # find_dialog already polls (up to 5s) so no sleep needed before it.
     dialog = _find_dialog("Play FloSCRIPT", timeout=5)
     if dialog is None:
-        return {
+        result = {
             "ok": False,
             "error": "Play FloSCRIPT dialog not found after menu trigger",
             "dismissed_popups": dismissed,
         }
+        if sub_stderr:
+            result["subprocess_stderr"] = sub_stderr
+        if sub_stdout:
+            result["subprocess_stdout"] = sub_stdout
+        return result
 
     # Step 3: Fill and submit
     if not _fill_file_dialog(dialog, script_path):
