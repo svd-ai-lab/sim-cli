@@ -9,9 +9,7 @@ authors = [{ name = "Weiqi Ji", email = "jiweiqi10@gmail.com" }]
 keywords = [
     "simulation", "cae", "cad", "cfd", "fea",
     "llm", "agent", "agentic",
-    "ansys", "fluent", "mechanical", "mapdl", "workbench",
-    "comsol", "matlab", "openfoam", "flotherm", "pybamm",
-    "abaqus", "starccm", "ls-dyna", "ltspice",
+    "openfoam", "ltspice", "pybamm",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",

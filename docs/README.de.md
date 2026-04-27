@@ -32,13 +32,6 @@
 
 ---
 
-## 📰 News
-
-- **2026-04-07** 🚀 **sim-cli v0.2.0** — Erste öffentliche Veröffentlichung auf GitHub. Umbenennung von `svd-ai-lab/ion @ feature/openfoam-driver`. Die Driver-Registry deckt heute CFD, Multiphysik, Thermik, strukturelle Vorverarbeitung und Batteriemodellierung ab — und wächst weiter.
-- **2026-04-07** 🧠 Begleit-Repository [`sim-skills`](https://github.com/svd-ai-lab/sim-skills) veröffentlicht — Agent-Skills im Anthropic-Skill-Format pro Solver, damit ein LLM jeden neuen Backend ohne Vorwissen bedienen kann.
-
----
-
 ## 🤔 Warum sim?
 
 LLM-Agenten wissen längst, wie man PyFluent-, MATLAB-, COMSOL- und OpenFOAM-Skripte schreibt — die Trainingsdaten sind voll davon. Was ihnen fehlt, ist eine standardisierte Möglichkeit, **einen Solver zu starten, ihn schrittweise zu steuern und zwischen jedem Schritt zu beobachten**, was passiert ist, bevor sie den nächsten Zug entscheiden.
@@ -82,7 +75,7 @@ Vollständiges Driver-Protokoll, Server-Endpunkte und Execution-Pipeline siehe [
 > **Namen auf einen Blick:** Repo `svd-ai-lab/sim-cli` · PyPI-Distribution `sim-runtime` · CLI-Befehl `sim` · Import `import sim`. Ja, drei verschiedene Strings — der Repo-Name ist älter als der erste PyPI-Release; der Rest folgt Python-Paketierungs-Konvention.
 
 ```bash
-# 1. Auf der Maschine mit dem Solver (z. B. einer Fluent-Workstation),
+# 1. Auf der Maschine mit dem Solver,
 #    erst nur sim core installieren — noch keine SDK-Wahl:
 uv pip install sim-runtime
 

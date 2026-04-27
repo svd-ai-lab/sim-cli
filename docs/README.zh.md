@@ -32,13 +32,6 @@
 
 ---
 
-## 📰 动态
-
-- **2026-04-07** 🚀 **sim-cli v0.2.0** —— 在 GitHub 首次公开发布。原 `svd-ai-lab/ion @ feature/openfoam-driver` 仓库的更名重生。当前注册表已覆盖 CFD、多物理场、热分析、结构前处理、电池建模等多个领域，并仍在持续扩展。
-- **2026-04-07** 🧠 配套仓库 [`sim-skills`](https://github.com/svd-ai-lab/sim-skills) 同步上线 —— 每个求解器对应一份 Anthropic 标准格式的 Agent skill，让大模型在没有任何先验上下文的情况下也能驱动新的后端。
-
----
-
 ## 🤔 为什么是 sim？
 
 LLM 智能体早已知道怎么写 PyFluent、MATLAB、COMSOL、OpenFOAM 脚本 —— 训练数据里到处都是。它们真正缺的，是一个标准化的方式去**启动一个求解器、一步一步地驱动它、并在每一步之间观察结果**，再决定下一步怎么走。
@@ -82,7 +75,7 @@ LLM 智能体早已知道怎么写 PyFluent、MATLAB、COMSOL、OpenFOAM 脚本 
 > **名字一览：** 仓库 `svd-ai-lab/sim-cli` · PyPI 分发名 `sim-runtime` · 命令行 `sim` · 导入 `import sim`。是的，三个不同的字符串 —— 仓库名比第一次 PyPI 发布更早；其余的遵循 Python 打包惯例。
 
 ```bash
-# 1. 在装有求解器的机器上（如一台 Fluent 工作站），先装 sim 核心 ——
+# 1. 在装有求解器的机器上，先装 sim 核心 ——
 #    此时不用选 SDK：
 uv pip install sim-runtime
 

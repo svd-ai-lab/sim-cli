@@ -75,8 +75,8 @@ For the full driver protocol, server endpoints, and execution pipeline see [CLAU
 > **Names at a glance:** repo `svd-ai-lab/sim-cli` · PyPI distribution `sim-runtime` · console command `sim` · import `import sim`. Yes, three different strings — the repo name predates the PyPI publish; the rest follow Python packaging convention.
 
 ```bash
-# 1. On the box that has the solver (e.g. a Fluent workstation), install
-#    sim core only — no SDK choices yet:
+# 1. On the host that has the solver installed, install sim core only
+#    — no SDK choices yet:
 uv pip install sim-runtime
 
 # 2. Tell sim to look at this machine and pick the right SDK profile:
@@ -237,10 +237,10 @@ See [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) for setup, project layout, addi
 
 ## 🌐 Remote deployment
 
-When the solver lives on a different machine (a Fluent workstation, an HPC login node, a lab box) and you want to drive it from your laptop, a notebook, or an LLM agent — install `sim-runtime` on **both** ends and run `sim serve` on the remote.
+When the solver lives on a different machine (an HPC login node, a lab box, or any host with the solver installed) and you want to drive it from your laptop, a notebook, or an LLM agent — install `sim-runtime` on **both** ends and run `sim serve` on the remote.
 
 ```bash
-# On the solver host (the machine with Fluent / COMSOL / OpenFOAM / ... installed)
+# On the solver host (the machine with the solver installed)
 ssh user@solver-host
 pip install sim-runtime
 sim serve --host 0.0.0.0 --port 7600     # bind to all interfaces
@@ -263,34 +263,13 @@ That is the entire setup — same `sim-runtime` package on both sides, same wire
 
 ---
 
-## 📰 News
-
-Highlights from the last few milestones — full history in [`CHANGELOG.md`](CHANGELOG.md).
-
-- **2026-04-25** 👁 **`sim run` observability — workspace delta + persisted stdout/stderr + drill-in hints, on success too.** Three stacked commits (`0d13648` / `a0f51d7` / `5e47965`) close the visibility gap between "sim run completed" and "the agent knows what to do next". `RunResult` now carries a `workspace_delta` list (`{path, kind, size}` per added/modified file under cwd) — solver-neutral, no per-solver file conventions hardcoded; works for `log.simpleFoam`, Abaqus `.msg`/`.dat`, SU2 `history.dat`, Newton USD output, anything that touches disk. Raw stdout/stderr persist to `<sim_home>/runs/<id>.{stdout,stderr}` so the agent can `grep`/`awk`/`tail` directly without a `sim logs --field` round-trip; `history.jsonl` stays small. The success path now also surfaces the workspace delta + the "for more detail" drill-in hint section (previously failure-only) — when CFD finishes converging the agent immediately sees `postProcessing/sample/200/U.csv` listed and knows where to extract from. Stdout/stderr **tails** stay failure-gated to avoid 10K-line context dumps on success. Validated downstream by sim-benchmark v13 (`cases/neutral/`, n=3): mean 0.62 → 0.83 under Kimi-K2.5 with no prompt or scoring changes — the +0.21 jump is partly this fix unblocking agents that previously fell back to bare-bash workflows after a successful `sim run`.
-- **2026-04-24** 🔭 **Probe observability — 41/41 driver coverage, fact-only contract.** Every driver in the registry now attaches structured `diagnostics` + `artifacts` to the result of `run()`. The 10 session drivers (Fluent, COMSOL, Flotherm, Workbench, Mechanical, MAPDL, LS-DYNA, ANSA, MATLAB, CFX) each wire `generic_probes()` via their `_default_<solver>_probes()` factory; the 31 one-shot drivers share the same coverage through `runner.execute_script`. At the same time we deleted every solver-specific "regex → error code" rule the drivers used to hardcode (≈ 40 patterns across 12 rule tables, including Fluent/COMSOL/CFX/Mechanical/Workbench/LS-DYNA/MATLAB/ANSA/Flotherm). Drivers now **only report facts** — process exit code, wall time, hung-snippet timeout, `stdout_json_tail`, Python tracebacks, new workdir files, GUI window list, screenshots, raw SDK attribute values. "Is this string an error?" is a semantic judgement that belongs to the agent or sim-skills layer; the driver no longer pretends to know. Before/after on a real CFX session: a plain list-objects command went from 23 diagnostics (22 false-positive `cfx.post.internal_error` triggered by normal `/INTERNAL TABLE:` object names) down to 1 clean `sim.process.exit_zero`; real errors still surface in `result["error"]` so an agent can read the actual text. `TextStreamRulesProbe` + `DomainExceptionMapProbe` remain importable as framework capabilities — callers can opt back in by passing rules explicitly. Net diff: −461 LOC across 13 files.
-- **2026-04-23** 🖱 **`sim.gui` — cross-driver GUI actuation (Phase 3 P0)**. New `sim.gui` subpackage injects a `GuiController` into the `sim exec` namespace for every GUI-capable driver. Agents locate a live window by title substring, then drive it: `gui.find("连接到").click("确定")` / `dlg.send_text(path, into="File name")` / `dlg.screenshot()` / `gui.list_windows()` / `gui.snapshot()` (UIA tree). Built on a subprocess-isolated pywinauto backend (keeps COM apartments clean) plus a lean Win32 ctypes layer vendored out of the flotherm driver. `/connect` now advertises availability via `tools: ["gui"]` + `tool_refs: {"gui": "sim-skills/sim-cli/gui/SKILL.md"}` so agents can self-discover. Fluent + COMSOL wired in; Flotherm's `_win32_backend.py` migrated to shared primitives (zero behaviour change). L1: 13 unit tests (monkey-patched). L3: two real-solver e2e — Flotherm `Mobile_Demo_Steady_State.pack` imports + solves to steady convergence (I/8003, 153,449 cells, clock 8 s); COMSOL `surface_mount_package` runs the full 6-step sim-skills workflow (8468 tets, stationary solve 10.9 s, `Tmax=97.32 °C` over 49,356 solution nodes via mph).
-- **2026-04-19** 🤖 **Isaac Sim + Newton drivers — embodied-AI category** — two new GPU-physics drivers. `isaac`: NVIDIA Isaac Sim 4.5/5.0 (Omniverse Kit) with SimulationApp bootstrap contract, AST-based import-order lint, and `ISAAC_PYTHON`/`ISAAC_VENV` → `sys.executable` interpreter resolution. `newton`: NVIDIA Newton 1.x on Warp, accepting both Route A (declarative recipe JSON, 6 solver backends — XPBD/VBD/MuJoCo/ImplicitMPM/Style3D/SemiImplicit) and Route B (Python run-script with `SIM_ARTIFACT_DIR` collection). 3 canonical Newton E2E: basic_pendulum (XPBD/CPU), robot_g1 (MuJoCo + USD importer + replicate), cable_twist (VBD via `newton.examples`). Subprocess entry launched by file path with flat sibling imports so the newton venv never has to import the shared sim package.
-- **2026-04-16** 🔧 **HyperMesh driver** — new Altair HyperMesh FE pre-processor driver. Python `hm` API with 1946 model methods + 225 entity classes. Batch execution via `hw -b -script`. Detects via ALTAIR_HOME env, PATH, Program Files scan. 26 unit tests. 2-profile compat matrix (2024-2025).
-- **2026-04-16** 🔬 **ParaView driver** — new Kitware ParaView post-processing driver. Detects `pvpython`/`pvbatch` on PATH, conda `paraview` package, or binary installs in standard locations. One-shot via `pvpython script.py` using `paraview.simple` API. 26 unit tests (detect/lint/connect/parse/run). Supports 30+ input formats (.vtu/.vtk/.case/.foam/.cgns/.pvd/.exo/.stl/.xdmf). 2-profile compat matrix (5.12–5.13).
-- **2026-04-16** 🔧 **ICEM CFD driver** — new Ansys ICEM CFD meshing preprocessor driver. Pure CLI Orchestration via `icemcfd.bat -batch -script <file.tcl>` (Tcl 8.4 scripting, 1850 `ic_*` commands). Batch tetra meshing via `ic_run_tetra` (Programmer's Guide p143). 15 unit tests + Box.tin → 26752 tetra E2E (860 KB `.uns`, 3.9s). 4-profile compat matrix (24.1–25.2). No session mode — ICEM is a preprocessor, one-shot is the correct model.
-- **2026-04-15** 🐍 **Pure-Python simulation ecosystem — 13 new pip-installable drivers**: OpenSeesPy, SfePy, Cantera, OpenMDAO, FiPy, pymoo, Pyomo, SimPy, Trimesh, Devito, CoolProp, scikit-rf, pandapower. Each verified against analytical/textbook benchmarks (CH4/air adiabatic flame 2225 K, Sellar MDA, NSGA-II ZDT1 Pareto, water T_sat 373.124 K, etc.).
-- **2026-04-15** 🐧 **Open-source Linux CAE — 9 new drivers** reachable via remote `sim serve`: CalculiX, Gmsh, SU2, LAMMPS, scikit-fem, Elmer FEM, meshio, pyvista, PyMFEM. Each with Tier-1 unit tests + real-E2E physics verification (cantilever tip 0.1 % err, NACA0012 inviscid, LJ NVT, Poisson < 1 % err).
-- **2026-04-14** 🔩 **MAPDL driver (Phase 1 + Phase 2)** — new Ansys MAPDL driver covering both one-shot `sim run` and persistent PyMAPDL gRPC session (`sim connect/exec/inspect`). 4-profile compatibility matrix (24.1–25.2), 2D I-beam + 3D notched plate E2E, same 2D beam re-driven through 10-step session with identical physics.
-- **2026-04-14** 🌡 **Flotherm 2410 (2024.3) profile** added to the compatibility matrix.
-- **2026-04-14** 🐍 **LS-DYNA session mode + driver-agnostic inspect** — persistent Python namespace with PyDyna `Deck` + DPF `Model`; `sim inspect` no longer hardcodes builtin targets.
-- **2026-04-14** 💥 **LS-DYNA driver** — explicit/implicit nonlinear FEA via `.k` keyword files, single hex tension E2E with 7129-cycle normal termination.
-- **2026-04-14** 🌀 **CFX driver** — hybrid `cfx5solve` / `cfx5post -line` / `cfx5post -batch` with 27 unit tests + VMFL015 E2E.
-
----
-
 ## 📄 License
 
 Apache-2.0 — see [LICENSE](LICENSE).
 
 ### Third-party solver SDKs
 
-`sim-cli` is a thin wrapper/runtime — it does **not** bundle or redistribute any vendor solver or vendor SDK. Each solver backend is reached through a third-party SDK (e.g. `ansys-fluent-core`, `ansys-mapdl-core`, `ansys-workbench-core`, `ansys-mechanical-core`, `ansys-dyna-core`, `ansys-dpf-core`, `mph`, `matlabengine`) that the user installs separately via `sim env install` or as an optional extra.
+`sim-cli` is a thin wrapper/runtime — it does **not** bundle or redistribute any vendor solver or vendor SDK. Each solver backend is reached through a third-party SDK that the user installs separately via `sim env install` or as an optional extra.
 
 Users are responsible for obtaining a valid license for each underlying solver and for complying with the license, copyright, and EULA of every third-party SDK they choose to install alongside `sim-cli`. See [`NOTICE`](NOTICE) for the list of optional SDK dependencies and their upstream locations.
 
