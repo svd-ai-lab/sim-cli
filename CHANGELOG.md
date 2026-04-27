@@ -10,6 +10,27 @@ changes at milestone boundaries.
 
 ## [Unreleased]
 
+### Changed
+
+- **`sim.drivers` is now lazy-loaded.** `import sim.drivers` no longer
+  pulls every driver module at startup; each driver is resolved on
+  demand via `importlib`. A broken import in one driver no longer
+  crashes the whole CLI — `solvers list` shows the broken driver as
+  `status="error"` while other drivers continue to work. New API:
+  - `get_driver(name)` — returns the instance (cached), raises the
+    underlying `ImportError` if `name` is registered but its module
+    fails to import, returns `None` for unknown names.
+  - `iter_drivers()` — yields `(name, instance, error)` tuples,
+    tolerating per-driver failure. Used by `solvers list` and `lint`
+    auto-detection.
+  - `driver_names()` — stable list of all registered names.
+
+  The old `DRIVERS` list constant is removed. The two internal
+  callers (`cli.py:_check_all_local`, `cli.py:lint`) migrated to
+  `iter_drivers`. External code that imported `DRIVERS` should switch
+  to `iter_drivers()` or call `get_driver(name)` for a specific
+  driver.
+
 ### Added
 
 - **`sim.drivers.comsol.lib.MphArchive` / `inspect_mph` / `mph_diff`** —
