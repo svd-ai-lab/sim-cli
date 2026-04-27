@@ -34,7 +34,7 @@ empty string) so downstream tools can rely on column presence.
   "ts": "2025-04-24T07:21:14Z",
   "cwd": "/abs/path/to/project",
   "session_id": "s-8f3a",
-  "solver": "fluent",
+  "solver": "<driver>",
   "run_id": "r-0001",
   "kind": "exec",
   "label": "cli-snippet",
@@ -52,8 +52,8 @@ Field rules:
 - `session_id` — set when a session exists (`sim exec`, `sim run` when
   routed through a session). For `sim run <file>` one-shot (no server,
   no session), `session_id` is the empty string `""`. Never `null`.
-- `solver` — driver name (`fluent`, `mapdl`, `pybamm`, ...). For one-shot
-  `sim run`, this is the driver used.
+- `solver` — driver name (`pybamm`, `openfoam`, or any other registered
+  driver). For one-shot `sim run`, this is the driver used.
 - `run_id` — monotonic id, unique within a process. Opaque string.
 - `kind` — one of `exec`, `run`, `run_file`. (`run` = `sim run <file>`
   one-shot; `run_file` = server-side `/run` via a session; `exec` = code
@@ -68,7 +68,7 @@ record shape doesn't need to change for that.
 ## 3. `sim-serve.log` line format
 
 ```
-2025-04-24T07:21:14Z [session=s-8f3a] [solver=fluent] /exec cli-snippet ok (142 ms)
+2025-04-24T07:21:14Z [session=s-8f3a] [solver=<driver>] /exec cli-snippet ok (142 ms)
 ```
 
 Prefix rules:
@@ -92,10 +92,11 @@ env var  >  project .sim/config.toml  >  global ~/.sim/config.toml  >  auto-dete
 Under multi-session, the schema is unchanged but two UX rules apply:
 
 1. **Solver pins are advisory, not gating.** If
-   `.sim/config.toml` pins `[solvers.fluent]` but the user runs
-   `sim connect --solver mapdl`, the connect proceeds; the pin is
+   `.sim/config.toml` pins `[solvers.<name>]` but the user runs
+   `sim connect --solver <other-name>`, the connect proceeds; the pin is
    ignored for that session and a one-line warning is printed. Rationale:
-   a project may legitimately run Mechanical + Flotherm side by side.
+   a project may legitimately run two solvers (e.g. a structural FEA
+   driver alongside a thermal driver) side by side.
 2. **`sim connect` with no `--solver` picks the one pinned default if
    present; otherwise errors with the available driver list.** No
    guessing across multiple pins.
@@ -109,13 +110,13 @@ Breaking change — migrate once, don't carry two shapes.
   "sessions": [
     {
       "session_id": "s-8f3a",
-      "solver": "fluent",
-      "mode": "meshing",
+      "solver": "<driver>",
+      "mode": "<driver-mode>",
       "ui_mode": "no_gui",
       "processors": 1,
       "connected_at": "2025-04-24T07:18:02Z",
       "run_count": 3,
-      "profile": "pyfluent-0.38"
+      "profile": "<profile-name>"
     }
   ],
   "default_session": "s-8f3a",
