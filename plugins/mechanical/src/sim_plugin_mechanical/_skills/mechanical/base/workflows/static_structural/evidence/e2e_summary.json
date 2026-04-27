@@ -1,0 +1,57 @@
+{
+  "geometry": {
+    "ns_names": [
+      "NS_Face_1",
+      "NS_Fixed",
+      "NS_Frictional",
+      "NS_Thermal"
+    ],
+    "n_coord_systems": 2,
+    "n_analyses": 1,
+    "ok": true,
+    "n_named_selections": 4,
+    "n_bodies": 4
+  },
+  "mesh": {
+    "mesh_elements": 1120,
+    "ok": true,
+    "mesh_nodes": 5852
+  },
+  "bcs": {
+    "ok": true,
+    "bc_count": 4
+  },
+  "solve": {
+    "ok": true,
+    "n_results": 5
+  },
+  "results": {
+    "results": [
+      {
+        "index": 0,
+        "no_scalar": true
+      },
+      {
+        "index": 1,
+        "min": 0.10404270887374878,
+        "max": 0.10480716079473495
+      },
+      {
+        "index": 2,
+        "min": 0.0,
+        "max": 0.10486948530353776
+      },
+      {
+        "index": 3,
+        "min": 82164407.51794997,
+        "max": 2898098304.837431
+      },
+      {
+        "index": 4,
+        "max_x": -9999999982.703175
+      }
+    ],
+    "ok": true,
+    "n_results": 5
+  }
+}
