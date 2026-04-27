@@ -37,7 +37,7 @@ from __future__ import annotations
 import json
 import sys
 
-from sim.drivers.fluent.driver import PyFluentDriver
+from sim_plugin_fluent.driver import PyFluentDriver
 
 SEP = "─" * 60
 
