@@ -151,16 +151,19 @@ class SessionClient:
             return {"ok": False, "error": str(e)}
 
     def connect(self, solver: str, mode: str = "meshing",
-                ui_mode: str = "no_gui", processors: int = 1) -> dict:
+                ui_mode: str = "no_gui", processors: int = 1,
+                workspace: str | None = None) -> dict:
         # Auto-start local server if needed
         if self._is_local() and not self._server_reachable():
             if not self._auto_start_server():
                 return {"ok": False, "error": "failed to auto-start sim-server locally"}
 
-        body = {
+        body: dict = {
             "solver": solver, "mode": mode,
             "ui_mode": ui_mode, "processors": processors,
         }
+        if workspace is not None:
+            body["workspace"] = workspace
         resp = self._request("post", "/connect", timeout=CONNECT_TIMEOUT_S, json=body)
         # Remember the new session_id so subsequent calls on this client
         # route to it even if another session shows up later.
