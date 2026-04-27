@@ -18,6 +18,7 @@ from pathlib import Path
 
 from sim.drivers.flotherm.lib.error_log import (
     parse_error_log,
+    parse_logfile_xml,
     read_floerror_log,
 )
 
@@ -94,6 +95,64 @@ def default_flouser(install_root: str) -> str:
     if env:
         return env
     return os.path.join(install_root, "flouser")
+
+
+# ---------------------------------------------------------------------------
+# GUI session log discovery (<install>/WinXP/bin/LogFiles/logFile*.xml)
+# ---------------------------------------------------------------------------
+
+def list_logfile_xmls(install_root: str) -> list[str]:
+    """Return Flotherm GUI session log paths, newest first.
+
+    Flotherm writes one `logFile<timestamp>.xml` per GUI session under
+    `<install>/WinXP/bin/LogFiles/`, retaining up to 5. Sorted by file
+    mtime descending so the first entry is the most recent session.
+    Returns ``[]`` when the directory doesn't exist.
+    """
+    log_dir = os.path.join(install_root, "WinXP", "bin", "LogFiles")
+    if not os.path.isdir(log_dir):
+        return []
+    candidates = []
+    for name in os.listdir(log_dir):
+        if name.startswith("logFile") and name.endswith(".xml"):
+            full = os.path.join(log_dir, name)
+            with suppress(OSError):
+                candidates.append((os.path.getmtime(full), full))
+    candidates.sort(reverse=True)
+    return [path for _, path in candidates]
+
+
+def tail_logfile_xml(
+    install_root: str,
+    *,
+    most_recent_only: bool = True,
+) -> list[dict]:
+    """Return structured GUI-log entries under `<install>/WinXP/bin/LogFiles/`.
+
+    Each entry is a plain dict ``{code, severity, message, suggested_action,
+    raw}`` from :func:`sim.drivers.flotherm.lib.error_log.parse_logfile_xml`.
+
+    With ``most_recent_only=True`` (default) reads only the most recently
+    modified `logFile*.xml` — the typical "what just happened in this GUI
+    session" use case. With ``most_recent_only=False`` merges every retained
+    log file in newest-first order.
+
+    Callers that want "only entries since a baseline" should pass the result
+    through their own diff (the parser doesn't expose per-entry timestamps —
+    use the same baseline-list approach the driver uses for `floerror.log`).
+    """
+    from dataclasses import asdict
+
+    paths = list_logfile_xmls(install_root)
+    if not paths:
+        return []
+    if most_recent_only:
+        paths = paths[:1]
+    out: list[dict] = []
+    for p in paths:
+        for entry in parse_logfile_xml(p):
+            out.append(asdict(entry))
+    return out
 
 
 # ---------------------------------------------------------------------------
