@@ -34,7 +34,7 @@
 
 ## 🤔 Warum sim?
 
-LLM-Agenten wissen längst, wie man PyFluent-, MATLAB-, COMSOL- und OpenFOAM-Skripte schreibt — die Trainingsdaten sind voll davon. Was ihnen fehlt, ist eine standardisierte Möglichkeit, **einen Solver zu starten, ihn schrittweise zu steuern und zwischen jedem Schritt zu beobachten**, was passiert ist, bevor sie den nächsten Zug entscheiden.
+LLM-Agenten wissen längst, wie man Simulationsskripte schreibt — die Trainingsdaten sind voll davon. Was ihnen fehlt, ist eine standardisierte Möglichkeit, **einen Solver zu starten, ihn schrittweise zu steuern und zwischen jedem Schritt zu beobachten**, was passiert ist, bevor sie den nächsten Zug entscheiden.
 
 Heutige Optionen sind unzureichend:
 
@@ -113,18 +113,7 @@ Das ist die volle Schleife: **erkennen → bootstrappen → starten → steuern 
 
 > 📺 **Frühe Vorschau:** [erster Walkthrough auf YouTube](https://www.youtube.com/watch?v=3Fg6Oph44Ik) — Rohschnitt, eine überarbeitete Aufnahme ist weiterhin willkommen (siehe unten).
 
-> **Aufnahme in Arbeit.** Ein kurzer Terminal-Capture von `sim connect → exec → inspect → screenshot` gegen eine echte Fluent-Session landet hier. Die exakte Sequenz:
->
-> ```bash
-> sim serve --host 0.0.0.0
-> sim --host <ip> connect --solver fluent --mode solver --ui-mode gui --auto-install
-> sim --host <ip> inspect session.versions    # ← Schritt 0: in welchem Profil bin ich?
-> sim --host <ip> exec "solver.settings.file.read_case(file_name='mixing_elbow.cas.h5')"
-> sim --host <ip> exec "solver.settings.solution.initialization.hybrid_initialize()"
-> sim --host <ip> exec "solver.settings.solution.run_calculation.iterate(iter_count=20)"
-> sim --host <ip> inspect session.summary
-> sim --host <ip> disconnect
-> ```
+> **Aufnahme in Arbeit.** Ein kurzer Terminal-Capture von `sim connect → exec → inspect → screenshot` gegen eine echte Solver-Session landet hier.
 >
 > Aufnahme beitragen? [`vhs`](https://github.com/charmbracelet/vhs) oder [`asciinema`](https://asciinema.org/) verwenden und einen PR auf `assets/demo.gif` öffnen.
 
@@ -201,18 +190,9 @@ Vollständiges Design: [`docs/architecture/version-compat.md`](architecture/vers
 
 ## 🧪 Solver Registry
 
-Die Driver-Registry ist **offen und absichtlich wachsend** — ein neuer Backend ist eine ~200 LOC `DriverProtocol`-Implementierung plus eine Zeile in `drivers/__init__.py`. Hier ein Snapshot dessen, was aktuell in `main` ausgeliefert wird:
+Die Driver-Registry ist **offen und absichtlich wachsend** — ein neuer Backend ist eine ~200 LOC `DriverProtocol`-Implementierung plus eine Zeile in `drivers/__init__.py`, oder ein Out-of-tree-Plugin-Paket, das über die `sim.drivers`-Entry-point-Gruppe registriert wird.
 
-| Domäne | Beispiel-Backends, die heute funktionieren | Sessions | Status |
-|---|---|---|---|
-| Elektronik-Thermik | Simcenter Flotherm | persistent (GUI) | ✅ Working — Modellgenerierung aus natürlicher Sprache, XSD-validiertes FloSCRIPT, schrittweiser Aufbau mit Checkpoints |
-| CFD | Ansys Fluent, OpenFOAM, Simcenter STAR-CCM+ | persistent / one-shot | ✅ Working |
-| Multiphysik | COMSOL Multiphysics | one-shot | ✅ Working |
-| CAE | Ansys Workbench, Ansys Mechanical, Abaqus | persistent / one-shot | ✅ Working |
-| Vorverarbeitung | BETA CAE ANSA | persistent / one-shot | ✅ Working (Phase 1) |
-| Numerik / Scripting | MATLAB | one-shot | ✅ Working (v0) |
-| Batteriemodellierung | PyBaMM | one-shot | ✅ Working |
-| **+ dein Solver** | PR öffnen — siehe [Entwicklung](#-entwicklung) | — | 🛠 |
+Die mitgelieferte Abdeckung umfasst CFD, Multiphysik, Elektronik-Thermik, implizite und explizite strukturelle FEA, Vor- und Nachverarbeitung, Mesh-Generierung, Embodied-AI / GPU-Physik, Molekulardynamik, Optimierung / MDAO, Batteriemodellierung, thermodynamische Stoffdaten, Energienetze und HF-Simulation sowie ereignisdiskrete Modellierung. Konkrete Solver werden entweder über die eingebaute Registry oder über Out-of-tree-Plugin-Pakete erreicht — siehe [`sim-plugin-cantera`](https://github.com/svd-ai-lab/sim-plugin-cantera) als Referenz-Plugin.
 
 Per-Solver-Protokolle, Snippets und Demo-Workflows leben in [`sim-skills`](https://github.com/svd-ai-lab/sim-skills), das **ebenfalls so entworfen ist, dass es mitwächst** — ein neuer Agent-Skill pro neuem Backend.
 

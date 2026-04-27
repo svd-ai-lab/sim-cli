@@ -34,7 +34,7 @@
 
 ## 🤔 为什么是 sim？
 
-LLM 智能体早已知道怎么写 PyFluent、MATLAB、COMSOL、OpenFOAM 脚本 —— 训练数据里到处都是。它们真正缺的，是一个标准化的方式去**启动一个求解器、一步一步地驱动它、并在每一步之间观察结果**，再决定下一步怎么走。
+LLM 智能体早已知道怎么写仿真脚本 —— 训练数据里到处都是。它们真正缺的，是一个标准化的方式去**启动一个求解器、一步一步地驱动它、并在每一步之间观察结果**，再决定下一步怎么走。
 
 今天的选项都很糟糕：
 
@@ -111,18 +111,7 @@ sim --host <server-ip> disconnect
 
 > 📺 **早期预览：** [【agent驱动 ansys fluent 进行芯片热仿真】](https://www.bilibili.com/video/BV15RD7BTE21/) —— 粗剪版本（B 站），仍欢迎贡献更精致的录制（见下文）。
 
-> **录制中。** 即将放置一段终端 capture：`sim connect → exec → inspect → screenshot` 驱动一个真实的 Fluent 会话。计划录制的命令序列：
->
-> ```bash
-> sim serve --host 0.0.0.0
-> sim --host <ip> connect --solver fluent --mode solver --ui-mode gui --auto-install
-> sim --host <ip> inspect session.versions    # ← step 0: 当前在哪个 profile？
-> sim --host <ip> exec "solver.settings.file.read_case(file_name='mixing_elbow.cas.h5')"
-> sim --host <ip> exec "solver.settings.solution.initialization.hybrid_initialize()"
-> sim --host <ip> exec "solver.settings.solution.run_calculation.iterate(iter_count=20)"
-> sim --host <ip> inspect session.summary
-> sim --host <ip> disconnect
-> ```
+> **录制中。** 即将放置一段终端 capture：`sim connect → exec → inspect → screenshot` 驱动一个真实的求解器会话。
 >
 > 想贡献录制？欢迎使用 [`vhs`](https://github.com/charmbracelet/vhs) 或 [`asciinema`](https://asciinema.org/)，向 `assets/demo.gif` 提 PR。
 
@@ -199,18 +188,9 @@ sim --host <server-ip> disconnect
 
 ## 🧪 求解器注册表
 
-驱动注册表是**开放的、有意为之的成长式设计** —— 新增一个后端只需一份 ~200 LOC 的 `DriverProtocol` 实现，加上 `drivers/__init__.py` 里的一行注册。下面是 `main` 当前的快照：
+驱动注册表是**开放的、有意为之的成长式设计** —— 新增一个后端只需一份 ~200 LOC 的 `DriverProtocol` 实现，加上 `drivers/__init__.py` 里的一行注册，或者作为独立插件包通过 `sim.drivers` entry-point 注册。
 
-| 领域 | 当前已支持的示例后端 | 会话模式 | 状态 |
-|---|---|---|---|
-| 电子热分析 | Simcenter Flotherm | 持久（GUI）| ✅ 可用 —— 自然语言驱动的模型生成、XSD 校验的 FloSCRIPT、带检查点的分步构建 |
-| CFD | Ansys Fluent、OpenFOAM、Simcenter STAR-CCM+ | 持久 / 一次性 | ✅ 可用 |
-| 多物理场 | COMSOL Multiphysics | 一次性 | ✅ 可用 |
-| CAE | Ansys Workbench、Ansys Mechanical、Abaqus | 持久 / 一次性 | ✅ 可用 |
-| 前处理 | BETA CAE ANSA | 持久 / 一次性 | ✅ 可用（Phase 1）|
-| 数值 / 脚本 | MATLAB | 一次性 | ✅ 可用（v0）|
-| 电池建模 | PyBaMM | 一次性 | ✅ 可用 |
-| **+ 你的求解器** | 提 PR —— 见 [Adding a driver](#-开发) | — | 🛠 |
+内置覆盖范围横跨 CFD、多物理场、电子热分析、隐式与显式结构 FEA、前后处理、网格生成、具身 AI / GPU 物理、分子动力学、优化 / MDAO、电池建模、热物性、电力系统与射频仿真、以及离散事件建模。具体的求解器既可通过内置注册表抵达，也可通过外置插件包接入 —— 参考插件实现见 [`sim-plugin-cantera`](https://github.com/svd-ai-lab/sim-plugin-cantera)。
 
 每个求解器的协议、片段、演示工作流都住在 [`sim-skills`](https://github.com/svd-ai-lab/sim-skills)，它**同样在持续扩展** —— 每加一个新后端就配一份 agent skill。
 

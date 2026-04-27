@@ -34,7 +34,7 @@
 
 ## 🤔 sim が存在する理由
 
-LLM エージェントは PyFluent、MATLAB、COMSOL、OpenFOAM のスクリプトの書き方を既に知っています ── トレーニングデータに満ちています。彼らに欠けているのは、**ソルバーを起動し、一歩ずつ駆動し、各ステップの間に結果を観察してから**次の手を決めるための標準的な方法です。
+LLM エージェントはシミュレーションスクリプトの書き方を既に知っています ── トレーニングデータに満ちています。彼らに欠けているのは、**ソルバーを起動し、一歩ずつ駆動し、各ステップの間に結果を観察してから**次の手を決めるための標準的な方法です。
 
 今日の選択肢はどれも不十分です：
 
@@ -112,18 +112,7 @@ sim --host <server-ip> disconnect
 
 > 📺 **早期プレビュー:** [YouTube の初回ウォークスルー](https://www.youtube.com/watch?v=3Fg6Oph44Ik) — 粗編集です。よりブラッシュアップした録画の投稿を歓迎します（下記参照）。
 
-> **録画準備中。** 実際の Fluent セッションに対する `sim connect → exec → inspect → screenshot` の短いターミナルキャプチャがここに入ります。録画する正確なシーケンス：
->
-> ```bash
-> sim serve --host 0.0.0.0
-> sim --host <ip> connect --solver fluent --mode solver --ui-mode gui --auto-install
-> sim --host <ip> inspect session.versions    # ← step 0: 今どの profile？
-> sim --host <ip> exec "solver.settings.file.read_case(file_name='mixing_elbow.cas.h5')"
-> sim --host <ip> exec "solver.settings.solution.initialization.hybrid_initialize()"
-> sim --host <ip> exec "solver.settings.solution.run_calculation.iterate(iter_count=20)"
-> sim --host <ip> inspect session.summary
-> sim --host <ip> disconnect
-> ```
+> **録画準備中。** ライブソルバーセッションに対する `sim connect → exec → inspect → screenshot` の短いターミナルキャプチャがここに入ります。
 >
 > 録画を貢献したい？ [`vhs`](https://github.com/charmbracelet/vhs) か [`asciinema`](https://asciinema.org/) を使って `assets/demo.gif` に PR をどうぞ。
 
@@ -200,18 +189,9 @@ sim --host <server-ip> disconnect
 
 ## 🧪 ソルバーレジストリ
 
-ドライバーレジストリは**オープンで、意図的に成長する設計** ── 新しいバックエンドの追加は ~200 LOC の `DriverProtocol` 実装と `drivers/__init__.py` の 1 行の登録だけ。下記は現在 `main` に入っているスナップショットです：
+ドライバーレジストリは**オープンで、意図的に成長する設計** ── 新しいバックエンドの追加は ~200 LOC の `DriverProtocol` 実装と `drivers/__init__.py` の 1 行の登録、または `sim.drivers` エントリポイントグループ経由で登録するアウトオブツリーのプラグインパッケージで済みます。
 
-| ドメイン | 今日動く例示バックエンド | セッション | ステータス |
-|---|---|---|---|
-| 電子機器熱解析 | Simcenter Flotherm | 持続 (GUI) | ✅ Working ── 自然言語からのモデル生成、XSD 検証付き FloSCRIPT、チェックポイント付き段階構築 |
-| CFD | Ansys Fluent、OpenFOAM、Simcenter STAR-CCM+ | 持続 / ワンショット | ✅ Working |
-| マルチフィジックス | COMSOL Multiphysics | ワンショット | ✅ Working |
-| CAE | Ansys Workbench、Ansys Mechanical、Abaqus | 持続 / ワンショット | ✅ Working |
-| 前処理 | BETA CAE ANSA | 持続 / ワンショット | ✅ Working (Phase 1) |
-| 数値 / スクリプト | MATLAB | ワンショット | ✅ Working (v0) |
-| 電池モデリング | PyBaMM | ワンショット | ✅ Working |
-| **+ あなたのソルバー** | PR をどうぞ ── [開発](#-開発) を参照 | — | 🛠 |
+ビルトインのカバー範囲は CFD、マルチフィジックス、電子機器熱解析、陰的・陽的構造 FEA、前処理 / 後処理、メッシュ生成、エンボディド AI / GPU 物理、分子動力学、最適化 / MDAO、電池モデリング、熱物性、電力系統・RF シミュレーション、離散イベントモデリングに及びます。具体的なソルバーはビルトインレジストリ、またはアウトオブツリーのプラグインパッケージから利用できます ── リファレンスプラグインは [`sim-plugin-cantera`](https://github.com/svd-ai-lab/sim-plugin-cantera) を参照。
 
 ソルバーごとのプロトコル、スニペット、デモワークフローは [`sim-skills`](https://github.com/svd-ai-lab/sim-skills) にあります。これも**同様に成長するよう設計されており** ── 新しいバックエンドごとに 1 つの新しいエージェントスキルを追加します。
 
