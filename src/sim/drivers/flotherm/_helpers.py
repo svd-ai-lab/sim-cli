@@ -16,7 +16,10 @@ import subprocess
 from contextlib import suppress
 from pathlib import Path
 
-from sim.drivers.flotherm.lib.error_log import read_floerror_log
+from sim.drivers.flotherm.lib.error_log import (
+    parse_error_log,
+    read_floerror_log,
+)
 
 # ---------------------------------------------------------------------------
 # Installation detection
@@ -187,7 +190,17 @@ def detect_job_state(
     has_fatal = len(new_fatals) > 0
 
     if has_fatal:
-        reasons.append(f"New fatal errors: {new_fatals[0][:80]}")
+        # Surface the code + suggested action when we recognise the line.
+        first = new_fatals[0]
+        entries = parse_error_log(workspace)
+        match = next((e for e in entries if e["raw"] == first), None)
+        if match and match["suggested_action"]:
+            reasons.append(
+                f"New fatal: {match['code']} — {match['message'][:60]} "
+                f"(action: {match['suggested_action'][:80]})"
+            )
+        else:
+            reasons.append(f"New fatal errors: {first[:80]}")
     elif all_fatals and not has_fatal:
         reasons.append(f"Historical errors (ignored): {len(all_fatals)}")
 
@@ -237,6 +250,7 @@ def collect_artifacts(
         log_files = sorted(os.listdir(log_dir))
 
     error_content, _, _ = read_floerror_log(workspace)
+    structured_errors = parse_error_log(workspace)
 
     return {
         "project_path": proj_path,
@@ -245,4 +259,5 @@ def collect_artifacts(
         "log_files": log_files,
         "generated_scripts": generated_scripts or [],
         "error_log_summary": error_content[:300] if error_content else "",
+        "errors": structured_errors,
     }
