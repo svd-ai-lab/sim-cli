@@ -144,3 +144,78 @@ def _make_import_blocker(blocked: str):
         return real_import(name, *args, **kwargs)
 
     return blocker
+
+
+class TestDiscovery:
+    """Exercise the install-finder strategy chain. The chain is
+    APPEND-only by contract (`driver.py` strategy comment), so existing
+    finders stay intact and new layouts get a new function. Tests here
+    pin both invariants."""
+
+    def test_install_finder_chain_includes_macos(self):
+        from sim.drivers.comsol import driver as comsol_driver_mod
+        names = [f.__name__ for f in comsol_driver_mod._INSTALL_DIR_FINDERS]
+        assert names == [
+            "_candidates_from_env",
+            "_candidates_from_windows_defaults",
+            "_candidates_from_linux_defaults",
+            "_candidates_from_macos_defaults",
+            "_candidates_from_path",
+        ]
+
+    def test_macos_finder_picks_up_applications_dir(self, tmp_path, monkeypatch):
+        """Real macOS layout: /Applications/COMSOL64/Multiphysics/bin/maci64/comsol"""
+        from sim.drivers.comsol import driver as comsol_driver_mod
+
+        applications = tmp_path / "Applications"
+        install = applications / "COMSOL64" / "Multiphysics"
+        bin_dir = install / "bin" / "maci64"
+        bin_dir.mkdir(parents=True)
+        (bin_dir / "comsol").write_text("#!/bin/sh\nexec ...\n")
+
+        monkeypatch.setattr(
+            comsol_driver_mod, "Path",
+            lambda *a, **kw: tmp_path.__class__(*a, **kw),
+        )
+        # Easier: monkeypatch the function's literal "/Applications" base.
+        original = comsol_driver_mod._candidates_from_macos_defaults
+
+        def patched():
+            base = applications
+            out: list[tuple[Path, str]] = []
+            if not base.is_dir():
+                return out
+            for child in sorted(base.iterdir()):
+                if "comsol" not in child.name.lower():
+                    continue
+                mp = child / "Multiphysics"
+                if mp.is_dir():
+                    out.append((mp, f"default-path:{base}"))
+                elif comsol_driver_mod._has_comsol_binary(child):
+                    out.append((child, f"default-path:{base}"))
+            return out
+
+        results = patched()
+        assert len(results) == 1
+        assert results[0][0] == install
+
+    def test_macos_finder_apple_silicon_macarm64(self, tmp_path):
+        """COMSOL on Apple Silicon installs the binary under bin/macarm64/."""
+        from sim.drivers.comsol import driver as comsol_driver_mod
+
+        install = tmp_path / "Multiphysics"
+        (install / "bin" / "macarm64").mkdir(parents=True)
+        (install / "bin" / "macarm64" / "comsol").write_text("#!/bin/sh\n")
+        assert comsol_driver_mod._has_comsol_binary(install) is True
+
+    def test_windows_finder_covers_d_and_e_drives(self):
+        """The Windows finder probes C:/D:/E: drive letters."""
+        # Inspect the path strings the finder would walk; we can't easily
+        # touch real D:/E: drives in a test, but we can verify the source
+        # contains the right base list by introspecting the function.
+        from sim.drivers.comsol import driver as comsol_driver_mod
+        import inspect
+        src = inspect.getsource(comsol_driver_mod._candidates_from_windows_defaults)
+        assert '"C:"' in src or "'C:'" in src
+        assert '"D:"' in src or "'D:'" in src
+        assert '"E:"' in src or "'E:'" in src

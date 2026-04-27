@@ -10,5 +10,24 @@ the API, it migrates to `sim-comsol` on PyPI.
 from __future__ import annotations
 
 from sim.drivers.comsol.lib.describe import describe, format_text
+from sim.drivers.comsol.lib.mph_inspect import (
+    ModelInfo,
+    MphArchive,
+    MphEntry,
+    MphFileProbe,
+    format_summary,
+    inspect_mph,
+    mph_diff,
+)
 
-__all__ = ["describe", "format_text"]
+__all__ = [
+    "describe",
+    "format_text",
+    "ModelInfo",
+    "MphArchive",
+    "MphEntry",
+    "MphFileProbe",
+    "format_summary",
+    "inspect_mph",
+    "mph_diff",
+]

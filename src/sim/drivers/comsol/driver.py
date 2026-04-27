@@ -60,19 +60,25 @@ def _default_comsol_readers() -> list[tuple[str, object]]:
 
 
 def _default_comsol_probes(enable_gui: bool = False) -> list:
-    """COMSOL's probe list — generic_probes() + SDK readers + optional GUI.
+    """COMSOL's probe list — generic_probes() + SDK readers + MPH file
+    probe + optional GUI.
 
     No driver-layer semantic assertions: "what counts as an error" is the
     agent's job, not the driver's. Probes here only extract facts.
     SdkAttributeProbe reads raw Java-API attribute values (observation,
     not judgement) — the agent decides whether the values are healthy.
+    MphFileProbe describes any new .mph file that the run produced
+    via the stdlib ZIP reader (no JVM round-trip).
     """
+    from sim.drivers.comsol.lib.mph_inspect import MphFileProbe  # noqa: PLC0415
+
     probes: list = list(generic_probes())
     probes.append(SdkAttributeProbe(
         readers=_default_comsol_readers(),
         source_prefix="sdk:attr",
         code_prefix="comsol.sdk.attr",
     ))
+    probes.append(MphFileProbe(only_new=True))
     if enable_gui:
         probes.append(GuiDialogProbe(
             process_name_substrings=("comsol", "comsolui", "mphserver"),
@@ -182,6 +188,7 @@ def _comsol_binary_paths(install_dir: Path) -> list[Path]:
         install_dir / "bin" / "comsol",
         install_dir / "bin" / "glnxa64" / "comsol",
         install_dir / "bin" / "maci64" / "comsol",
+        install_dir / "bin" / "macarm64" / "comsol",
     ]
 
 
@@ -199,15 +206,19 @@ def _candidates_from_env() -> list[tuple[Path, str]]:
 
 
 def _candidates_from_windows_defaults() -> list[tuple[Path, str]]:
-    """Windows: C:\\Program Files\\COMSOL\\COMSOL{XX}\\Multiphysics\\ etc."""
-    bases = [
-        Path(r"C:\Program Files\COMSOL"),
-        Path(r"C:\Program Files (x86)\COMSOL"),
-        Path(r"C:\Program Files (x86)\COMSOL64\Multiphysics"),
-        Path(r"D:\Program Files\COMSOL"),
-        Path(r"D:\Program Files (x86)\COMSOL64\Multiphysics"),
-        Path(r"E:\Program Files (x86)\COMSOL64\Multiphysics"),
-    ]
+    """Windows: C:\\Program Files\\COMSOL\\COMSOL{XX}\\Multiphysics\\ etc.
+
+    Probes every common drive letter (C:/D:/E:) under both
+    ``Program Files`` and ``Program Files (x86)`` — the COMSOL installer
+    lets the user pick a different drive on multi-disk setups.
+    """
+    bases: list[Path] = []
+    for drive in ("C:", "D:", "E:"):
+        bases.extend([
+            Path(rf"{drive}\Program Files\COMSOL"),
+            Path(rf"{drive}\Program Files (x86)\COMSOL"),
+            Path(rf"{drive}\Program Files (x86)\COMSOL64\Multiphysics"),
+        ])
     out: list[tuple[Path, str]] = []
     for base in bases:
         if not base.is_dir():
@@ -244,6 +255,25 @@ def _candidates_from_linux_defaults() -> list[tuple[Path, str]]:
     return out
 
 
+def _candidates_from_macos_defaults() -> list[tuple[Path, str]]:
+    """macOS: /Applications/COMSOL{NN}/Multiphysics/ — the layout used
+    by the official COMSOL installer. Same naming convention as the
+    `sim-skills/comsol/doc-search` skill expects."""
+    base = Path("/Applications")
+    out: list[tuple[Path, str]] = []
+    if not base.is_dir():
+        return out
+    for child in sorted(base.iterdir()):
+        if "comsol" not in child.name.lower():
+            continue
+        mp = child / "Multiphysics"
+        if mp.is_dir():
+            out.append((mp, f"default-path:{base}"))
+        elif _has_comsol_binary(child):
+            out.append((child, f"default-path:{base}"))
+    return out
+
+
 def _candidates_from_path() -> list[tuple[Path, str]]:
     """`which comsol` — last-resort PATH probe."""
     out: list[tuple[Path, str]] = []
@@ -262,6 +292,7 @@ _INSTALL_DIR_FINDERS: list[Callable[[], list[tuple[Path, str]]]] = [
     _candidates_from_env,
     _candidates_from_windows_defaults,
     _candidates_from_linux_defaults,
+    _candidates_from_macos_defaults,
     _candidates_from_path,
 ]
 """Strategy chain. APPEND new finders for new install layouts; do not edit."""
