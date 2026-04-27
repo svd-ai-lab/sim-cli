@@ -32,7 +32,6 @@ _DRIVERS = [
     ("sim.drivers.mapdl.driver", "MapdlDriver"),
     ("sim.drivers.lsdyna.driver", "LsDynaDriver"),
     ("sim.drivers.ansa.driver", "AnsaDriver"),
-    ("sim.drivers.matlab.driver", "MatlabDriver"),
     ("sim.drivers.cfx.driver", "CfxDriver"),
 ]
 

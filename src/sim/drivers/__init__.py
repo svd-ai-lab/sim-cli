@@ -39,10 +39,6 @@ _ENTRY_POINT_GROUP = "sim.drivers"
 # and `lint` first-match priority.
 _BUILTIN_REGISTRY: list[tuple[str, str]] = [
     ("pybamm", "sim.drivers.pybamm:PyBaMMLDriver"),
-    ("fluent", "sim.drivers.fluent:PyFluentDriver"),
-    ("matlab", "sim.drivers.matlab:MatlabDriver"),
-    ("comsol", "sim.drivers.comsol:ComsolDriver"),
-    ("flotherm", "sim.drivers.flotherm:FlothermDriver"),
     ("ansa", "sim.drivers.ansa:AnsaDriver"),
     ("openfoam", "sim.drivers.openfoam:OpenFOAMDriver"),
     ("workbench", "sim.drivers.workbench:WorkbenchDriver"),

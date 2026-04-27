@@ -1,8 +1,7 @@
 """Generic Win32 ctypes helpers for standard Windows dialogs.
 
-Extracted from drivers/flotherm/_win32_backend.py so every driver can reuse
-the same proven path for interacting with modal dialogs without each
-driver vendoring its own copy.
+A shared backend so every driver can reuse the same path for interacting
+with modal dialogs without vendoring its own copy.
 
 The scope is deliberately narrow:
 

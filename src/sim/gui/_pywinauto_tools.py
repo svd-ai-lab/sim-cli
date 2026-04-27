@@ -9,8 +9,8 @@ Why subprocess isolation?
   action: main process stays clean, each call is stateless.
 
 Design inspiration:
-  * subprocess isolation + Windows file-dialog fallback: flotherm
-    ``drivers/flotherm/_win32_backend.py``
+  * subprocess isolation + Windows file-dialog fallback: developed
+    in this project's GUI-driving work for solvers without batch APIs.
   * tool catalog (find/click/type/close/screenshot/snapshot):
     sandraschi/pywinauto-mcp (MIT).
     https://github.com/sandraschi/pywinauto-mcp
