@@ -474,8 +474,10 @@ def _print_followup_hints(run_id, stdout_path, stderr_path, delta):
 @click.option("--mode", default="meshing", type=click.Choice(["meshing", "solver"]))
 @click.option("--ui-mode", default="no_gui", type=click.Choice(["no_gui", "gui"]))
 @click.option("--processors", default=1, type=int)
+@click.option("--workspace", default=None,
+              help="Solver-specific working dir (e.g. flotherm FLOUSERDIR).")
 @click.pass_context
-def connect(ctx, solver, mode, ui_mode, processors):
+def connect(ctx, solver, mode, ui_mode, processors, workspace):
     """Launch a solver and hold a persistent session."""
     from sim.session import SessionClient
 
@@ -486,6 +488,7 @@ def connect(ctx, solver, mode, ui_mode, processors):
         mode=mode,
         ui_mode=ui_mode,
         processors=processors,
+        workspace=workspace,
     )
 
     if ctx.obj["json"]:

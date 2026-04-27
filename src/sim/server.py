@@ -76,6 +76,7 @@ class ConnectRequest(BaseModel):
     mode: str = "meshing"
     ui_mode: str = "gui"
     processors: int = 2
+    workspace: str | None = None  # passed through to driver.launch(workspace=...)
 
 
 class ExecRequest(BaseModel):
@@ -277,12 +278,15 @@ def connect(req: ConnectRequest):
                     "two concurrent sessions on the same driver aren't supported yet",
                 )
 
+    launch_kwargs: dict = {
+        "mode": req.mode,
+        "ui_mode": req.ui_mode,
+        "processors": req.processors,
+    }
+    if req.workspace is not None:
+        launch_kwargs["workspace"] = req.workspace
     try:
-        info = driver.launch(
-            mode=req.mode,
-            ui_mode=req.ui_mode,
-            processors=req.processors,
-        )
+        info = driver.launch(**launch_kwargs)
     except HTTPException:
         raise
     except Exception as e:
