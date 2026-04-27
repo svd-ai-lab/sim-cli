@@ -120,7 +120,7 @@ nodeType, mesh/solution sizes — prefer the stdlib reader over a live
 JVM:
 
 ```python
-from sim.drivers.comsol.lib import inspect_mph
+from sim_plugin_comsol.lib import inspect_mph
 summary = inspect_mph(path)   # one-shot dict
 ```
 

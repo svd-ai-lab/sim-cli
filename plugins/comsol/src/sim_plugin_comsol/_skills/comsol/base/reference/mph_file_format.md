@@ -4,7 +4,7 @@
 
 ## Why this matters
 
-When an agent needs to answer "what's in this `.mph`?" — physics tags, parameters, mesh size, whether it's solved — the historical answer was "spin up a 2 GB JVM." For inspection-only queries that's overkill. The stdlib reader (`sim.drivers.comsol.lib.mph_inspect`) collapses these into sub-second calls and is auto-invoked by the driver's diagnostic probes.
+When an agent needs to answer "what's in this `.mph`?" — physics tags, parameters, mesh size, whether it's solved — the historical answer was "spin up a 2 GB JVM." For inspection-only queries that's overkill. The stdlib reader (`sim_plugin_comsol.lib.mph_inspect`) collapses these into sub-second calls and is auto-invoked by the driver's diagnostic probes.
 
 ## Archive layout
 
@@ -50,10 +50,10 @@ The `T="33"` siblings inside `<ModelParamGroup>` are the global parameters. **Ma
 
 ## Reading the file
 
-The driver ships `sim.drivers.comsol.lib.mph_inspect` with a stdlib-only API:
+The driver ships `sim_plugin_comsol.lib.mph_inspect` with a stdlib-only API:
 
 ```python
-from sim.drivers.comsol.lib import inspect_mph, MphArchive, mph_diff
+from sim_plugin_comsol.lib import inspect_mph, MphArchive, mph_diff
 
 # One-shot dict summary
 summary = inspect_mph("model.mph")
@@ -81,5 +81,5 @@ delta = mph_diff("before.mph", "after.mph")
 
 ## References
 
-- `sim-cli` source: [`src/sim/drivers/comsol/lib/mph_inspect.py`](https://github.com/svd-ai-lab/sim-cli/blob/main/src/sim/drivers/comsol/lib/mph_inspect.py)
+- Plugin source: [`src/sim_plugin_comsol/lib/mph_inspect.py`](https://github.com/svd-ai-lab/sim-plugin-comsol/blob/main/src/sim_plugin_comsol/lib/mph_inspect.py)
 - Reverse-engineering write-up: [sim-proj#51](https://github.com/svd-ai-lab/sim-proj/issues/51), [sim-cli#47](https://github.com/svd-ai-lab/sim-cli/pull/47)
