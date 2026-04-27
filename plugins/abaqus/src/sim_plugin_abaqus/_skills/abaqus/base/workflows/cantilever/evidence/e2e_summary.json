@@ -1,0 +1,56 @@
+{
+  "test": "abaqus_e2e_cantilever",
+  "date": "2026-04-13",
+  "solver": "Abaqus 2026",
+
+  "model": {
+    "type": "Cantilever beam under tip load",
+    "geometry": "L=10m, b=1m, h=1m",
+    "material": "Steel, E=200GPa, nu=0.3",
+    "load": "P=-1000N at tip (node 5)",
+    "boundary": "Fixed at nodes 1,10 (left edge)",
+    "elements": "4x CPS4 (2D plane stress)",
+    "nodes": 10
+  },
+
+  "analytical_reference": {
+    "formula": "PL^3 / (3EI)",
+    "tip_deflection_m": 2e-5,
+    "note": "Euler-Bernoulli beam theory"
+  },
+
+  "results": {
+    "ok": true,
+    "node": 5,
+    "U1_m": -4.2898087e-7,
+    "U2_m": -5.7521961e-6,
+    "tip_deflection_m": 5.7521961e-6,
+    "solver_output": "Abaqus completed successfully"
+  },
+
+  "validation": {
+    "tip_deflection_in_range": true,
+    "expected_range": "1e-7 to 1e-4 m",
+    "actual": "5.75e-6 m",
+    "note": "Coarse 4-element CPS4 mesh gives stiffer response than beam theory (5.75e-6 vs 2e-5) — expected for low-order plane stress elements"
+  },
+
+  "runs": {
+    "inp_direct": {
+      "file": "abaqus_e2e_cantilever.inp",
+      "run_id": "065",
+      "exit_code": 0,
+      "duration_s": 10.672,
+      "stdout_key": "Abaqus JOB abaqus_e2e_cantilever COMPLETED"
+    },
+    "python_wrapper": {
+      "file": "abaqus_e2e_cantilever_run.py",
+      "exit_code": 0,
+      "duration_s": "<1s (Python wrapper + Abaqus subprocess)",
+      "parsed_output": {
+        "ok": true,
+        "tip_deflection_m": 5.7521961e-6
+      }
+    }
+  }
+}

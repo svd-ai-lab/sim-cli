@@ -1,0 +1,51 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sim-plugin-abaqus"
+version = "0.1.0"
+description = "Dassault Systemes SIMULIA Abaqus driver for sim-cli, distributed as an out-of-tree plugin"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+authors = [{ name = "Weiqi Ji", email = "jiweiqi10@gmail.com" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: Apache Software License",
+]
+# Abaqus has no Python SDK imported into sim — scripts run in Abaqus's own
+# embedded Python via subprocess. Only sim-runtime is needed.
+dependencies = [
+    "sim-runtime @ git+https://github.com/svd-ai-lab/sim-cli@main",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7",
+]
+
+[project.entry-points."sim.drivers"]
+abaqus = "sim_plugin_abaqus:AbaqusDriver"
+
+[project.entry-points."sim.skills"]
+abaqus = "sim_plugin_abaqus:skills_dir"
+
+[project.urls]
+Homepage = "https://github.com/svd-ai-lab/sim-plugin-abaqus"
+Issues = "https://github.com/svd-ai-lab/sim-plugin-abaqus/issues"
+
+[tool.hatch.metadata]
+# Required because `sim-runtime` is pinned to a git+https URL — sim-cli is
+# distributed via GitHub, not PyPI. See sim-proj memory: plugin distribution
+# is GitHub-only.
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sim_plugin_abaqus"]
