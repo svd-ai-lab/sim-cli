@@ -14,7 +14,7 @@ ruff check src/sim tests
 
 ## Adding a new driver
 
-Drop a `DriverProtocol` implementation under `src/sim/drivers/<name>/driver.py`, register it in `drivers/__init__.py`, and you're done. See `pybamm/driver.py` for the smallest reference; `fluent/` for a full persistent-session driver.
+Drop a `DriverProtocol` implementation under `src/sim/drivers/<name>/driver.py` and register it in `_BUILTIN_REGISTRY` inside `drivers/__init__.py`. For an out-of-tree driver, expose it via the `sim.drivers` entry-point group from your own package. See `pybamm/driver.py` for the smallest reference. Persistent-session driver examples live in the out-of-tree plugin packages.
 
 The server routes all drivers through `DriverProtocol` — no `server.py` changes needed. Set `supports_session = True` for persistent-session drivers, `False` for one-shot only.
 
@@ -28,12 +28,13 @@ src/sim/
   driver.py        DriverProtocol + result dataclasses
   compat.py        Version-compat profiles + layered skill resolution
   drivers/
-    fluent/        Reference: persistent-session driver
-                   (driver.py + runtime.py + queries.py)
     pybamm/        Reference: smallest one-shot driver
-    flotherm/      GUI automation driver (Win32 + UIA backend)
-    …              one folder per registered backend
-    __init__.py    DRIVERS registry — register new backends here
+    openfoam/      Reference: SDK-less batch-CLI driver
+    …              one folder per built-in (open-source) backend
+    __init__.py    _BUILTIN_REGISTRY — register new built-in backends
+                   here; external plugins register via the
+                   `sim.drivers` entry-point group from their own
+                   package
 tests/             unit tests + fixtures (84 tests)
 assets/            logo · banner · architecture (SVG)
 docs/              translated READMEs (de · ja · zh) + architecture docs
@@ -77,9 +78,10 @@ sim disconnect --stop-server
 
 ### `SIM_DEV_MODE=1`
 
-Gates dangerous features behind an env var. Currently:
-
-- **Flotherm `#!python` exec** — raw Python execution through the Flotherm driver is blocked unless `SIM_DEV_MODE=1` is set.
+Gates dangerous features behind an env var. Plugins use this to gate
+raw-Python escape hatches inside script formats that would otherwise be
+declarative-only — without `SIM_DEV_MODE=1`, those code paths refuse to
+execute even when the directive is present in the input file.
 
 ## Layered skill composition
 

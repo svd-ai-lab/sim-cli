@@ -30,7 +30,7 @@ ruff check --fix src/sim tests
 
 # CLI
 sim serve --host 0.0.0.0             # start HTTP server (default port 7600)
-sim --host <ip> connect --solver fluent --mode solver --ui-mode gui
+sim --host <ip> connect --solver <name> --mode solver --ui-mode gui
 sim --host <ip> exec "solver.settings.mesh.check()"
 sim --host <ip> inspect session.summary
 sim --host <ip> screenshot -o shot.png
@@ -39,7 +39,7 @@ sim --host <ip> disconnect
 sim run script.py --solver pybamm    # one-shot mode
 sim logs                              # list runs
 sim logs last --field voltage_V      # extract a parsed field
-sim check fluent                      # solver availability
+sim check <name>                      # solver availability
 sim lint script.py                    # validate before running
 ```
 
@@ -65,11 +65,11 @@ FastAPI app exposing:
 
 The server supports multiple concurrent sessions keyed by session_id. Each `SessionState` carries its own `threading.Lock` so exec/inspect against different sessions can run in parallel. A single solver name can only be live once (driver instances are module-level singletons).
 
-**`sim serve --reload` drops all sessions on any source change under the watched tree.** uvicorn's reload watchdog observes file mtimes in `src/sim/**`; any edit (git pull, scp of a modified driver, even touching an unrelated module) restarts the worker, wiping `_sessions`. Child solver processes (Flotherm GUI, Fluent, etc.) survive the reload because they're spawned separately, but the session handles to them are gone — you have to `connect` again. Driver temp files (written to the solver's workspace, e.g. `flouser/_sim_*.xml`) live outside `src/` so they don't retrigger. Practical rules:
+**`sim serve --reload` drops all sessions on any source change under the watched tree.** uvicorn's reload watchdog observes file mtimes in `src/sim/**`; any edit (git pull, scp of a modified driver, even touching an unrelated module) restarts the worker, wiping `_sessions`. Child solver processes (out-of-process GUIs, separately spawned solver binaries) survive the reload because they're spawned separately, but the session handles to them are gone — you have to `connect` again. Driver temp files written into the solver's workspace live outside `src/` so they don't retrigger. Practical rules:
 
 - Don't edit driver code mid-experiment; finish the run, then edit.
 - For long autonomous experiments where you're editing driver code iteratively, launch **without** `--reload` and restart manually when you want the new code picked up.
-- Reconnecting after a reload takes ~20s for GUI-mode Flotherm (the existing GUI process is re-adopted; no re-launch needed).
+- Reconnecting after a reload can take tens of seconds for GUI-mode drivers that re-adopt the existing window rather than relaunching it.
 
 ### Driver protocol (`src/sim/driver.py`)
 `DriverProtocol` (a `runtime_checkable` `Protocol`):
@@ -83,33 +83,13 @@ The server supports multiple concurrent sessions keyed by session_id. Each `Sess
 `LintResult`, `Diagnostic`, `RunResult`, `ConnectionInfo` are dataclasses with `to_dict()` for JSON serialization.
 
 ### Driver registry (`src/sim/drivers/__init__.py`)
-`DRIVERS` — module-level list of instantiated driver objects:
 
-| Name | Class | Layout |
-|---|---|---|
-| `pybamm` | `PyBaMMLDriver` | `pybamm/driver.py` |
-| `fluent` | `PyFluentDriver` | `fluent/driver.py` + `runtime.py` + `queries.py` |
-| `matlab` | `MatlabDriver` | `matlab/driver.py` |
-| `comsol` | `ComsolDriver` | `comsol/driver.py` |
-| `flotherm` | `FlothermDriver` | `flotherm/driver.py` + `_helpers.py` |
-| `ansa` | `AnsaDriver` | `ansa/driver.py` + `runtime.py` + `schemas.py` |
-| `openfoam` | `OpenFOAMDriver` | `openfoam/driver.py` |
-| `workbench` | `WorkbenchDriver` | `workbench/driver.py` + `compatibility.yaml` |
-| `mechanical` | `MechanicalDriver` | `mechanical/driver.py` + `compatibility.yaml` |
-| `abaqus` | `AbaqusDriver` | `abaqus/driver.py` |
-| `starccm` | `StarccmDriver` | `starccm/driver.py` + `compatibility.yaml` |
-| `cfx` | `CfxDriver` | `cfx/driver.py` + `compatibility.yaml` |
-| `ls_dyna` | `LsDynaDriver` | `lsdyna/driver.py` + `compatibility.yaml` |
-| `mapdl` | `MapdlDriver` | `mapdl/driver.py` + `compatibility.yaml` |
-| `icem` | `IcemDriver` | `icem/driver.py` + `compatibility.yaml` |
-| `paraview` | `ParaViewDriver` | `paraview/driver.py` + `compatibility.yaml` |
-| `hypermesh` | `HyperMeshDriver` | `hypermesh/driver.py` + `compatibility.yaml` |
+Drivers are resolved lazily through two channels:
 
-Drivers with `supports_session = True` (fluent, ansa, flotherm, matlab, workbench, mechanical, cfx, ls_dyna, mapdl) implement persistent-session lifecycle (`launch`/`run`/`query`/`disconnect`). The rest are one-shot only.
+- **`_BUILTIN_REGISTRY`** — an ordered list of `(name, "module:Class")` tuples for the open-source drivers that ship with `sim-runtime` itself (PyBaMM, OpenFOAM, CalculiX, gmsh, SU2, LAMMPS, Elmer, scikit-fem, MFEM, OpenSeesPy, SfePy, OpenMDAO, FiPy, pymoo, Pyomo, SimPy, Trimesh, Devito, CoolProp, scikit-rf, pandapower, ParaView, meshio, PyVista, Newton, Isaac Sim, LTspice). The canonical list lives in `src/sim/drivers/__init__.py`.
+- **`sim.drivers` entry-point group** — external/closed-source drivers register themselves via standard Python entry points and are discovered at import time, validated, and appended after the built-ins. Built-ins win on name collisions. This is the path used by every commercial-solver plugin (each lives in its own out-of-tree package with its own `compatibility.yaml`).
 
-LS-DYNA is a special case: the *solver* is one-shot (no live process to connect to), but the session holds a persistent Python namespace with PyDyna `Deck`/`run_dyna` and a DPF `Model` so deck-building and post-processing can be driven incrementally via `sim exec`.
-
-`get_driver(name)` looks up by `.name` attribute.
+A driver may set `supports_session = True` to implement the persistent-session lifecycle (`launch`/`run`/`query`/`disconnect`); the rest are one-shot only. `get_driver(name)` looks up by `.name` attribute and lazily imports the implementation module on first use, so a broken plugin does not crash the CLI.
 
 ### Execution pipeline — one-shot (`run`)
 1. `cli.run` → `runner.execute_script(script, solver, driver)` → subprocess, captures stdout/stderr/duration
@@ -132,66 +112,31 @@ Session routing rules: an explicit `X-Sim-Session` header wins (404 if unknown);
 3. Register in `src/sim/drivers/__init__.py`: import and append to `DRIVERS`
 4. If the driver needs server-side launch logic, extend `server.py`'s `/connect` handler accordingly
 
-See `pybamm/driver.py` for the smallest reference implementation; `fluent/` for a full persistent-session example.
+See `pybamm/driver.py` for the smallest reference implementation. Persistent-session examples live in the out-of-tree plugin packages.
 
 ## Test Layout
 
 ```
 tests/
   __init__.py
-  conftest.py                        shared FIXTURES / EXECUTION paths
+  conftest.py                        shared fixtures / execution paths
   base/                              core framework tests (no solver needed)
     test_cli.py                      smoke tests for click commands
     test_compat.py                   skills layering / profile resolution
+    test_config.py                   two-tier config resolution
     test_connect.py                  driver.connect() availability checks
+    test_driver_discovery.py         entry-point plugin discovery
+    test_history.py                  global run history persistence
     test_lint.py                     lint protocol coverage
-    test_run.py                      one-shot subprocess execution
-    test_store.py                    RunStore persistence
     test_logs.py                     sim logs CLI
-  drivers/                           per-driver unit + integration tests
-    abaqus/
-      test_abaqus_driver.py          protocol compliance
-      test_abaqus_e2e.py             cantilever beam E2E
-    comsol/
-      test_comsol_driver.py          unit tests
-    flotherm/
-      test_flotherm_lint.py          FloSCRIPT XSD validation
-    fluent/
-      test_fluent_mixing_elbow.py    mixing_elbow E2E
-    matlab/
-      test_matlab_driver.py          unit tests
-    cfx/
-      test_cfx_driver.py             unit tests (27 tests)
-      test_cfx_e2e.py                VMFL015 verification E2E
-    lsdyna/
-      test_lsdyna_driver.py          unit tests (24 tests)
-      test_lsdyna_e2e.py             single hex tension E2E
-    starccm/
-      test_starccm_driver.py         unit tests
-    workbench/
-      test_workbench_driver.py       unit tests (monkeypatched)
-      test_workbench_integration.py  real SDK integration
-  fixtures/                          mock solver scripts, organized by solver
-    abaqus/                          .py + .inp fixtures
-    comsol/                          .py fixtures
-    matlab/                          .m fixtures
-    pybamm/                          .py fixtures
-    cfx/                             .ccl + .def fixtures
-    lsdyna/                          .k fixtures
-    starccm/                         .java fixtures
-    workbench/                       .wbjn + .py fixtures
-    mock_solver.py                   shared mock scripts
-    mock_fail.py
-    not_simulation.py
-  execution/                         E2E scripts (per solver, manual runs)
-    abaqus/                          cantilever beam scripts
-    fluent/                          mixing_elbow snippets + PS1 runners
-    mechanical/                      static structural E2E + observation coupling
-    starccm/                         smoke test Java macro
-    workbench/                       SDK example runners
+    test_multi_session.py            session routing + concurrency
+    test_run.py                      one-shot subprocess execution
+  drivers/                           per-driver unit + integration tests for in-tree drivers
+  fixtures/                          mock solver scripts (one set per in-tree driver, plus shared mocks)
+  execution/                         optional end-to-end scripts for in-tree drivers
 ```
 
-Tests that need a real solver are gated by import-availability flags (e.g. `HAS_PYBAMM`) and skip gracefully when the package is missing.
+Tests for out-of-tree plugin drivers live in their own plugin repos. Tests in this repo that require a real solver are gated by import-availability flags (e.g. `HAS_PYBAMM`) and skip gracefully when the package is missing.
 
 ## Notes
 
@@ -218,9 +163,12 @@ machine or account. The two are easy to confuse.
 
 **Keep:**
 - The bug, the error message, the exit code, the reproducing input.
-- Version info that is a genuine reproduction prereq — *"this bug
-  reproduces on MATLAB R2024+ because `addpath` rejects `resources/`
-  in that release"*. The version is part of the engineering claim.
+- Version info that is a genuine reproduction prereq — when a behavior
+  is gated to a specific release of an open-source dependency, the
+  version is part of the engineering claim and stays. Use neutral
+  framing for closed-source dependencies ("a CFD solver release that
+  changed the boundary-condition API") rather than naming the vendor
+  and release.
 - Platform when behavior is platform-gated (Linux vs Windows
   filesystem casing, COM availability, etc.).
 
@@ -233,9 +181,9 @@ machine or account. The two are easy to confuse.
   `C:\Program Files\<Vendor>\<version>\...`) → "a local clone",
   "the editable install", or elide.
 - Specific commercial-software *versions tied to a personal machine*
-  — e.g. *"MATLAB R2025b on my Windows host at `C:\Program
-  Files\MATLAB\R2025b`"*. Vendor compliance teams use these as
-  license-audit signals even when the version alone would be fine.
+  — vendor compliance teams treat these as license-audit signals
+  even when the version alone would be fine. Replace with neutral
+  phrasing.
 - Tailscale tailnet names, OS account SIDs, MAC/serial numbers.
 
 Sanitize existing artifacts by editing PR/issue/comment bodies

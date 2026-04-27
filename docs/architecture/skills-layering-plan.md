@@ -18,17 +18,17 @@
 ## 1. Problem (one paragraph)
 
 Each driver currently ships a flat `sim-skills/<driver>/` tree. As we
-add more SDK and solver versions, the API-specific bits (pyfluent 0.37
-vs 0.38) and solver-specific bits (Fluent 25R2 vs 24R1) start fighting
-the cross-cutting bits (concepts, file formats, license tips). We need
-a way to say "this reference is generic; this snippet is 0.38-only;
-this known-issue is 25R2-only" *without* duplicating the whole tree per
-profile.
+add more SDK and solver versions, the API-specific bits (one SDK
+release vs the next) and solver-specific bits (one solver release vs
+the next) start fighting the cross-cutting bits (concepts, file
+formats, license tips). We need a way to say "this reference is
+generic; this snippet is SDK-rev-only; this known-issue is
+solver-rev-only" *without* duplicating the whole tree per profile.
 
 ## 2. Layout
 
 ```
-sim-skills/fluent/
+sim-skills/<driver>/
     SKILL.md            ← single entry point. Hand-written index that
                           tells the LLM where to look. Does NOT contain
                           actual knowledge — only pointers like
@@ -41,18 +41,19 @@ sim-skills/fluent/
         snippets/
         workflows/
     sdk/
-        pyfluent-0.37/
-        pyfluent-0.38/
+        <sdk-rev-a>/
+        <sdk-rev-b>/
     solver/
-        25.2/
-        24.1/
+        <solver-rev-a>/
+        <solver-rev-b>/
 ```
 
 `base/` is always relevant. `sdk/<slug>/` and `solver/<slug>/` carry
 deltas that apply only to specific profiles.
 
-The same template applies to every driver. SDK-less drivers (openfoam,
-flotherm, ansa) just have an empty or absent `sdk/` directory.
+The same template applies to every driver. SDK-less drivers (e.g. those
+that drive a solver purely through its scripting interface or a CLI
+batch mode) just have an empty or absent `sdk/` directory.
 
 ## 3. compat.yaml change
 
@@ -60,12 +61,12 @@ Each profile gains two optional string fields:
 
 ```yaml
 profiles:
-  - name: pyfluent_0_38_modern
-    sdk: ">=0.38,<0.39"
-    solver_versions: ["25.2", "25.1"]
-    runner_module: sim._runners.fluent.modern_runner
-    active_sdk_layer: pyfluent-0.38         # ← new
-    active_solver_layer: "25.2"             # ← new
+  - name: <profile-name>
+    sdk: ">=X.Y,<Z.W"
+    solver_versions: ["<solver-rev-a>", "<solver-rev-b>"]
+    runner_module: sim._runners.<driver>.<runner>
+    active_sdk_layer: <sdk-slug>            # ← new
+    active_solver_layer: "<solver-slug>"    # ← new
 ```
 
 `base/` is implicit and always active — no field for it.
@@ -82,7 +83,7 @@ content leave `active_solver_layer` unset). The current
 
 The only runtime requirement: when an LLM connects, it needs to know
 which sdk/solver layers are active for its profile. Otherwise it can't
-tell whether to read `sdk/pyfluent-0.37/` or `sdk/pyfluent-0.38/`.
+tell which `sdk/<slug>/` directory to read.
 
 Wire it through the existing `/connect` response. After a successful
 connect, sim-server returns:
@@ -92,12 +93,12 @@ connect, sim-server returns:
   "ok": true,
   "data": {
     "session_id": "...",
-    "profile": "pyfluent_0_38_modern",
+    "profile": "<profile-name>",
     "skills": {
-      "root": "/path/to/sim-skills/fluent",
-      "index": "/path/to/sim-skills/fluent/SKILL.md",
-      "active_sdk_layer": "sdk/pyfluent-0.38",
-      "active_solver_layer": "solver/25.2"
+      "root": "/path/to/sim-skills/<driver>",
+      "index": "/path/to/sim-skills/<driver>/SKILL.md",
+      "active_sdk_layer": "sdk/<sdk-slug>",
+      "active_solver_layer": "solver/<solver-slug>"
     },
     ...
   }
@@ -153,31 +154,28 @@ skipping.)
 
 ## 6. sim-skills migration
 
-Per-driver, in this order. Each driver is a separate sim-skills PR.
+Per-driver, in dependency order. Each driver is a separate sim-skills PR.
 
 1. **pybamm** — currently has only `SKILL.md`. Create `base/` with the
    existing content, write a fresh top-level `SKILL.md` index.
    Validates the loader/contract end-to-end on minimal content.
 2. **openfoam** — SDK-less. Move existing `reference/`, `docs/`,
-   `tests/` into `base/`. Create `solver/v2206/`, `solver/v2312/`,
-   `solver/v2406/` (initially empty `.gitkeep`). Hand-write SKILL.md
+   `tests/` into `base/`. Create `solver/<rev>/` directories per
+   supported release (initially empty `.gitkeep`). Hand-write SKILL.md
    index. compat.yaml profiles get `active_solver_layer`.
-3. **fluent** — the actual reason this exists. Move bulk content into
-   `base/`. Create `sdk/pyfluent-0.37/` and `sdk/pyfluent-0.38/` and
-   triage which existing snippets/reference files are version-specific.
-   Create `solver/25.2/`, `solver/24.1/` (probably mostly empty at
-   first). Hand-write SKILL.md index.
-4. **comsol** — same recipe; mostly `solver/<ver>/` layers, single
-   `sdk/mph-1.x/`.
-5. **matlab** — three engine versions, three release years; mostly
-   `sdk/<engine>/` layers.
-6. **flotherm**, **ansa** — SDK-less, smallest deltas; do last.
+3. Drivers with both SDK and solver-version sensitivity — move bulk
+   content into `base/`. Create one `sdk/<rev>/` per supported SDK
+   release and triage which existing snippets/reference files are
+   version-specific. Create `solver/<rev>/` directories (probably
+   mostly empty at first). Hand-write SKILL.md index.
+4. SDK-less drivers and drivers with smallest deltas — do last.
 
 After each driver's PR lands, the corresponding `compatibility.yaml` in
-sim-cli is updated in the same commit (the schema change in §3 must be
-additive and backward compatible *for unmigrated drivers*: profiles
-without the two new fields just get None for both, which means "no
-sdk/solver overlay, base only").
+sim-cli (or the plugin package, for out-of-tree drivers) is updated in
+the same commit. The schema change in §3 must be additive and backward
+compatible *for unmigrated drivers*: profiles without the two new
+fields just get None for both, which means "no sdk/solver overlay,
+base only".
 
 ## 7. SKILL.md content (template)
 
@@ -198,15 +196,16 @@ which active layers apply (`active_sdk_layer`, `active_solver_layer`).
 
 ## SDK-version-specific — sdk/<your-active-sdk-layer>/
 
-If your active_sdk_layer is `pyfluent-0.38`, look in
-`sdk/pyfluent-0.38/` for:
+For example, if your active_sdk_layer is `<sdk-slug>`, look in
+`sdk/<sdk-slug>/` for:
 - the API surface (method names, kwargs)
 - migration notes from earlier SDKs
 - known SDK-version bugs
 
 ## Solver-version-specific — solver/<your-active-solver-layer>/
 
-If your active_solver_layer is `25.2`, look in `solver/25.2/` for:
+For example, if your active_solver_layer is `<solver-slug>`, look in
+`solver/<solver-slug>/` for:
 - features added/removed in this release
 - license syntax quirks
 - known issues
@@ -233,10 +232,10 @@ Tests live alongside `compat.py`. Create `tests/test_compat_skills.py`
 |---|------|---------|
 | 1 | `profile_loads_active_layer_fields` | Synthetic compat.yaml with `active_sdk_layer` / `active_solver_layer` round-trips into `Profile` correctly. |
 | 2 | `profile_active_layers_default_to_none` | A profile that omits both fields gets `None` / `None` and still loads. |
-| 3 | `verify_skills_layout_passes_on_complete_tree` | Build a synthetic sim-skills tree with `fluent/SKILL.md`, `fluent/base/`, `fluent/sdk/pyfluent-0.38/`, `fluent/solver/25.2/`. Pretend compat.yaml declares those active layers. `verify_skills_layout()` returns `[]`. |
-| 4 | `verify_skills_layout_flags_missing_skill_md` | Drop `fluent/SKILL.md` → mismatch entry. |
-| 5 | `verify_skills_layout_flags_missing_base` | Drop `fluent/base/` → mismatch entry. |
-| 6 | `verify_skills_layout_flags_missing_sdk_layer` | compat.yaml says `active_sdk_layer: pyfluent-0.99`, no such dir → mismatch entry. |
+| 3 | `verify_skills_layout_passes_on_complete_tree` | Build a synthetic sim-skills tree with `<driver>/SKILL.md`, `<driver>/base/`, `<driver>/sdk/<sdk-slug>/`, `<driver>/solver/<solver-slug>/`. Pretend compat.yaml declares those active layers. `verify_skills_layout()` returns `[]`. |
+| 4 | `verify_skills_layout_flags_missing_skill_md` | Drop `<driver>/SKILL.md` → mismatch entry. |
+| 5 | `verify_skills_layout_flags_missing_base` | Drop `<driver>/base/` → mismatch entry. |
+| 6 | `verify_skills_layout_flags_missing_sdk_layer` | compat.yaml declares an `active_sdk_layer` slug for which no directory exists → mismatch entry. |
 | 7 | `verify_skills_layout_flags_missing_solver_layer` | symmetric. |
 | 8 | `verify_skills_layout_skips_unset_layers` | A profile with `active_sdk_layer: None` doesn't trigger any sdk-related check. |
 | 9 | `connect_response_includes_skills_block` | (server-side, async test) `/connect` against a fake driver returns a response whose `data.skills` block has `root`, `index`, `active_sdk_layer`, `active_solver_layer`. |
@@ -253,8 +252,8 @@ sim-skills repo.
 4. Per-driver sim-skills migration PRs in the order from §6. Each PR
    updates that driver's `compatibility.yaml` to set the two active
    layer fields and removes `skill_revision`.
-5. Once all 7 drivers are migrated, delete the back-compat tolerance
-   for `skill_revision` (a one-line removal — until then the loader
+5. Once every driver is migrated, delete the back-compat tolerance for
+   `skill_revision` (a one-line removal — until then the loader
    accepts and ignores it with a warning).
 
 ## 10. What this plan deliberately does NOT do
@@ -289,12 +288,11 @@ works with the same Read/Glob/Grep tools it already has.
 
 ## 12. Open questions for review
 
-1. **Layer slug convention.** I've been writing `sdk/pyfluent-0.38/`
-   and `solver/25.2/`. Are those the slugs you want, or do you prefer
-   something tighter like `sdk/0.38/` (driver name dropped because the
-   parent dir already says `fluent`)?
+1. **Layer slug convention.** Should the slug repeat the SDK package
+   name (e.g. `sdk/<sdk-package>-<rev>/`) or stay terse (e.g.
+   `sdk/<rev>/`, since the parent dir already names the driver)?
 2. **`active_sdk_layer` value format.** Same question — does the yaml
-   value include the `pyfluent-` prefix, or just `0.38`?
+   value include the SDK-package prefix, or just the rev?
 3. **Should `verify_skills_layout()` be wired into a CI step now**, or
    only added as a function for later use? (I lean: add the function,
    no CI hook yet — wiring it into CI requires both repos to migrate
