@@ -66,7 +66,6 @@ _BUILTIN_REGISTRY: list[tuple[str, str]] = [
     ("pymfem", "sim.drivers.pymfem:PymfemDriver"),
     ("openseespy", "sim.drivers.openseespy:OpenSeesPyDriver"),
     ("sfepy", "sim.drivers.sfepy:SfepyDriver"),
-    ("cantera", "sim.drivers.cantera:CanteraDriver"),
     ("openmdao", "sim.drivers.openmdao:OpenMDAODriver"),
     ("fipy", "sim.drivers.fipy:FipyDriver"),
     ("pymoo", "sim.drivers.pymoo:PymooDriver"),
