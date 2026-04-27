@@ -28,10 +28,15 @@ def test_public_surface():
         lint_pack,
         pack_project_dir,
         pack_project_name,
+        parse_error_line,
+        parse_error_log,
+        parse_error_log_text,
+        parse_logfile_xml,
         read_floerror_log,
     )
 
     for fn in (build_custom, build_solve_and_save, build_solve_scenario,
                lint_floscript, lint_floxml, lint_pack, pack_project_dir,
-               pack_project_name, read_floerror_log):
+               pack_project_name, parse_error_line, parse_error_log,
+               parse_error_log_text, parse_logfile_xml, read_floerror_log):
         assert callable(fn)

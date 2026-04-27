@@ -14,7 +14,16 @@ here.
 """
 from __future__ import annotations
 
-from sim.drivers.flotherm.lib.error_log import read_floerror_log
+from sim.drivers.flotherm.lib.error_log import (
+    CODE_CATALOGUE,
+    FATAL_CODES,
+    ErrorEntry,
+    parse_error_line,
+    parse_error_log,
+    parse_error_log_text,
+    parse_logfile_xml,
+    read_floerror_log,
+)
 from sim.drivers.flotherm.lib.floscript import (
     build_custom,
     build_solve_and_save,
@@ -46,7 +55,10 @@ from sim.drivers.flotherm.lib.pack import (
 
 __all__ = [
     "Ambient",
+    "CODE_CATALOGUE",
     "Cuboid",
+    "ErrorEntry",
+    "FATAL_CODES",
     "FixedTemperature",
     "Fluid",
     "HeatSource",
@@ -63,6 +75,10 @@ __all__ = [
     "list_fields",
     "pack_project_dir",
     "pack_project_name",
+    "parse_error_line",
+    "parse_error_log",
+    "parse_error_log_text",
+    "parse_logfile_xml",
     "read_floerror_log",
     "read_mesh_dims",
     "read_msp_field",
