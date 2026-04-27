@@ -80,7 +80,10 @@ def _check_local(solver: str) -> dict:
 
     from sim.compat import load_compatibility, safe_detect_installed
 
-    driver = get_driver(solver)
+    try:
+        driver = get_driver(solver)
+    except Exception as e:  # noqa: BLE001 — surface lazy-import failures distinctly
+        return {"ok": False, "error": f"driver '{solver}' failed to load: {type(e).__name__}: {e}"}
     if driver is None:
         return {"ok": False, "error": f"unknown solver: {solver}"}
 
@@ -184,10 +187,16 @@ def _check_all_local() -> dict:
     with status="not_installed". Driver errors are captured as status="error".
     """
     from sim.compat import safe_detect_installed
-    from sim.drivers import DRIVERS
+    from sim.drivers import iter_drivers
 
     rows: list[dict] = []
-    for driver in DRIVERS:
+    for reg_name, driver, import_error in iter_drivers():
+        if import_error is not None:
+            rows.append({
+                "name": reg_name, "status": "error",
+                "message": f"{type(import_error).__name__}: {import_error}",
+            })
+            continue
         name = getattr(driver, "name", driver.__class__.__name__)
         try:
             installs = safe_detect_installed(driver)
@@ -296,10 +305,12 @@ def check(ctx, solver, check_all):
 def lint(ctx, script):
     """Validate a simulation script before execution."""
     script_path = Path(script)
-    from sim.drivers import DRIVERS
+    from sim.drivers import iter_drivers
 
     driver = None
-    for d in DRIVERS:
+    for _name, d, import_error in iter_drivers():
+        if import_error is not None or d is None:
+            continue
         if d.detect(script_path):
             driver = d
             break
@@ -327,7 +338,11 @@ def lint(ctx, script):
 @click.pass_context
 def run(ctx, script, solver):
     """Execute a simulation script in a subprocess (one-shot)."""
-    driver = get_driver(solver)
+    try:
+        driver = get_driver(solver)
+    except Exception as e:  # noqa: BLE001 — surface lazy-import failures distinctly
+        click.echo(f"[sim] error: driver '{solver}' failed to load: {type(e).__name__}: {e}", err=True)
+        sys.exit(1)
     if driver is None:
         click.echo(f"[sim] error: no driver for '{solver}'", err=True)
         sys.exit(1)

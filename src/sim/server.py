@@ -175,7 +175,10 @@ def detect_solver(solver: str):
     from sim.compat import load_compatibility, safe_detect_installed
     from sim.drivers import get_driver
 
-    driver = get_driver(solver)
+    try:
+        driver = get_driver(solver)
+    except Exception as e:  # noqa: BLE001 — surface lazy-import failures distinctly
+        raise HTTPException(500, f"driver '{solver}' failed to load: {type(e).__name__}: {e}")
     if driver is None:
         raise HTTPException(404, f"unknown solver: {solver}")
 
@@ -246,7 +249,10 @@ def connect(req: ConnectRequest):
     """
     from sim.drivers import get_driver
 
-    driver = get_driver(req.solver)
+    try:
+        driver = get_driver(req.solver)
+    except Exception as e:  # noqa: BLE001 — surface lazy-import failures distinctly
+        raise HTTPException(500, f"driver '{req.solver}' failed to load: {type(e).__name__}: {e}")
     if driver is None:
         raise HTTPException(400, f"unknown solver: {req.solver}")
 
@@ -356,7 +362,10 @@ def run_script(req: RunRequest):
     if not script_path.is_file():
         raise HTTPException(400, f"script not found: {req.script}")
 
-    driver = get_driver(req.solver)
+    try:
+        driver = get_driver(req.solver)
+    except Exception as e:  # noqa: BLE001 — surface lazy-import failures distinctly
+        raise HTTPException(500, f"driver '{req.solver}' failed to load: {type(e).__name__}: {e}")
     if driver is None:
         raise HTTPException(400, f"unknown solver: {req.solver}")
 
