@@ -148,6 +148,35 @@ def test_parse_logfile_xml_malformed_xml_returns_empty(tmp_path: Path) -> None:
     assert parse_logfile_xml(str(p)) == []
 
 
+def test_parse_logfile_xml_handles_unterminated_log(tmp_path: Path) -> None:
+    """Flotherm leaves logFile*.xml without a closing </xml_log_file> — both
+    while the session is live and (often) after exit. We must still parse
+    the messages that are present."""
+    open_xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<xml_log_file version="1.0">\n'
+        '    <!--Unpublished work. Copyright 2025 Siemens-->\n'
+        '    <message text="ERROR   E/15002 - '
+        'Command failed to find property: foo"/>\n'
+        '    <message text="WARN    W/15000 - '
+        'Aborting XML due to previous error"/>\n'
+        # No closing </xml_log_file> on purpose.
+    )
+    p = tmp_path / "logFile_truncated.xml"
+    p.write_text(open_xml, encoding="utf-8")
+    out = parse_logfile_xml(str(p))
+    assert [e.code for e in out] == ["E/15002", "W/15000"]
+    assert out[0].suggested_action  # action propagates after the wrap-and-retry
+
+
+def test_parse_logfile_xml_empty_file_returns_empty(tmp_path: Path) -> None:
+    p = tmp_path / "empty.xml"
+    p.write_text("", encoding="utf-8")
+    assert parse_logfile_xml(str(p)) == []
+    p.write_text("   \n  \n", encoding="utf-8")
+    assert parse_logfile_xml(str(p)) == []
+
+
 # --- catalogue invariants -------------------------------------------------
 
 def test_fatal_codes_are_in_catalogue() -> None:

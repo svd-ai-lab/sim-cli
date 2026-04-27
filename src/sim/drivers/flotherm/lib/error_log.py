@@ -112,18 +112,32 @@ def parse_logfile_xml(path: str) -> list[ErrorEntry]:
 
     Flotherm writes `<install>\\WinXP\\bin\\LogFiles\\logFile<ts>.xml` per
     GUI session (5 retained). Each diagnostic appears as
-    `<message text="ERROR …"/>`.
+    `<message text="ERROR …"/>`. Flotherm leaves these files without a
+    closing `</xml_log_file>` tag — both during a live session and (often)
+    after exit — so a strict ``ET.parse`` raises
+    ``ParseError: no element found``. Try the strict parse first; on
+    failure, append a synthetic close tag and retry.
     """
     from xml.etree import ElementTree as ET
 
     if not os.path.isfile(path):
         return []
     try:
-        tree = ET.parse(path)
-    except ET.ParseError:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            text = f.read()
+    except OSError:
         return []
+    if not text.strip():
+        return []
+    try:
+        root = ET.fromstring(text)
+    except ET.ParseError:
+        try:
+            root = ET.fromstring(text + "\n</xml_log_file>")
+        except ET.ParseError:
+            return []
     entries: list[ErrorEntry] = []
-    for el in tree.getroot().iter("message"):
+    for el in root.iter("message"):
         entry = parse_error_line(el.get("text") or "")
         if entry is not None:
             entries.append(entry)
