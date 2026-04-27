@@ -739,7 +739,15 @@ class FlothermDriver:
                     self._process.kill()
 
     def _launch_gui(self, workspace: str) -> int | None:
-        """Launch Flotherm GUI via flotherm.exe."""
+        """Launch Flotherm GUI via flotherm.exe.
+
+        Injects ``FLOUSERDIR=<workspace>`` into the subprocess env so the
+        spawned GUI looks at the session's workspace, not the inherited
+        process-wide default. Without this, calling ``launch(workspace=...)``
+        sets the field on the session metadata but the GUI itself opens the
+        wrong project root — projects created in our workspace are invisible
+        in Project Manager.
+        """
         if self._install is None:
             return None
 
@@ -752,8 +760,10 @@ class FlothermDriver:
 
         try:
             self._ensure_license_env()
+            env = os.environ.copy()
+            env["FLOUSERDIR"] = workspace
             self._process = subprocess.Popen(
-                [exe_path], cwd=bin_dir,
+                [exe_path], cwd=bin_dir, env=env,
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                 creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
             )
