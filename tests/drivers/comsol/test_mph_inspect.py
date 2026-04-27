@@ -542,7 +542,9 @@ def test_format_summary_includes_title_and_node_type(compact_mph: Path):
     text = format_summary(inspect_mph(compact_mph))
     assert "Compact Sample" in text
     assert "compact" in text
-    assert "HeatTransfer" not in text or "physics" not in text  # physics is tags here
+    # Tag block shows the smodel.json physics tag, not the modelinfo string
+    assert "physics:" in text
+    assert "ht" in text
     # Parameters block
     assert "L = 1[m]" in text
     assert "T0 = 293.15[K]" in text
@@ -705,6 +707,24 @@ def test_probe_does_not_apply_when_workdir_missing():
     probe = MphFileProbe()
     ctx = _StubCtx("/no/such/dir/anywhere")
     assert probe.applies(ctx) is False
+
+
+def test_probe_does_not_apply_in_only_new_mode_without_baseline(tmp_path: Path):
+    """Mirrors WorkdirDiffProbe's contract — `only_new=True` needs a
+    baseline to be meaningful, otherwise we'd silently describe every
+    pre-existing .mph the agent already knew about."""
+    from sim.drivers.comsol.lib import MphFileProbe
+
+    workdir = tmp_path / "wd"
+    workdir.mkdir()
+    probe = MphFileProbe(only_new=True)
+    ctx = _StubCtx(workdir, workdir_before=None)
+    assert probe.applies(ctx) is False
+
+    # only_new=False is the explicit "describe everything" mode and
+    # must still apply.
+    probe_all = MphFileProbe(only_new=False)
+    assert probe_all.applies(ctx) is True
 
 
 # Keep `io` imported — reserved for future stream-based helpers.

@@ -729,9 +729,16 @@ class MphFileProbe:
 
     def applies(self, ctx: Any) -> bool:
         try:
-            return Path(self.workdir_getter(ctx)).is_dir()
+            if not Path(self.workdir_getter(ctx)).is_dir():
+                return False
         except Exception:
             return False
+        # only_new mode requires a baseline; without one we'd silently
+        # describe every .mph in the workdir (matching WorkdirDiffProbe's
+        # contract). Skip rather than surprise the caller.
+        if self.only_new and getattr(ctx, "workdir_before", None) is None:
+            return False
+        return True
 
     def probe(self, ctx: Any) -> Any:
         # Import locally so the probe class can live next to the parser
