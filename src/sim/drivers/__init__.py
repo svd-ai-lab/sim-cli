@@ -5,18 +5,39 @@ A broken import in one driver no longer crashes the entire CLI: callers that
 walk the registry (`iter_drivers`) get a per-driver error; callers that ask
 for a specific driver (`get_driver`) get the original ImportError raised so
 they can present it directly.
+
+Plugin discovery
+----------------
+External drivers register themselves via the ``sim.drivers`` entry-point group:
+
+    [project.entry-points."sim.drivers"]
+    myname = "my_pkg.module:MyDriver"
+
+These are discovered at import time, validated, sorted by name, and **appended
+after** the built-in registry. This ordering is contract: built-ins always
+take precedence in `lint` first-match resolution and `solvers list` output;
+externals cannot override a built-in name (collisions are logged and skipped).
+External `module:Class` strings are stored as-is and resolved lazily by
+`_resolve` — discovery never imports the plugin module.
 """
 from __future__ import annotations
 
 import importlib
+import logging
+from importlib.metadata import entry_points
 from typing import Iterator
 
 from sim.driver import DriverProtocol
 
 
+log = logging.getLogger(__name__)
+
+_ENTRY_POINT_GROUP = "sim.drivers"
+
+
 # (driver_name, "module:Class") — order controls `solvers list` output order
 # and `lint` first-match priority.
-_REGISTRY: list[tuple[str, str]] = [
+_BUILTIN_REGISTRY: list[tuple[str, str]] = [
     ("pybamm", "sim.drivers.pybamm:PyBaMMLDriver"),
     ("fluent", "sim.drivers.fluent:PyFluentDriver"),
     ("matlab", "sim.drivers.matlab:MatlabDriver"),
@@ -60,6 +81,62 @@ _REGISTRY: list[tuple[str, str]] = [
     ("hypermesh", "sim.drivers.hypermesh:HyperMeshDriver"),
     ("ltspice", "sim.drivers.ltspice:LTspiceDriver"),
 ]
+
+
+def _is_valid_spec(spec: str) -> bool:
+    """Cheap shape check for ``"module.path:ClassName"`` — no import."""
+    if not isinstance(spec, str) or ":" not in spec:
+        return False
+    module_path, _, cls_name = spec.rpartition(":")
+    if not module_path or not cls_name:
+        return False
+    if not all(p.isidentifier() for p in module_path.split(".")):
+        return False
+    return cls_name.isidentifier()
+
+
+def _discover_external() -> list[tuple[str, str]]:
+    """Find external drivers registered via the ``sim.drivers`` entry-point group.
+
+    Validation rules (all violations are logged + skipped, never raised):
+      * ``ep.value`` must look like ``"module.path:ClassName"``.
+      * Names already in ``_BUILTIN_REGISTRY`` are ignored — built-in wins.
+      * Duplicate external names: first-seen wins; rest skipped.
+
+    Returns a list sorted by driver name for deterministic ordering.
+    """
+    builtin_names = {n for n, _ in _BUILTIN_REGISTRY}
+    found: dict[str, str] = {}
+    try:
+        eps = entry_points(group=_ENTRY_POINT_GROUP)
+    except Exception as e:  # noqa: BLE001 — entry-point machinery itself failed; degrade gracefully
+        log.warning("entry_points(%s) lookup failed: %s", _ENTRY_POINT_GROUP, e)
+        return []
+    for ep in eps:
+        name, spec = ep.name, ep.value
+        if name in builtin_names:
+            log.warning(
+                "external driver %r (from %s) shadows a built-in; skipping",
+                name, spec,
+            )
+            continue
+        if name in found:
+            log.warning(
+                "duplicate external driver %r (from %s); keeping first-seen %r",
+                name, spec, found[name],
+            )
+            continue
+        if not _is_valid_spec(spec):
+            log.warning(
+                "external driver %r has malformed entry-point value %r; skipping",
+                name, spec,
+            )
+            continue
+        found[name] = spec
+    return sorted(found.items())
+
+
+_REGISTRY: list[tuple[str, str]] = _BUILTIN_REGISTRY + _discover_external()
 
 # Cache: name -> instance. Populated on first successful resolve.
 _INSTANCE_CACHE: dict[str, DriverProtocol] = {}
