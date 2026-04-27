@@ -1,4 +1,0 @@
-# This is just a plain text file renamed to .wbjn
-# It has no Workbench API calls
-print("hello world")
-x = 1 + 2
