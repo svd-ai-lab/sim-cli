@@ -39,16 +39,7 @@ _ENTRY_POINT_GROUP = "sim.drivers"
 # and `lint` first-match priority.
 _BUILTIN_REGISTRY: list[tuple[str, str]] = [
     ("pybamm", "sim.drivers.pybamm:PyBaMMLDriver"),
-    ("ansa", "sim.drivers.ansa:AnsaDriver"),
     ("openfoam", "sim.drivers.openfoam:OpenFOAMDriver"),
-    ("workbench", "sim.drivers.workbench:WorkbenchDriver"),
-    ("mechanical", "sim.drivers.mechanical:MechanicalDriver"),
-    ("abaqus", "sim.drivers.abaqus:AbaqusDriver"),
-    ("starccm", "sim.drivers.starccm:StarccmDriver"),
-    ("cfx", "sim.drivers.cfx:CfxDriver"),
-    ("ls_dyna", "sim.drivers.lsdyna:LsDynaDriver"),
-    ("mapdl", "sim.drivers.mapdl:MapdlDriver"),
-    ("icem", "sim.drivers.icem:IcemDriver"),
     ("isaac", "sim.drivers.isaac:IsaacDriver"),
     ("newton", "sim.drivers.newton:NewtonDriver"),
     ("calculix", "sim.drivers.calculix:CalculixDriver"),
@@ -73,7 +64,6 @@ _BUILTIN_REGISTRY: list[tuple[str, str]] = [
     ("scikit_rf", "sim.drivers.scikitrf:ScikitRfDriver"),
     ("pandapower", "sim.drivers.pandapower:PandapowerDriver"),
     ("paraview", "sim.drivers.paraview:ParaViewDriver"),
-    ("hypermesh", "sim.drivers.hypermesh:HyperMeshDriver"),
     ("ltspice", "sim.drivers.ltspice:LTspiceDriver"),
 ]
 

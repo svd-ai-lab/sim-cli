@@ -1,4 +1,0 @@
-SetScriptVersion(Version="24.1")
-template1 = GetTemplate(TemplateName="Static Structural"
-# missing closing paren - syntax error
-system1 = template1.CreateSystem(
