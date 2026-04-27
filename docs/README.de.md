@@ -80,18 +80,18 @@ Vollständiges Driver-Protokoll, Server-Endpunkte und Execution-Pipeline siehe [
 uv pip install sim-runtime
 
 # 2. sim die Maschine ansehen lassen und das passende Profil wählen:
-sim check fluent
-# → meldet erkannte Fluent-Installs und das Profil, zu dem sie auflösen
+sim check <solver>
+# → meldet erkannte Installs des Solvers und das Profil, zu dem sie auflösen
 
 # 3. Dieses Profil-Env aufsetzen (legt .sim/envs/<profile>/ mit gepinntem
 #    SDK an; alternativ in Schritt 5 --auto-install verwenden):
-sim env install pyfluent_0_38_modern
+sim env install <profile>
 
 # 4. Server starten (nur für netzwerkübergreifende Workflows nötig):
 sim serve --host 0.0.0.0          # FastAPI auf :7600
 
 # 5. Vom Agenten / Laptop / irgendwo im Netzwerk:
-sim --host <server-ip> connect --solver fluent --mode solver --ui-mode gui
+sim --host <server-ip> connect --solver <solver> --mode solver --ui-mode gui
 sim --host <server-ip> inspect session.versions   # ← immer zuerst
 sim --host <server-ip> exec "solver.settings.mesh.check()"
 sim --host <server-ip> screenshot -o shot.png
@@ -100,11 +100,13 @@ sim --host <server-ip> disconnect
 
 Das ist die volle Schleife: **erkennen → bootstrappen → starten → steuern → beobachten → abbauen** — der Ingenieur kann optional die Solver-GUI in Echtzeit beobachten.
 
-> **Warum der Bootstrap-Schritt?** Jede (Solver, SDK, Driver, Skill)-Kombination ist
-> ein eigenes Kompatibilitäts-Universum — Fluent 24R1 braucht PyFluent 0.37.x;
-> Fluent 25R2 will 0.38.x. sim behandelt jede als isoliertes "Profile-Env", so
-> dass beide Versionen ohne Abhängigkeitskonflikt auf derselben Maschine
-> koexistieren können. Das vollständige Design steht in
+> **Warum der Bootstrap-Schritt?** Jede `(Solver, SDK, Driver, Skill)`-Kombination
+> ist ein eigenes Kompatibilitäts-Universum — verschiedene Solver-Releases
+> brauchen oft unterschiedliche SDK-Versionen, und diese SDK-Versionen
+> koexistieren nicht immer in einem Python-env. sim behandelt jede
+> Kombination als isoliertes "Profile-Env", damit mehrere Versionen ohne
+> Abhängigkeitskonflikt auf derselben Maschine koexistieren können. Der
+> Vertrag steht in
 > [`docs/architecture/version-compat.md`](architecture/version-compat.md).
 
 ---
@@ -167,9 +169,9 @@ Umgebungsvariablen: `SIM_HOST`, `SIM_PORT` für den Client; `SIM_DIR` (Standard 
 
 Meistens muss man nichts wählen. `sim check <solver>` sagt dir, zu welchem Profil dein installierter Solver auflöst, und `sim connect ... --auto-install` setzt es beim ersten Gebrauch automatisch auf. Die Notausgänge:
 
-- **Profil festsetzen:** `sim connect --solver fluent --profile pyfluent_0_37_legacy`
-- **Profil-Env überspringen (Legacy / Tests):** `sim connect --solver fluent --inline`
-- **Power-User Single-Env-Install:** `pip install 'sim-runtime[fluent]'` legt das SDK direkt in die aktuelle venv. Überspringt `sim env`; sinnvoll, wenn du auf dieser Maschine nur eine Fluent-Version brauchst.
+- **Profil festsetzen:** `sim connect --solver <solver> --profile <profile>`
+- **Profil-Env überspringen (Legacy / Tests):** `sim connect --solver <solver> --inline`
+- **Power-User Single-Env-Install:** das passende Plugin-Paket direkt in die aktuelle venv installieren (z. B. `pip install <plugin-package>`). Überspringt `sim env`; sinnvoll, wenn du auf dieser Maschine nur eine Solver-Version brauchst.
 
 Vollständiges Design: [`docs/architecture/version-compat.md`](architecture/version-compat.md).
 
@@ -210,7 +212,7 @@ pytest -q -m integration        # Integrationstests (Solver + sim serve nötig)
 ruff check src/sim tests
 ```
 
-Neuen Driver hinzufügen? Eine `DriverProtocol`-Implementierung unter `src/sim/drivers/<name>/driver.py` ablegen, in `drivers/__init__.py` registrieren — fertig. Kleinste Referenz: `pybamm/driver.py`. Vollständiges Persistente-Session-Beispiel: `fluent/`.
+Neuen Driver hinzufügen? Eine `DriverProtocol`-Implementierung im Tree ablegen oder als Out-of-Tree-Plugin über die `sim.drivers`-Entry-Point-Gruppe registrieren. Kleinste In-Tree-Referenz: `pybamm/driver.py`. Plugin-Referenz (Driver + Skill-Bundle): [`sim-plugin-cantera`](https://github.com/svd-ai-lab/sim-plugin-cantera).
 
 ---
 
@@ -223,11 +225,11 @@ src/sim/
   session.py       HTTP-Client für connect/exec/inspect
   driver.py        DriverProtocol + Result-Dataclasses
   drivers/
-    fluent/        Referenzbeispiel: Persistente-Session-Driver
-                   (driver.py + runtime.py + queries.py)
     pybamm/        Referenzbeispiel: kleinster One-shot-Driver
-    …              und mehr — ein Ordner pro registriertem Backend
-    __init__.py    DRIVERS-Registry — neue Backends hier registrieren
+    …              und mehr — ein Ordner pro registriertem Built-in
+    __init__.py    DRIVERS-Registry — neue In-Tree-Backends hier registrieren;
+                   Out-of-Tree-Plugins werden zur Laufzeit über `sim.drivers`
+                   Entry-Points entdeckt
 tests/             Unit-Tests + Fixtures + Execution-Snippets
 assets/            logo · banner · architecture (SVG)
 docs/              Übersetzte READMEs (de · ja · zh)
