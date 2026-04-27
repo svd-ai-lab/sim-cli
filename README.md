@@ -34,7 +34,7 @@
 
 ## 🤔 Why sim?
 
-LLM agents already know how to write PyFluent, MATLAB, COMSOL, and OpenFOAM scripts — training data is full of them. What they *don't* have is a standard way to **launch a solver, drive it step by step, and observe what happened** before deciding the next move.
+LLM agents already know how to write simulation scripts — training data is full of them. What they *don't* have is a standard way to **launch a solver, drive it step by step, and observe what happened** before deciding the next move.
 
 Today, the choices are awful:
 
@@ -110,29 +110,9 @@ That's the full loop: **detect → bootstrap → launch → drive → observe �
 
 ## 🧪 Solver registry
 
-The driver registry is **open and intentionally growing** — adding a new backend is a ~200-LOC `DriverProtocol` implementation plus one line in `drivers/__init__.py`. Below is a snapshot of what currently ships in `main`:
+The driver registry is **open and intentionally growing** — adding a new backend is a ~200-LOC `DriverProtocol` implementation plus one line in `drivers/__init__.py`, or an out-of-tree plugin package registered through the `sim.drivers` entry-point group.
 
-| Domain | Example backends shipping today | Sessions | Status |
-|---|---|---|---|
-| Electronics thermal | Simcenter Flotherm | persistent (GUI) | ✅ Working — model generation from natural language, XSD-validated FloSCRIPT, step-by-step build with checkpoints |
-| CFD | Ansys Fluent, OpenFOAM, Simcenter STAR-CCM+, Ansys CFX | persistent / one-shot | ✅ Working |
-| Multiphysics | COMSOL Multiphysics | one-shot | ✅ Working |
-| CAE | Ansys Workbench, Ansys Mechanical, Abaqus | persistent / one-shot | ✅ Working |
-| Explicit FEA | Ansys LS-DYNA | one-shot | ✅ Working |
-| Pre-processing | BETA CAE ANSA | persistent / one-shot | ✅ Working (Phase 1) |
-| Numerical / scripting | MATLAB | one-shot | ✅ Working (v0) |
-| Battery modeling | PyBaMM | one-shot | ✅ Working |
-| Implicit FEA | Ansys MAPDL, CalculiX, Elmer FEM, PyMFEM, scikit-fem, SfePy, OpenSeesPy | persistent / one-shot | ✅ Working |
-| Pre/post-processing | Gmsh, meshio, pyvista, ParaView, HyperMesh, Trimesh | one-shot | ✅ Working |
-| Embodied-AI / GPU physics | NVIDIA Isaac Sim, NVIDIA Newton (Warp) | one-shot | ✅ Working — Newton: Route A recipe JSON + Route B run-script; Isaac: SimulationApp bootstrap + AST lint |
-| Open-source CFD | OpenFOAM, SU2 | one-shot / remote | ✅ Working |
-| Molecular dynamics | LAMMPS | one-shot | ✅ Working |
-| FD codegen / seismic | Devito | one-shot | ✅ Working |
-| Thermo properties / combustion | CoolProp, Cantera | one-shot | ✅ Working |
-| Optimization / MDAO | OpenMDAO, pymoo, Pyomo | one-shot | ✅ Working |
-| Discrete-event simulation | SimPy | one-shot | ✅ Working |
-| Power systems / RF | pandapower, scikit-rf | one-shot | ✅ Working |
-| **+ your solver** | open a PR — see [Adding a driver](#-development) | — | 🛠 |
+Built-in coverage spans CFD, multiphysics, electronics thermal, implicit and explicit structural FEA, pre/post-processing, mesh generation, embodied-AI / GPU physics, molecular dynamics, optimization / MDAO, battery modeling, thermo properties, power-systems and RF simulation, and discrete-event modeling. Specific solvers are reached through either the built-in registry or out-of-tree plugin packages — see [`sim-plugin-cantera`](https://github.com/svd-ai-lab/sim-plugin-cantera) for a reference plugin.
 
 Per-solver protocols, snippets, and demo workflows live in [`sim-skills`](https://github.com/svd-ai-lab/sim-skills), which is **also designed to grow** alongside the driver registry — one new agent skill per new backend.
 
@@ -142,18 +122,7 @@ Per-solver protocols, snippets, and demo workflows live in [`sim-skills`](https:
 
 > 📺 **Early preview:** [first walkthrough on YouTube](https://www.youtube.com/watch?v=3Fg6Oph44Ik) — rough cut, a polished recording is still wanted (see below).
 
-> **Recording in progress.** A short terminal capture of `sim connect → exec → inspect → screenshot` against a real Fluent session will land here. The exact sequence to record:
->
-> ```bash
-> sim serve --host 0.0.0.0
-> sim --host <ip> connect --solver fluent --mode solver --ui-mode gui --auto-install
-> sim --host <ip> inspect session.versions    # ← step 0: which profile am I in?
-> sim --host <ip> exec "solver.settings.file.read_case(file_name='mixing_elbow.cas.h5')"
-> sim --host <ip> exec "solver.settings.solution.initialization.hybrid_initialize()"
-> sim --host <ip> exec "solver.settings.solution.run_calculation.iterate(iter_count=20)"
-> sim --host <ip> inspect session.summary
-> sim --host <ip> disconnect
-> ```
+> **Recording in progress.** A short terminal capture of `sim connect → exec → inspect → screenshot` against a live solver session will land here.
 >
 > Want to contribute the recording? Use [`vhs`](https://github.com/charmbracelet/vhs) or [`asciinema`](https://asciinema.org/) and open a PR against `assets/demo.gif`.
 
