@@ -80,20 +80,20 @@ For the full driver protocol, server endpoints, and execution pipeline see [CLAU
 uv pip install sim-runtime
 
 # 2. Tell sim to look at this machine and pick the right SDK profile:
-sim check fluent
-# → reports detected Fluent installs and the profile they resolve to
+sim check <solver>
+# → reports detected installs of <solver> and the profile they resolve to
 
 # 3. Bootstrap that profile env (creates .sim/envs/<profile>/ with the
 #    pinned SDK; or pass --auto-install to step 4 to do it inline):
-sim env install pyfluent_0_38_modern
+sim env install <profile>
 
 # 4. Start the server (only needed for remote / cross-machine workflows):
 sim serve --host 0.0.0.0          # FastAPI on :7600
 
 # 5. From the agent / your laptop / anywhere on the network:
-sim --host <server-ip> connect --solver fluent --mode solver --ui-mode gui
+sim --host <server-ip> connect --solver <solver> --mode solver --ui-mode gui
 sim --host <server-ip> inspect session.versions   # ← always do this first
-sim --host <server-ip> exec "solver.settings.mesh.check()"
+sim --host <server-ip> exec "<solver-specific snippet>"
 sim --host <server-ip> screenshot -o shot.png
 sim --host <server-ip> disconnect
 ```
@@ -179,9 +179,9 @@ Environment: `SIM_HOST`, `SIM_PORT` for the client; `SIM_DIR` (default `.sim/`) 
 
 You don't usually have to. `sim check <solver>` tells you which profile your installed solver maps to, and `sim connect ... --auto-install` will bootstrap it for you on first use. The escape hatches:
 
-- **Pin a specific profile:** `sim connect --solver fluent --profile pyfluent_0_37_legacy`
-- **Skip the profile env entirely (legacy / tests):** `sim connect --solver fluent --inline`
-- **Power-user single-env install:** `pip install 'sim-runtime[fluent]'` puts the SDK directly into your current venv. Skips `sim env` entirely; OK when you only need one Fluent version on this machine.
+- **Pin a specific profile:** `sim connect --solver <solver> --profile <profile>`
+- **Skip the profile env entirely (legacy / tests):** `sim connect --solver <solver> --inline`
+- **Power-user single-env install:** install the matching plugin package directly into your current venv (e.g. `pip install <plugin-package>`). Skips `sim env` entirely; OK when you only need one solver version on this machine.
 
 The full design is in [`docs/architecture/version-compat.md`](docs/architecture/version-compat.md).
 
@@ -217,8 +217,8 @@ pip install sim-runtime
 sim serve --host 0.0.0.0 --port 7600     # bind to all interfaces
 
 # On your local control machine
-sim --host <solver-host-ip> connect --solver fluent --mode meshing
-sim --host <solver-host-ip> exec "session.settings.mesh.check()"
+sim --host <solver-host-ip> connect --solver <solver> --mode <mode>
+sim --host <solver-host-ip> exec "<solver-specific snippet>"
 sim --host <solver-host-ip> inspect session.summary
 sim --host <solver-host-ip> disconnect
 sim --host <solver-host-ip> stop          # shut down the remote server when done
