@@ -563,6 +563,7 @@ class ComsolDriver:
         comsol_root: str | None = None,
         user: str | None = None,
         password: str | None = None,
+        **kwargs,
     ) -> dict:
         """Launch comsolmphserver + optional GUI client, connect via JPype.
 
