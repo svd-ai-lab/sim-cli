@@ -1,0 +1,55 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sim-plugin-workbench"
+version = "0.1.0"
+description = "Ansys Workbench (PyWorkbench) driver for sim-cli, distributed as an out-of-tree plugin"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+authors = [{ name = "Weiqi Ji", email = "jiweiqi10@gmail.com" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: Apache Software License",
+]
+dependencies = [
+    "sim-runtime @ git+https://github.com/svd-ai-lab/sim-cli@main",
+    # Unpinned: the SDK / Ansys-version compatibility matrix lives in
+    # src/sim_plugin_workbench/compatibility.yaml — four profiles span
+    # 0.4–0.13, gated by Ansys release (24.1 vs 24.2 vs 25.x). A single
+    # range can't capture that, so callers must select an SDK version
+    # consistent with their installed Ansys release.
+    "ansys-workbench-core",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7",
+]
+
+[project.entry-points."sim.drivers"]
+workbench = "sim_plugin_workbench:WorkbenchDriver"
+
+[project.entry-points."sim.skills"]
+workbench = "sim_plugin_workbench:skills_dir"
+
+[project.urls]
+Homepage = "https://github.com/svd-ai-lab/sim-plugin-workbench"
+Issues = "https://github.com/svd-ai-lab/sim-plugin-workbench/issues"
+
+[tool.hatch.metadata]
+# Required because `sim-runtime` is pinned to a git+https URL — sim-cli is
+# distributed via GitHub, not PyPI. See sim-proj memory: plugin distribution
+# is GitHub-only.
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sim_plugin_workbench"]
