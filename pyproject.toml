@@ -1,6 +1,6 @@
 [project]
 name = "sim-runtime"
-version = "0.2.5"
+version = "0.2.4"
 description = "Make every engineering tool agent-native — a CLI runtime that lets LLM agents launch, drive, and observe CAD/CAE software"
 readme = "README.md"
 license = "Apache-2.0"
