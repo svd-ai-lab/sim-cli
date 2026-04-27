@@ -75,8 +75,8 @@ For the full driver protocol, server endpoints, and execution pipeline see [CLAU
 > **Names at a glance:** repo `svd-ai-lab/sim-cli` · PyPI distribution `sim-runtime` · console command `sim` · import `import sim`. Yes, three different strings — the repo name predates the PyPI publish; the rest follow Python packaging convention.
 
 ```bash
-# 1. On the box that has the solver (e.g. a Fluent workstation), install
-#    sim core only — no SDK choices yet:
+# 1. On the host that has the solver installed, install sim core only
+#    — no SDK choices yet:
 uv pip install sim-runtime
 
 # 2. Tell sim to look at this machine and pick the right SDK profile:
@@ -237,10 +237,10 @@ See [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) for setup, project layout, addi
 
 ## 🌐 Remote deployment
 
-When the solver lives on a different machine (a Fluent workstation, an HPC login node, a lab box) and you want to drive it from your laptop, a notebook, or an LLM agent — install `sim-runtime` on **both** ends and run `sim serve` on the remote.
+When the solver lives on a different machine (an HPC login node, a lab box, or any host with the solver installed) and you want to drive it from your laptop, a notebook, or an LLM agent — install `sim-runtime` on **both** ends and run `sim serve` on the remote.
 
 ```bash
-# On the solver host (the machine with Fluent / COMSOL / OpenFOAM / ... installed)
+# On the solver host (the machine with the solver installed)
 ssh user@solver-host
 pip install sim-runtime
 sim serve --host 0.0.0.0 --port 7600     # bind to all interfaces
@@ -269,7 +269,7 @@ Apache-2.0 — see [LICENSE](LICENSE).
 
 ### Third-party solver SDKs
 
-`sim-cli` is a thin wrapper/runtime — it does **not** bundle or redistribute any vendor solver or vendor SDK. Each solver backend is reached through a third-party SDK (e.g. `ansys-fluent-core`, `ansys-mapdl-core`, `ansys-workbench-core`, `ansys-mechanical-core`, `ansys-dyna-core`, `ansys-dpf-core`, `mph`, `matlabengine`) that the user installs separately via `sim env install` or as an optional extra.
+`sim-cli` is a thin wrapper/runtime — it does **not** bundle or redistribute any vendor solver or vendor SDK. Each solver backend is reached through a third-party SDK that the user installs separately via `sim env install` or as an optional extra.
 
 Users are responsible for obtaining a valid license for each underlying solver and for complying with the license, copyright, and EULA of every third-party SDK they choose to install alongside `sim-cli`. See [`NOTICE`](NOTICE) for the list of optional SDK dependencies and their upstream locations.
 
