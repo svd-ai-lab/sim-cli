@@ -15,11 +15,10 @@ type / close / screenshot / snapshot) was informed by:
 
 The subprocess-isolation pattern for UIA calls (one-shot
 `python -c '...'` per action to keep the calling process's COM
-apartment clean) is lifted from **this project's own**
-`src/sim/drivers/flotherm/_win32_backend.py`, which proved it in
-production against Simcenter Flotherm.
+apartment clean) was developed in this project's GUI-driving work for
+solvers that don't expose a batch API.
 
 The Win32 ctypes file-dialog primitives in `_win32_dialog.py`
-(`WM_SETTEXT` + `BM_CLICK` against control ids 1148 / 1) are also
-extracted from that same flotherm backend so every driver can share the
-implementation instead of copy-pasting it.
+(`WM_SETTEXT` + `BM_CLICK` against control ids 1148 / 1) are part of
+that same shared backend so every driver can share the implementation
+instead of copy-pasting it.

@@ -25,9 +25,9 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 
-# sim-cli runs every solver in its own process; the SDK (pyfluent, mph,
-# matlabengine, …) is installed alongside sim-cli into the same env. Pick
-# the SDK that matches the solver version you actually have. compat.yaml
+# sim-cli runs every solver in its own process; vendor SDKs (when needed)
+# are installed alongside sim-cli into the same env, either as part of the
+# corresponding plugin's install, or directly by the user. compat.yaml
 # documents which combinations are supported.
 dependencies = [
     "click>=8.0",
@@ -39,19 +39,10 @@ dependencies = [
     "lxml>=5.0", # XSD validation for FloSCRIPT lint
     "sim-ltspice>=0.2.2", # LTspice file formats + runtime — sim-cli's LTspice driver delegates here. >=0.2.2 for run_asc.
     "tomli>=2.0; python_version<'3.11'", # TOML parser for config.py; stdlib tomllib is 3.11+
-    "pywinauto>=0.6.8; sys_platform == 'win32'", # GUI automation backend for Flotherm (and other solvers without a batch API). Spawned in a subprocess via sys.executable, so must live in the same venv as sim-server.
+    "pywinauto>=0.6.8; sys_platform == 'win32'", # GUI automation backend for solvers driven through their UI rather than a batch API. Spawned in a subprocess via sys.executable, so must live in the same venv as sim-server.
 ]
 
 [project.optional-dependencies]
-# Convenience extras for installing a solver SDK alongside sim-cli. These
-# are not exclusive — pick whichever matches your local solver install.
-# 0.38 dropped Fluent 2024 R1 (v241) from FluentVersion enum and the
-# PYFLUENT_FLUENT_ROOT workaround no longer bypasses the post-connect
-# scheme_eval.version check — see Phase 1 STATUS §3.1. Widen to 0.37 so
-# hosts with Fluent 2024 R1 installed work out of the box.
-fluent  = ["ansys-fluent-core>=0.37,<0.39"]
-matlab  = ["matlabengine"]
-comsol  = ["mph>=1.2,<2.0"]
 pybamm  = ["pybamm>=24.0"]
 dev     = ["pytest>=8.0", "ruff>=0.4"]
 
