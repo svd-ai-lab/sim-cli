@@ -595,5 +595,117 @@ def test_real_mph_summary_smoke():
         assert isinstance(s["size_breakdown"], dict)
 
 
+# ----------------------------------------------------------------------
+# MphFileProbe
+# ----------------------------------------------------------------------
+
+
+class _StubCtx:
+    """Duck-typed stand-in for InspectCtx — enough to drive MphFileProbe."""
+
+    def __init__(self, workdir, workdir_before=None):
+        self.workdir = str(workdir)
+        self.workdir_before = workdir_before
+
+
+def test_probe_emits_summary_for_new_mph(tmp_path: Path, compact_mph: Path):
+    from sim.drivers.comsol.lib import MphFileProbe
+
+    workdir = tmp_path / "wd"
+    workdir.mkdir()
+    target = workdir / "out.mph"
+    target.write_bytes(compact_mph.read_bytes())
+
+    probe = MphFileProbe(only_new=True)
+    ctx = _StubCtx(workdir, workdir_before=[])
+    assert probe.applies(ctx)
+    result = probe.probe(ctx)
+    assert any(d.code == "comsol.mph.summary" for d in result.diagnostics)
+    diag = next(d for d in result.diagnostics if d.code == "comsol.mph.summary")
+    assert diag.severity == "info"
+    assert "Compact Sample" in diag.message
+    assert diag.extra["node_type"] == "compact"
+    assert diag.extra["parameter_count"] == 3
+
+
+def test_probe_skips_files_present_in_baseline(tmp_path: Path, compact_mph: Path):
+    from sim.drivers.comsol.lib import MphFileProbe
+
+    workdir = tmp_path / "wd"
+    workdir.mkdir()
+    pre = workdir / "preexisting.mph"
+    pre.write_bytes(compact_mph.read_bytes())
+    new = workdir / "new.mph"
+    new.write_bytes(compact_mph.read_bytes())
+
+    probe = MphFileProbe(only_new=True)
+    ctx = _StubCtx(workdir, workdir_before=["preexisting.mph"])
+    result = probe.probe(ctx)
+
+    paths = [d.extra["path"] for d in result.diagnostics if d.extra.get("path")]
+    assert any(p.endswith("new.mph") for p in paths)
+    assert not any(p.endswith("preexisting.mph") for p in paths)
+
+
+def test_probe_describes_all_when_only_new_is_false(tmp_path: Path, compact_mph: Path):
+    from sim.drivers.comsol.lib import MphFileProbe
+
+    workdir = tmp_path / "wd"
+    workdir.mkdir()
+    a = workdir / "a.mph"
+    a.write_bytes(compact_mph.read_bytes())
+    b = workdir / "b.mph"
+    b.write_bytes(compact_mph.read_bytes())
+
+    probe = MphFileProbe(only_new=False)
+    ctx = _StubCtx(workdir, workdir_before=["a.mph"])  # baseline ignored
+    result = probe.probe(ctx)
+
+    paths = [d.extra["path"] for d in result.diagnostics if d.extra.get("path")]
+    assert any(p.endswith("a.mph") for p in paths)
+    assert any(p.endswith("b.mph") for p in paths)
+
+
+def test_probe_emits_warning_on_corrupt_mph(tmp_path: Path):
+    from sim.drivers.comsol.lib import MphFileProbe
+
+    workdir = tmp_path / "wd"
+    workdir.mkdir()
+    bad = workdir / "broken.mph"
+    bad.write_bytes(b"\x00" * 32)  # not a ZIP
+
+    probe = MphFileProbe(only_new=False)
+    ctx = _StubCtx(workdir)
+    result = probe.probe(ctx)
+    parse_failed = [d for d in result.diagnostics if d.code == "comsol.mph.parse_failed"]
+    assert len(parse_failed) == 1
+    assert parse_failed[0].severity == "warning"
+    assert "broken.mph" in parse_failed[0].message
+
+
+def test_probe_caps_at_max_files(tmp_path: Path, compact_mph: Path):
+    from sim.drivers.comsol.lib import MphFileProbe
+
+    workdir = tmp_path / "wd"
+    workdir.mkdir()
+    for i in range(7):
+        f = workdir / f"sample_{i}.mph"
+        f.write_bytes(compact_mph.read_bytes())
+
+    probe = MphFileProbe(only_new=False, max_files=3)
+    ctx = _StubCtx(workdir)
+    result = probe.probe(ctx)
+    summaries = [d for d in result.diagnostics if d.code == "comsol.mph.summary"]
+    assert len(summaries) == 3
+
+
+def test_probe_does_not_apply_when_workdir_missing():
+    from sim.drivers.comsol.lib import MphFileProbe
+
+    probe = MphFileProbe()
+    ctx = _StubCtx("/no/such/dir/anywhere")
+    assert probe.applies(ctx) is False
+
+
 # Keep `io` imported — reserved for future stream-based helpers.
 _ = io

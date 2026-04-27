@@ -688,10 +688,135 @@ def format_summary(summary: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+# ----------------------------------------------------------------------
+# Inspect-pipeline probe
+# ----------------------------------------------------------------------
+
+
+class MphFileProbe:
+    """Inspect-pipeline probe — describe `.mph` files in the workdir.
+
+    Scans ``ctx.workdir`` for `.mph` files, opens each via the stdlib
+    ZIP path (no JVM, no JPype), and emits one info Diagnostic per
+    file with the headline metadata (title, node_type, schema version,
+    last computation time, parameter count).
+
+    With ``only_new=True`` (the default) it filters to files that
+    weren't in ``ctx.workdir_before`` — i.e. produced by the run that
+    just finished. With ``only_new=False`` it describes every `.mph`
+    in the workdir, useful when the agent wants a one-shot snapshot.
+
+    A failed parse becomes a single warning Diagnostic per file (code
+    ``sim.comsol.mph_parse_failed``); the probe never crashes the
+    pipeline.
+    """
+
+    name = "mph-file"
+
+    def __init__(
+        self,
+        workdir_getter: Any = None,
+        only_new: bool = True,
+        max_files: int = 5,
+        source: str = "comsol.mph",
+        code_prefix: str = "comsol.mph",
+    ) -> None:
+        self.workdir_getter = workdir_getter or (lambda ctx: ctx.workdir)
+        self.only_new = only_new
+        self.max_files = max_files
+        self.source = source
+        self.code_prefix = code_prefix
+
+    def applies(self, ctx: Any) -> bool:
+        try:
+            return Path(self.workdir_getter(ctx)).is_dir()
+        except Exception:
+            return False
+
+    def probe(self, ctx: Any) -> Any:
+        # Import locally so the probe class can live next to the parser
+        # without forcing every consumer of `mph_inspect` to import the
+        # full inspect-pipeline machinery.
+        from sim.inspect import Diagnostic, ProbeResult  # noqa: PLC0415
+
+        workdir = Path(self.workdir_getter(ctx))
+        before: set[str] = set()
+        if self.only_new and getattr(ctx, "workdir_before", None) is not None:
+            before = set(ctx.workdir_before)
+
+        try:
+            mph_paths = sorted(p for p in workdir.rglob("*.mph") if p.is_file())
+        except Exception as exc:
+            return ProbeResult(diagnostics=[Diagnostic(
+                severity="warning",
+                source=self.source,
+                code=f"{self.code_prefix}.scan_failed",
+                message=f"{type(exc).__name__}: {exc}",
+            )])
+
+        # Filter to "new since baseline" if requested.
+        if self.only_new and before:
+            kept: list[Path] = []
+            for p in mph_paths:
+                try:
+                    rel = str(p.relative_to(workdir)).replace("\\", "/")
+                except ValueError:
+                    rel = str(p)
+                if rel not in before:
+                    kept.append(p)
+            mph_paths = kept
+
+        diags = []
+        for p in mph_paths[: self.max_files]:
+            try:
+                with MphArchive(p) as mph:
+                    info = mph.model_info()
+                    params = mph.parameters()
+                    sizes = mph.size_breakdown()
+                    payload = {
+                        "path": str(p),
+                        "title": info.title,
+                        "node_type": info.node_type,
+                        "is_runnable": info.is_runnable,
+                        "saved_in_version": mph.saved_in_version,
+                        "schema_version": mph.schema_version,
+                        "last_computation_time": info.last_computation_time,
+                        "physics_info": info.physics,
+                        "parameter_count": len(params),
+                        "size_breakdown": sizes,
+                    }
+            except Exception as exc:
+                diags.append(Diagnostic(
+                    severity="warning",
+                    source=self.source,
+                    code=f"{self.code_prefix}.parse_failed",
+                    message=f"{p.name}: {type(exc).__name__}: {exc}",
+                    extra={"path": str(p)},
+                ))
+                continue
+
+            title = payload["title"] or "(untitled)"
+            last = payload["last_computation_time"] or "—"
+            msg = (
+                f'{p.name}: {payload["node_type"] or "?"} model "{title}" '
+                f'({payload["parameter_count"]} params, last solve: {last})'
+            )
+            diags.append(Diagnostic(
+                severity="info",
+                source=self.source,
+                code=f"{self.code_prefix}.summary",
+                message=msg,
+                extra=payload,
+            ))
+
+        return ProbeResult(diagnostics=diags)
+
+
 __all__ = [
     "MphArchive",
     "MphEntry",
     "ModelInfo",
+    "MphFileProbe",
     "inspect_mph",
     "mph_diff",
     "format_summary",

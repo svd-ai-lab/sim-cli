@@ -12,6 +12,32 @@ changes at milestone boundaries.
 
 ### Added
 
+- **`sim.drivers.comsol.lib.MphArchive` / `inspect_mph` / `mph_diff`** —
+  stdlib-only inspection of `.mph` files (which are ZIP archives, magic
+  `50 4b 03 04`). An agent can now answer "what's in this model"
+  without spinning up `comsolmphserver` + JPype + a 2 GB heap:
+  `inspect_mph(path)` returns a typed dict with title, description,
+  `comsolVersion`, `nodeType` (compact / solved / preview), `isRunnable`,
+  `lastComputationTime`, used licenses, geometry tags, the size
+  breakdown by entry bucket (solution / mesh / geometry / savepoint /
+  image / data / binary / other), the user-defined Global Parameters
+  pulled from `dmodel.xml`, and the physics / study / material /
+  solution tag lists harvested from `smodel.json`. `mph_diff(a, b)`
+  reports just the differences — useful for "what changed between this
+  run and the last" monitoring. New `MphFileProbe` is wired into the
+  COMSOL driver's default probe list, so any new `.mph` produced by a
+  run is auto-described by Diagnostic. 36 unit tests on macOS use
+  in-memory ZIPs shaped after fixtures probed on a real Windows host;
+  real-MPH integration is gated on `COMSOL_MPH_FIXTURES`.
+
+- **COMSOL install discovery hardening.** `_INSTALL_DIR_FINDERS` gains
+  `_candidates_from_macos_defaults` (probes `/Applications/COMSOL{NN}/
+  Multiphysics/`, matching the layout the doc-search skill expects),
+  and the Windows finder now walks C:/D:/E: drive letters for
+  multi-disk installs. `_comsol_binary_paths` learns the Apple
+  Silicon `bin/macarm64/comsol` location alongside the existing
+  `bin/maci64/comsol`.
+
 - **`sim.drivers.comsol.lib.describe(model, what="physics")`** — typed
   walk over the COMSOL Java model tree returning a structured Python
   dict (and a compact `format_text()` plain-text rendering) of all
