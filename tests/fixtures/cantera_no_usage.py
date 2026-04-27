@@ -1,2 +1,0 @@
-import cantera
-print("loaded")
