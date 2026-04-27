@@ -100,9 +100,10 @@ sim --host <server-ip> disconnect
 
 完整闭环：**检测 → 启动 env → 启动 → 驱动 → 观察 → 收尾** —— 工程师还可以同时盯着求解器 GUI 实时监控。
 
-> **为什么要先 bootstrap？** 每个 (Solver, SDK, driver, skill) 组合都是独立的兼容性宇宙
-> —— Fluent 24R1 需要 PyFluent 0.37.x；Fluent 25R2 要 0.38.x。sim 把每种组合当成一个隔离
-> 的 "profile env"，于是同一台机器可以同时拥有两个版本而不冲突。完整设计在
+> **为什么要先 bootstrap？** 每个 `(solver, SDK, driver, skill)` 组合都是
+> 独立的兼容性宇宙 —— 不同的 solver 版本可能需要不同的 SDK 版本，而这些
+> SDK 版本未必能在同一个 Python env 中共存。sim 把每种组合当成一个隔离的
+> "profile env"，于是同一台机器可以同时保留多个版本而不冲突。完整设计在
 > [`docs/architecture/version-compat.md`](architecture/version-compat.md)。
 
 ---

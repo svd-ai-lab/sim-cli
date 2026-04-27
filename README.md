@@ -100,10 +100,12 @@ sim --host <server-ip> disconnect
 
 That's the full loop: **detect → bootstrap → launch → drive → observe → tear down** — with the engineer optionally watching the solver GUI in real time.
 
-> **Why the bootstrap step?** Each (Solver, SDK, driver, skill) combo is its own
-> compatibility universe — Fluent 24R1 needs PyFluent 0.37.x; Fluent 25R2 wants
-> 0.38.x. sim treats each as an isolated "profile env" so you can have both
-> versions on one machine without dependency conflicts. The full design is in
+> **Why the bootstrap step?** Each `(solver, SDK, driver, skill)` combo is
+> its own compatibility universe — different solver releases may want
+> different SDK versions, and those SDK versions can't always coexist in
+> one Python env. sim treats each combo as an isolated "profile env" so
+> you can keep multiple versions on one machine without dependency
+> conflicts. The contract is in
 > [`docs/architecture/version-compat.md`](docs/architecture/version-compat.md).
 
 ---

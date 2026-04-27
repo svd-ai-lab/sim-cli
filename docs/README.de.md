@@ -100,11 +100,13 @@ sim --host <server-ip> disconnect
 
 Das ist die volle Schleife: **erkennen → bootstrappen → starten → steuern → beobachten → abbauen** — der Ingenieur kann optional die Solver-GUI in Echtzeit beobachten.
 
-> **Warum der Bootstrap-Schritt?** Jede (Solver, SDK, Driver, Skill)-Kombination ist
-> ein eigenes Kompatibilitäts-Universum — Fluent 24R1 braucht PyFluent 0.37.x;
-> Fluent 25R2 will 0.38.x. sim behandelt jede als isoliertes "Profile-Env", so
-> dass beide Versionen ohne Abhängigkeitskonflikt auf derselben Maschine
-> koexistieren können. Das vollständige Design steht in
+> **Warum der Bootstrap-Schritt?** Jede `(Solver, SDK, Driver, Skill)`-Kombination
+> ist ein eigenes Kompatibilitäts-Universum — verschiedene Solver-Releases
+> brauchen oft unterschiedliche SDK-Versionen, und diese SDK-Versionen
+> koexistieren nicht immer in einem Python-env. sim behandelt jede
+> Kombination als isoliertes "Profile-Env", damit mehrere Versionen ohne
+> Abhängigkeitskonflikt auf derselben Maschine koexistieren können. Der
+> Vertrag steht in
 > [`docs/architecture/version-compat.md`](architecture/version-compat.md).
 
 ---

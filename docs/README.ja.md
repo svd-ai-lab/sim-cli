@@ -100,11 +100,13 @@ sim --host <server-ip> disconnect
 
 これが完全なループ：**検出 → bootstrap → 起動 → 駆動 → 観察 → 撤収** ── エンジニアは必要に応じてソルバー GUI をリアルタイムで監視できます。
 
-> **なぜ bootstrap が必要？** (Solver, SDK, driver, skill) の各組み合わせはそれぞれ独立した
-> 互換性ユニバースです ── Fluent 24R1 は PyFluent 0.37.x、Fluent 25R2 は 0.38.x が必要。
-> sim はそれぞれを隔離された "profile env" として扱うので、同じマシン上に依存衝突なしで両方の
-> バージョンを置けます。完全な設計は
-> [`docs/architecture/version-compat.md`](architecture/version-compat.md) にあります。
+> **なぜ bootstrap が必要？** `(solver, SDK, driver, skill)` の各組み合わせは
+> それぞれ独立した互換性ユニバースです ── ソルバーのリリースごとに必要な SDK
+> バージョンが異なる場合があり、それらが一つの Python env に共存できないこと
+> もあります。sim は各組み合わせを隔離された "profile env" として扱うので、
+> 同じマシン上に依存衝突なしで複数バージョンを置けます。仕様は
+> [`docs/architecture/version-compat.md`](architecture/version-compat.md) に
+> あります。
 
 ---
 
