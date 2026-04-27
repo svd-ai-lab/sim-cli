@@ -29,7 +29,7 @@ _REGISTRY: list[tuple[str, str]] = [
     ("abaqus", "sim.drivers.abaqus:AbaqusDriver"),
     ("starccm", "sim.drivers.starccm:StarccmDriver"),
     ("cfx", "sim.drivers.cfx:CfxDriver"),
-    ("lsdyna", "sim.drivers.lsdyna:LsDynaDriver"),
+    ("ls_dyna", "sim.drivers.lsdyna:LsDynaDriver"),
     ("mapdl", "sim.drivers.mapdl:MapdlDriver"),
     ("icem", "sim.drivers.icem:IcemDriver"),
     ("isaac", "sim.drivers.isaac:IsaacDriver"),
@@ -54,7 +54,7 @@ _REGISTRY: list[tuple[str, str]] = [
     ("trimesh", "sim.drivers.trimesh:TrimeshDriver"),
     ("devito", "sim.drivers.devito:DevitoDriver"),
     ("coolprop", "sim.drivers.coolprop:CoolPropDriver"),
-    ("scikitrf", "sim.drivers.scikitrf:ScikitRfDriver"),
+    ("scikit_rf", "sim.drivers.scikitrf:ScikitRfDriver"),
     ("pandapower", "sim.drivers.pandapower:PandapowerDriver"),
     ("paraview", "sim.drivers.paraview:ParaViewDriver"),
     ("hypermesh", "sim.drivers.hypermesh:HyperMeshDriver"),
@@ -111,5 +111,5 @@ def iter_drivers() -> Iterator[tuple[str, DriverProtocol | None, BaseException |
     for name, _ in _REGISTRY:
         try:
             yield name, _resolve(name), None
-        except BaseException as e:  # noqa: BLE001 — intentional: any import-time failure
+        except Exception as e:  # noqa: BLE001 — any import-time failure; KeyboardInterrupt/SystemExit propagate
             yield name, None, e
