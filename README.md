@@ -76,21 +76,25 @@ For the full driver protocol, server endpoints, and execution pipeline see [CLAU
 
 ```bash
 # 1. On the host that has the solver installed, install sim core only
-#    — no SDK choices yet:
+#    — no driver choice yet:
 uv pip install sim-runtime
 
-# 2. Tell sim to look at this machine and pick the right SDK profile:
+# 2. Install the plugin for the solver you actually want (browse the
+#    index with `sim plugin list`):
+sim plugin install <solver>     # e.g. ltspice, coolprop, pybamm
+
+# 3. Tell sim to look at this machine and pick the right SDK profile:
 sim check <solver>
 # → reports detected installs of <solver> and the profile they resolve to
 
-# 3. Bootstrap that profile env (creates .sim/envs/<profile>/ with the
-#    pinned SDK; or pass --auto-install to step 4 to do it inline):
+# 4. Bootstrap that profile env (creates .sim/envs/<profile>/ with the
+#    pinned SDK; or pass --auto-install to step 5 to do it inline):
 sim env install <profile>
 
-# 4. Start the server (only needed for remote / cross-machine workflows):
+# 5. Start the server (only needed for remote / cross-machine workflows):
 sim serve --host 0.0.0.0          # FastAPI on :7600
 
-# 5. From the agent / your laptop / anywhere on the network:
+# 6. From the agent / your laptop / anywhere on the network:
 sim --host <server-ip> connect --solver <solver> --mode solver --ui-mode gui
 sim --host <server-ip> inspect session.versions   # ← always do this first
 sim --host <server-ip> exec "<solver-specific snippet>"
@@ -112,11 +116,18 @@ That's the full loop: **detect → bootstrap → launch → drive → observe �
 
 ## 🧪 Solver registry
 
-The driver registry is **open and intentionally growing** — adding a new backend is a ~200-LOC `DriverProtocol` implementation plus one line in `drivers/__init__.py`, or an out-of-tree plugin package registered through the `sim.drivers` entry-point group.
+`sim-cli` core is **solver-agnostic** — it ships with one OSS driver as a built-in (`openfoam`), and every other solver is reached through an **out-of-tree plugin package** registered via the `sim.drivers` entry-point group. Adding a new backend is a ~200-LOC `DriverProtocol` implementation in its own `sim-plugin-<name>` repo.
 
-Built-in coverage spans CFD, multiphysics, electronics thermal, implicit and explicit structural FEA, pre/post-processing, mesh generation, embodied-AI / GPU physics, molecular dynamics, optimization / MDAO, battery modeling, thermo properties, power-systems and RF simulation, and discrete-event modeling. Specific solvers are reached through either the built-in registry or out-of-tree plugin packages — see [`sim-plugin-cantera`](https://github.com/svd-ai-lab/sim-plugin-cantera) for a reference plugin.
+Plugin coverage spans CFD, multiphysics, electronics thermal, implicit and explicit structural FEA, pre/post-processing, mesh generation, embodied-AI / GPU physics, molecular dynamics, optimization / MDAO, battery modeling, thermo properties, power-systems and RF simulation, and discrete-event modeling. Browse the curated index:
 
-Per-solver protocols, snippets, and demo workflows live in [`sim-skills`](https://github.com/svd-ai-lab/sim-skills), which is **also designed to grow** alongside the driver registry — one new agent skill per new backend.
+```bash
+sim plugin list                  # what the curated index advertises
+sim plugin install <name>        # e.g. sim plugin install ltspice
+```
+
+The index is served from [`sim-plugin-index`](https://github.com/svd-ai-lab/sim-plugin-index); reference plugins to read for shape: [`sim-plugin-coolprop`](https://github.com/svd-ai-lab/sim-plugin-coolprop) (one-shot, no SDK gate), [`sim-plugin-ltspice`](https://github.com/svd-ai-lab/sim-plugin-ltspice) (one-shot with vendor binary), [`sim-plugin-pybamm`](https://github.com/svd-ai-lab/sim-plugin-pybamm) (heavy SDK).
+
+Per-solver protocols, snippets, and demo workflows live in [`sim-skills`](https://github.com/svd-ai-lab/sim-skills) and the per-plugin repos.
 
 ---
 
@@ -139,9 +150,9 @@ Per-solver protocols, snippets, and demo workflows live in [`sim-skills`](https:
 - **Numbered run history** in `.sim/runs/` for one-shot jobs, browsable via `sim logs`
 
 ### 🔌 Solver-agnostic
-- **One protocol** (`DriverProtocol`) — every driver is ~200 LOC, registered in `drivers/__init__.py`
+- **One protocol** (`DriverProtocol`) — every driver is ~200 LOC, shipped as its own `sim-plugin-<name>` package via Python entry points
 - **Persistent + one-shot** from the same CLI — no separate client per mode
-- **Open registry** — new solvers land continuously; CFD, multiphysics, thermal, pre-processing, battery models all in scope
+- **Open plugin index** — discoverable via `sim plugin list`; curated registry at [`sim-plugin-index`](https://github.com/svd-ai-lab/sim-plugin-index)
 - **Companion skills** in [`sim-skills`](https://github.com/svd-ai-lab/sim-skills) so an LLM picks up each new backend without prior context
 
 ### 🌐 Remote-friendly
@@ -155,6 +166,7 @@ Per-solver protocols, snippets, and demo workflows live in [`sim-skills`](https:
 
 | Command | What it does | Analogy |
 |---|---|---|
+| `sim plugin list / install / uninstall` | Manage out-of-tree solver plugins from the curated index | `npm install` |
 | `sim check <solver>` | Detect installations + resolve a profile | `docker info` |
 | `sim env install <profile>` | Bootstrap a profile env (venv + pinned SDK) | `pyenv install` |
 | `sim env list [--catalogue]` | Show bootstrapped envs (and the full catalogue) | `pyenv versions` |
@@ -230,7 +242,9 @@ That is the entire setup — same `sim-runtime` package on both sides, same wire
 
 ## 🔗 Related projects
 
+- **[`sim-plugin-index`](https://github.com/svd-ai-lab/sim-plugin-index)** — curated registry of out-of-tree solver plugins; what `sim plugin list / install` reads
 - **[`sim-skills`](https://github.com/svd-ai-lab/sim-skills)** — agent skills, snippets, and demo workflows for each supported solver
+- **[`sim-ltspice`](https://github.com/svd-ai-lab/sim-ltspice)** — standalone Python API for LTspice file formats (used by `sim-plugin-ltspice`)
 
 ---
 
