@@ -230,3 +230,78 @@ def test_install_report_dict_includes_all_keys():
               "pip_returncode", "pip_stdout", "pip_stderr",
               "sync_skills", "error_code", "message"):
         assert k in d
+
+
+# ── --python flag plumbing ─────────────────────────────────────────────────
+
+
+class _FakeProc:
+    def __init__(self):
+        self.returncode = 0
+        self.stdout = ""
+        self.stderr = ""
+
+
+def test_pip_install_pins_python_via_uv(monkeypatch):
+    """When uv is on PATH, _pip_install must pass ``--python <exe>``."""
+    from sim import _plugin_install
+
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        return _FakeProc()
+
+    monkeypatch.setattr(_plugin_install.shutil, "which",
+                        lambda exe: "/usr/bin/uv" if exe == "uv" else None)
+    monkeypatch.setattr(_plugin_install.subprocess, "run", fake_run)
+
+    _plugin_install._pip_install("sim-plugin-foo", python="/tmp/myvenv/bin/python")
+
+    cmd = captured["cmd"]
+    assert cmd[0] == "uv"
+    assert "--python" in cmd
+    assert "/tmp/myvenv/bin/python" in cmd
+    assert cmd[-1] == "sim-plugin-foo"
+
+
+def test_pip_install_pins_python_via_pip(monkeypatch):
+    """When uv is NOT on PATH, _pip_install must invoke ``<exe> -m pip``."""
+    from sim import _plugin_install
+
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        return _FakeProc()
+
+    monkeypatch.setattr(_plugin_install.shutil, "which", lambda exe: None)
+    monkeypatch.setattr(_plugin_install.subprocess, "run", fake_run)
+
+    _plugin_install._pip_install("sim-plugin-foo", python="/tmp/myvenv/bin/python")
+
+    cmd = captured["cmd"]
+    assert cmd[0] == "/tmp/myvenv/bin/python"
+    assert cmd[1:4] == ["-m", "pip", "install"]
+
+
+def test_pip_install_defaults_to_sys_executable(monkeypatch):
+    """Without an explicit ``python``, fall back to ``sys.executable``."""
+    import sys
+    from sim import _plugin_install
+
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        return _FakeProc()
+
+    monkeypatch.setattr(_plugin_install.shutil, "which",
+                        lambda exe: "/usr/bin/uv" if exe == "uv" else None)
+    monkeypatch.setattr(_plugin_install.subprocess, "run", fake_run)
+
+    _plugin_install._pip_install("sim-plugin-foo")
+
+    cmd = captured["cmd"]
+    assert "--python" in cmd
+    assert sys.executable in cmd

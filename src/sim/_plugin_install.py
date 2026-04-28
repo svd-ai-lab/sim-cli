@@ -199,15 +199,27 @@ def resolve_source(source: str, *, offline: bool = False, index_url: str = DEFAU
 
 
 def _pip_install(target: str, *, editable: bool = False, upgrade: bool = False,
-                 extra_args: list[str] | None = None) -> subprocess.CompletedProcess:
-    """Run ``pip install`` (or ``uv pip install`` if uv is on PATH)."""
+                 extra_args: list[str] | None = None,
+                 python: str | None = None) -> subprocess.CompletedProcess:
+    """Run ``pip install`` (or ``uv pip install`` if uv is on PATH).
+
+    ``python`` lets the caller pin which interpreter receives the install.
+    Defaults to ``sys.executable`` (the interpreter running ``sim``), which
+    is the right choice in 90% of cases. The canary verification proved
+    that without an explicit pin, ``uv pip install`` resolves the active
+    venv via ``$VIRTUAL_ENV`` / ``$CONDA_PREFIX`` / cwd discovery, which
+    can target the *wrong* interpreter when the user's terminal has no
+    venv activated.
+    """
     use_uv = shutil.which("uv") is not None
+
+    target_python = python or sys.executable
 
     cmd: list[str]
     if use_uv:
-        cmd = ["uv", "pip", "install"]
+        cmd = ["uv", "pip", "install", "--python", target_python]
     else:
-        cmd = [sys.executable, "-m", "pip", "install"]
+        cmd = [target_python, "-m", "pip", "install"]
 
     if upgrade:
         cmd.append("--upgrade")
@@ -259,12 +271,16 @@ def install_plugin(
     offline: bool = False,
     sync_target: Path | None = None,
     skip_sync: bool = False,
+    python: str | None = None,
 ) -> InstallReport:
     """High-level installer used by ``sim plugin install``.
 
     Returns an InstallReport — never raises for normal failures (bad source,
     pip non-zero, sync failure). Catches and reports cleanly so the CLI
     layer can render either JSON or human output without try/except.
+
+    ``python`` overrides the install-target interpreter. Defaults to
+    ``sys.executable`` (the interpreter running ``sim``).
     """
     try:
         resolved = resolve_source(source, offline=offline)
@@ -276,7 +292,10 @@ def install_plugin(
             message=str(e),
         )
 
-    proc = _pip_install(resolved.pip_target, editable=editable, upgrade=upgrade)
+    proc = _pip_install(
+        resolved.pip_target,
+        editable=editable, upgrade=upgrade, python=python,
+    )
     ok = proc.returncode == 0
 
     if not ok:
@@ -322,12 +341,14 @@ def _default_skills_target() -> Path:
 # ── Uninstall ───────────────────────────────────────────────────────────────
 
 
-def uninstall_plugin(name: str, *, sync: bool = True) -> dict[str, Any]:
+def uninstall_plugin(name: str, *, sync: bool = True,
+                      python: str | None = None) -> dict[str, Any]:
     """Best-effort plugin uninstall.
 
     Tries the canonical PyPI distribution name (``sim-plugin-<name>``)
     first, then falls back to whatever package the registry says owns
-    that driver.
+    that driver. ``python`` pins the target interpreter (defaults to
+    ``sys.executable``).
     """
     from sim.plugins import list_installed_plugins
 
@@ -341,9 +362,10 @@ def uninstall_plugin(name: str, *, sync: bool = True) -> dict[str, Any]:
                            "or remove from sim-cli's _BUILTIN_REGISTRY."}
 
     package = rows[name].package or f"sim-plugin-{name}"
+    target_python = python or sys.executable
     use_uv = shutil.which("uv") is not None
-    cmd = (["uv", "pip", "uninstall", package] if use_uv
-           else [sys.executable, "-m", "pip", "uninstall", "-y", package])
+    cmd = (["uv", "pip", "uninstall", "--python", target_python, package] if use_uv
+           else [target_python, "-m", "pip", "uninstall", "-y", package])
     proc = subprocess.run(cmd, capture_output=True, text=True)
 
     if proc.returncode != 0:

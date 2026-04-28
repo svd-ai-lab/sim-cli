@@ -1021,8 +1021,13 @@ def plugin_info_cmd(ctx, name):
 @click.option("--target", "sync_target", type=click.Path(file_okay=False, path_type=Path),
               default=None,
               help="Override sync-skills target dir (default: ./.claude/skills or ~/.claude/skills).")
+@click.option("--python", "python_exe", default=None,
+              help="Pin the target Python interpreter for the install. "
+                   "Defaults to the interpreter running sim — use this "
+                   "when sim is on PATH but the desired venv isn't activated.")
 @click.pass_context
-def plugin_install(ctx, source, editable, upgrade, offline, no_sync, sync_target):
+def plugin_install(ctx, source, editable, upgrade, offline, no_sync, sync_target,
+                    python_exe):
     """Install a plugin from any supported source.
 
     \b
@@ -1033,6 +1038,7 @@ def plugin_install(ctx, source, editable, upgrade, offline, no_sync, sync_target
       sim plugin install ./sim-plugin-coolprop -e          # editable, for authors
       sim plugin install git+https://github.com/svd-ai-lab/sim-plugin-coolprop
       sim plugin install --offline coolprop                # use cached index only
+      sim plugin install coolprop --python /path/to/venv/bin/python
     """
     from sim._plugin_install import install_plugin
 
@@ -1040,6 +1046,7 @@ def plugin_install(ctx, source, editable, upgrade, offline, no_sync, sync_target
         source,
         editable=editable, upgrade=upgrade, offline=offline,
         sync_target=sync_target, skip_sync=no_sync,
+        python=python_exe,
     )
 
     if ctx.obj["json"]:
@@ -1063,12 +1070,14 @@ def plugin_install(ctx, source, editable, upgrade, offline, no_sync, sync_target
 
 @plugin.command("uninstall")
 @click.argument("name")
+@click.option("--python", "python_exe", default=None,
+              help="Pin the target Python interpreter for the uninstall.")
 @click.pass_context
-def plugin_uninstall(ctx, name):
+def plugin_uninstall(ctx, name, python_exe):
     """Uninstall a plugin and remove its synced skill directory."""
     from sim._plugin_install import uninstall_plugin
 
-    result = uninstall_plugin(name)
+    result = uninstall_plugin(name, python=python_exe)
     if ctx.obj["json"]:
         click.echo(json_mod.dumps(result, indent=2))
     else:
