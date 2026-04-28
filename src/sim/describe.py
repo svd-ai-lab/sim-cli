@@ -101,6 +101,38 @@ _EXAMPLES: dict[str, list[dict[str, str]]] = {
         {"cmd": "sim describe --error-codes",
          "summary": "List the closed enum of error codes."},
     ],
+    "plugin list": [
+        {"cmd": "sim plugin list --json",
+         "summary": "List every registered plugin (built-in + external)."},
+    ],
+    "plugin info": [
+        {"cmd": "sim plugin info coolprop",
+         "summary": "Show one plugin's metadata and compatibility profiles."},
+    ],
+    "plugin install": [
+        {"cmd": "sim plugin install coolprop",
+         "summary": "Install a plugin by name (resolves via the index)."},
+        {"cmd": "sim plugin install ./sim_plugin_coolprop-0.1.0-py3-none-any.whl",
+         "summary": "Install from a local wheel (offline-friendly)."},
+        {"cmd": "sim plugin install ./sim-plugin-coolprop -e",
+         "summary": "Editable install for plugin authors."},
+    ],
+    "plugin uninstall": [
+        {"cmd": "sim plugin uninstall coolprop",
+         "summary": "Remove a plugin and its synced skill dir."},
+    ],
+    "plugin bundle": [
+        {"cmd": "sim plugin bundle coolprop simpy gmsh -o ./plugins-bundle/",
+         "summary": "Fetch wheels into a directory for offline install."},
+    ],
+    "plugin sync-skills": [
+        {"cmd": "sim plugin sync-skills",
+         "summary": "Materialize installed plugins' _skills into .claude/skills/."},
+    ],
+    "plugin doctor": [
+        {"cmd": "sim plugin doctor --all --json",
+         "summary": "Run doctor on every plugin; exits with the count of FAILs."},
+    ],
 }
 
 

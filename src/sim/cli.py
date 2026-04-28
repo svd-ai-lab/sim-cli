@@ -886,6 +886,140 @@ def plugin_info_cmd(ctx, name):
         click.echo(f"  profiles:      {', '.join(p.name for p in compat.profiles)}")
 
 
+@plugin.command("install")
+@click.argument("source")
+@click.option("-e", "--editable", is_flag=True,
+              help="Editable install (pip install -e). For plugin authors.")
+@click.option("--upgrade", is_flag=True,
+              help="Pass --upgrade to pip.")
+@click.option("--offline", is_flag=True,
+              help="Use only the local cached index; no network calls.")
+@click.option("--no-sync", "no_sync", is_flag=True,
+              help="Skip sync-skills after install.")
+@click.option("--target", "sync_target", type=click.Path(file_okay=False, path_type=Path),
+              default=None,
+              help="Override sync-skills target dir (default: ./.claude/skills or ~/.claude/skills).")
+@click.pass_context
+def plugin_install(ctx, source, editable, upgrade, offline, no_sync, sync_target):
+    """Install a plugin from any supported source.
+
+    \b
+    Examples:
+      sim plugin install coolprop                          # by name (online index)
+      sim plugin install coolprop@0.1.0                    # pinned version
+      sim plugin install ./sim_plugin_coolprop-0.1.0-py3-none-any.whl
+      sim plugin install ./sim-plugin-coolprop -e          # editable, for authors
+      sim plugin install git+https://github.com/svd-ai-lab/sim-plugin-coolprop
+      sim plugin install --offline coolprop                # use cached index only
+    """
+    from sim._plugin_install import install_plugin
+
+    report = install_plugin(
+        source,
+        editable=editable, upgrade=upgrade, offline=offline,
+        sync_target=sync_target, skip_sync=no_sync,
+    )
+
+    if ctx.obj["json"]:
+        click.echo(json_mod.dumps(report.to_dict(), indent=2))
+    else:
+        if report.ok:
+            click.echo(f"[sim] plugin install: ok ({report.source_kind} → {report.pip_target})")
+            if report.sync_skills:
+                if report.sync_skills.get("ok"):
+                    linked = len(report.sync_skills.get("linked", []))
+                    copied = len(report.sync_skills.get("copied", []))
+                    if linked or copied:
+                        click.echo(f"[sim] sync-skills: {linked} linked, {copied} copied")
+        else:
+            click.echo(f"[sim] plugin install: FAIL — {report.message}", err=True)
+            if report.pip_stderr:
+                click.echo(report.pip_stderr.rstrip(), err=True)
+
+    sys.exit(0 if report.ok else 4)
+
+
+@plugin.command("uninstall")
+@click.argument("name")
+@click.pass_context
+def plugin_uninstall(ctx, name):
+    """Uninstall a plugin and remove its synced skill directory."""
+    from sim._plugin_install import uninstall_plugin
+
+    result = uninstall_plugin(name)
+    if ctx.obj["json"]:
+        click.echo(json_mod.dumps(result, indent=2))
+    else:
+        if result["ok"]:
+            click.echo(f"[sim] plugin uninstall: removed {result['package']}")
+        else:
+            click.echo(f"[sim] plugin uninstall: FAIL — {result.get('message')}", err=True)
+    sys.exit(0 if result.get("ok") else 4)
+
+
+@plugin.command("bundle")
+@click.argument("names", nargs=-1, required=True)
+@click.option("--output", "-o", type=click.Path(file_okay=False, path_type=Path),
+              default=Path("./plugins-bundle"),
+              help="Output directory for wheels + filtered index.json.")
+@click.pass_context
+def plugin_bundle(ctx, names, output):
+    """Download wheels for the named plugins into a directory for offline install.
+
+    \b
+    Examples:
+      sim plugin bundle coolprop simpy gmsh -o ./plugins-bundle/
+      sim plugin install --offline --from-dir ./plugins-bundle/ coolprop
+    """
+    from sim._plugin_install import bundle_plugins
+
+    result = bundle_plugins(list(names), output)
+
+    if ctx.obj["json"]:
+        click.echo(json_mod.dumps(result, indent=2))
+    else:
+        if result["ok"]:
+            click.echo(f"[sim] plugin bundle: wrote {len(result['fetched'])} plugin(s) to {result['output']}")
+            for n in result["fetched"]:
+                click.echo(f"  + {n}")
+        else:
+            click.echo(f"[sim] plugin bundle: PARTIAL — {len(result['fetched'])} ok, {len(result['errors'])} failed", err=True)
+            for err in result["errors"]:
+                click.echo(f"  ! {err['name']}: {err['error']}", err=True)
+    sys.exit(0 if result.get("ok") else 4)
+
+
+@plugin.command("sync-skills")
+@click.option("--target", type=click.Path(file_okay=False, path_type=Path), default=None,
+              help="Where to materialize plugin _skills/ dirs (default: per-project .claude/skills/).")
+@click.option("--copy", "copy_mode", is_flag=True,
+              help="Copy instead of symlink (Windows-friendly).")
+@click.pass_context
+def plugin_sync_skills(ctx, target, copy_mode):
+    """Materialize every installed plugin's bundled skill into a target dir.
+
+    Idempotent. Symlinks where supported; ``--copy`` on environments where
+    symlinks aren't available (Windows without dev mode).
+    """
+    from sim import plugins as _plugins
+    from sim._plugin_install import _default_skills_target
+
+    dest = target or _default_skills_target()
+    result = _plugins.sync_skills_to(dest, copy=copy_mode)
+
+    if ctx.obj["json"]:
+        click.echo(json_mod.dumps(result, indent=2))
+    else:
+        click.echo(f"[sim] plugin sync-skills: target={result['target']}")
+        if result.get("linked"):
+            click.echo(f"  linked: {', '.join(result['linked'])}")
+        if result.get("copied"):
+            click.echo(f"  copied: {', '.join(result['copied'])}")
+        if result.get("skipped"):
+            click.echo(f"  skipped (no _skills bundle): {len(result['skipped'])} plugin(s)")
+    sys.exit(0 if result.get("ok") else 4)
+
+
 @plugin.command("doctor")
 @click.argument("name", required=False)
 @click.option("--all", "all_plugins", is_flag=True,

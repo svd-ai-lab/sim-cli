@@ -59,8 +59,8 @@ def test_every_command_has_examples_or_is_a_pure_group():
     m = _describe.build_manifest(main, version="0")
     leaf_commands_missing_examples: list[str] = []
     for cmd in m["commands"]:
-        # Skip pure groups (config) — their leaves carry the examples.
-        if cmd["name"] in {"config"}:
+        # Skip pure groups (config, plugin) — their leaves carry the examples.
+        if cmd["name"] in {"config", "plugin"}:
             continue
         if not cmd["examples"]:
             leaf_commands_missing_examples.append(cmd["name"])
