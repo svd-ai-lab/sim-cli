@@ -171,9 +171,7 @@ def detect_solver(solver: str):
     the CLI can use the same rendering code for both local and remote
     detection.
     """
-    from pathlib import Path
-
-    from sim.compat import load_compatibility, safe_detect_installed
+    from sim.compat import load_compatibility_by_name, safe_detect_installed
     from sim.drivers import get_driver
 
     try:
@@ -185,11 +183,10 @@ def detect_solver(solver: str):
 
     installs = safe_detect_installed(driver)
 
-    driver_dir = Path(__file__).parent / "drivers" / solver
     resolutions: list[dict] = []
     compat_dict: dict | None = None
-    try:
-        compat = load_compatibility(driver_dir)
+    compat = load_compatibility_by_name(solver)
+    if compat is not None:
         compat_dict = {
             "driver": compat.driver,
             "sdk_package": compat.sdk_package,
@@ -201,7 +198,7 @@ def detect_solver(solver: str):
                 "install": inst.to_dict(),
                 "profile": profile.to_dict() if profile else None,
             })
-    except FileNotFoundError:
+    else:
         for inst in installs:
             resolutions.append({"install": inst.to_dict(), "profile": None})
 
@@ -221,15 +218,13 @@ def _resolve_profile(driver, solver: str):
     detected install. Returns the Profile, or None on miss / failure.
     Never raises.
     """
-    from pathlib import Path
-    from sim.compat import load_compatibility, safe_detect_installed
+    from sim.compat import load_compatibility_by_name, safe_detect_installed
 
     installs = safe_detect_installed(driver)
     if not installs:
         return None
-    try:
-        compat = load_compatibility(Path(__file__).parent / "drivers" / solver)
-    except (FileNotFoundError, ValueError):
+    compat = load_compatibility_by_name(solver)
+    if compat is None:
         return None
     for inst in sorted(installs, key=lambda i: i.version, reverse=True):
         profile = compat.resolve(inst.version)

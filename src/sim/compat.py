@@ -10,12 +10,23 @@ module parses that file into a small typed surface (`Profile`,
 
 It is intentionally a **metadata catalogue**, not a runtime. sim-cli
 runs every driver in its own process — compat.yaml exists so the CLI
-can tell users "your Fluent 25R2 is supported via the
-pyfluent_0_38_modern profile" and so the skills layer can resolve a
-profile to its (sdk, solver) overlay paths under sim-skills/.
+can tell users which profile applies to a detected solver version and
+so the skills layer can resolve a profile to its (sdk, solver)
+overlay paths.
+
+## Plugin awareness
+
+Driver registry entries point at packages (built-in
+``sim.drivers.<name>`` or external ``sim_plugin_<name>``). For both,
+``compatibility.yaml`` lives at the package root and is loaded via
+``importlib.resources`` so wheel-installed plugins work the same as
+in-tree built-ins. ``load_compatibility_by_name(name)`` is the
+plugin-aware entry point; ``load_compatibility(driver_dir)`` remains
+for path-based callers and tests.
 
 Public surface:
-    load_compatibility(driver_dir)              -> Compatibility
+    load_compatibility_by_name(name)            -> Compatibility | None
+    load_compatibility(driver_dir)              -> Compatibility   (legacy, path-based)
     Compatibility.resolve(solver_version)       -> Profile | None
     Compatibility.profile_by_name(name)         -> Profile | None
     find_profile(name)                          -> (driver, Profile) | None
@@ -32,6 +43,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from functools import lru_cache
+from importlib import resources as _resources
 from pathlib import Path
 from typing import Iterable
 
@@ -131,18 +143,59 @@ def _normalize_solver_version(v: str) -> str:
     return s
 
 
-def find_profile(profile_name: str) -> tuple[str, "Profile"] | None:
-    """Walk every driver under sim/drivers/ to find a profile by name."""
-    drivers_root = Path(__file__).parent / "drivers"
-    if not drivers_root.is_dir():
+def _registry_module_for(driver_name: str) -> str | None:
+    """Resolve a driver name to its package module path via the registry.
+
+    Returns the *module path* (e.g. ``"sim.drivers.coolprop"`` for built-ins
+    or ``"sim_plugin_coolprop"`` for external plugins). Returns None when
+    the driver isn't registered.
+
+    We import the registry lazily to avoid a circular import at module load
+    time — ``sim.drivers`` imports from ``sim.driver`` which imports from
+    nowhere; ``sim.compat`` is the higher layer.
+    """
+    from sim.drivers import _REGISTRY  # local import — see docstring
+    for name, spec in _REGISTRY:
+        if name == driver_name:
+            module_path, _, _cls = spec.rpartition(":")
+            return module_path or None
+    return None
+
+
+def load_compatibility_by_name(driver_name: str) -> "Compatibility | None":
+    """Plugin-aware ``compatibility.yaml`` loader.
+
+    Resolves ``driver_name`` to its package via the registry, then reads
+    ``compatibility.yaml`` from the package using ``importlib.resources``.
+    Works identically for built-in drivers (``sim.drivers.<name>``) and
+    external plugins (``sim_plugin_<name>``).
+
+    Returns None when:
+      * the driver isn't registered, OR
+      * its package has no ``compatibility.yaml`` (some drivers are
+        SDK-less / version-insensitive — e.g. simpy), OR
+      * the file is malformed (logged at WARNING in the future; silent
+        for now to match legacy behaviour).
+    """
+    module_path = _registry_module_for(driver_name)
+    if module_path is None:
         return None
-    for child in sorted(drivers_root.iterdir()):
-        compat_file = child / "compatibility.yaml"
-        if not compat_file.is_file():
-            continue
-        try:
-            compat = load_compatibility(child)
-        except Exception:
+    try:
+        traversable = _resources.files(module_path).joinpath("compatibility.yaml")
+        if not traversable.is_file():
+            return None
+        text = traversable.read_text(encoding="utf-8")
+    except (FileNotFoundError, ModuleNotFoundError, OSError):
+        return None
+    return _parse_compatibility_text(driver_name, text)
+
+
+def find_profile(profile_name: str) -> tuple[str, "Profile"] | None:
+    """Find a profile by name across every registered driver."""
+    from sim.drivers import _REGISTRY  # local import — see _registry_module_for
+    for driver_name, _spec in _REGISTRY:
+        compat = load_compatibility_by_name(driver_name)
+        if compat is None:
             continue
         prof = compat.profile_by_name(profile_name)
         if prof is not None:
@@ -151,18 +204,12 @@ def find_profile(profile_name: str) -> tuple[str, "Profile"] | None:
 
 
 def all_known_profiles() -> list[tuple[str, "Profile"]]:
-    """Enumerate every profile across every driver that has a compatibility.yaml."""
+    """Enumerate every profile across every registered driver."""
+    from sim.drivers import _REGISTRY  # local import — see _registry_module_for
     out: list[tuple[str, Profile]] = []
-    drivers_root = Path(__file__).parent / "drivers"
-    if not drivers_root.is_dir():
-        return out
-    for child in sorted(drivers_root.iterdir()):
-        compat_file = child / "compatibility.yaml"
-        if not compat_file.is_file():
-            continue
-        try:
-            compat = load_compatibility(child)
-        except Exception:
+    for driver_name, _spec in _REGISTRY:
+        compat = load_compatibility_by_name(driver_name)
+        if compat is None:
             continue
         for p in compat.profiles:
             out.append((compat.driver, p))
@@ -181,31 +228,29 @@ def safe_detect_installed(driver) -> list:
         return []
 
 
-@lru_cache(maxsize=64)
-def load_compatibility(driver_dir: str | Path) -> Compatibility:
-    """Load and cache the compatibility.yaml for one driver directory."""
-    path = Path(driver_dir) / "compatibility.yaml"
-    if not path.is_file():
-        raise FileNotFoundError(
-            f"compatibility.yaml not found for driver at {driver_dir}"
-        )
+def _parse_compatibility_text(source_label: str, text: str) -> Compatibility:
+    """Parse a compatibility.yaml string into a Compatibility object.
 
-    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    ``source_label`` is used only in error messages (path, package, etc.).
+    Raises ``ValueError`` on malformed input. Trusts well-formed input; the
+    caller decides whether a missing file is an error.
+    """
+    raw = yaml.safe_load(text) or {}
     if not isinstance(raw, dict):
-        raise ValueError(f"{path} top-level must be a mapping")
+        raise ValueError(f"{source_label} top-level must be a mapping")
 
     try:
         driver = raw["driver"]
         raw_profiles = raw.get("profiles") or []
     except KeyError as e:
-        raise ValueError(f"{path} missing required field: {e}") from e
+        raise ValueError(f"{source_label} missing required field: {e}") from e
 
     sdk_package = raw.get("sdk_package")
 
     profiles: list[Profile] = []
     for i, p in enumerate(raw_profiles):
         if not isinstance(p, dict):
-            raise ValueError(f"{path} profile #{i} must be a mapping, not {type(p).__name__}")
+            raise ValueError(f"{source_label} profile #{i} must be a mapping, not {type(p).__name__}")
         try:
             profiles.append(
                 Profile(
@@ -221,7 +266,7 @@ def load_compatibility(driver_dir: str | Path) -> Compatibility:
             )
         except KeyError as e:
             raise ValueError(
-                f"{path} profile #{i} missing required field: {e}"
+                f"{source_label} profile #{i} missing required field: {e}"
             ) from e
 
     return Compatibility(
@@ -229,6 +274,24 @@ def load_compatibility(driver_dir: str | Path) -> Compatibility:
         sdk_package=sdk_package,
         profiles=tuple(profiles),
     )
+
+
+@lru_cache(maxsize=64)
+def load_compatibility(driver_dir: str | Path) -> Compatibility:
+    """Load and cache the compatibility.yaml for one driver directory.
+
+    Path-based loader retained for tests and any caller that already has
+    the directory in hand. Plugin-aware code should call
+    ``load_compatibility_by_name(driver_name)`` instead — that one resolves
+    via the registry and reads from the package's resources, which works
+    for wheel-installed plugins.
+    """
+    path = Path(driver_dir) / "compatibility.yaml"
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"compatibility.yaml not found for driver at {driver_dir}"
+        )
+    return _parse_compatibility_text(str(path), path.read_text(encoding="utf-8"))
 
 
 # ── Skills layering ─────────────────────────────────────────────────────────

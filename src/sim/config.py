@@ -19,7 +19,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any  # noqa: F401 — used in newer additions below
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -232,3 +232,149 @@ def init_config_file(scope: str) -> Path:
     if not path.exists():
         path.write_text(content, encoding="utf-8")
     return path
+
+
+# ── sim.toml — project manifest (plugins, defaults) ─────────────────────────
+#
+# Distinct from the global/project `config.toml` files above: `sim.toml`
+# lives at the project root and declares plugins to install + project-wide
+# defaults. It's the file `sim init` creates and `sim setup` reads. Two
+# files because the `[server] / [solvers.<x>]` config tier predates the
+# plugin layer and we don't want to break existing workflows by merging.
+
+SIM_TOML_NAME = "sim.toml"
+
+
+def project_sim_toml_path() -> Path:
+    """Walk up from cwd looking for sim.toml; return the canonical location.
+
+    Returns the cwd path when no sim.toml is found, so `sim init` writes
+    there. Walk-up is for the `sim setup` and `sim config show` cases.
+    """
+    cur = Path.cwd().resolve()
+    for parent in (cur, *cur.parents):
+        candidate = parent / SIM_TOML_NAME
+        if candidate.is_file():
+            return candidate
+    return cur / SIM_TOML_NAME
+
+
+SIM_TOML_STUB = """\
+# sim.toml — project manifest for sim-cli
+#
+# Declare the plugins your project depends on and any project-wide defaults.
+# `sim setup` reads this file; `sim config show --json` prints the merged
+# resolved config.
+
+[sim]
+# default_solver = "gmsh"
+# workspace = "./workspace"
+
+# Each entry under [[sim.plugins]] declares one plugin to install.
+# Sources accepted: name (resolved via the public index), git+https://...,
+# wheel = "./path/to/file.whl", or version = "==X.Y.Z" / ">=X".
+#
+# [[sim.plugins]]
+# name = "coolprop"
+# version = ">=0.1.0"
+"""
+
+
+def init_sim_toml(*, force: bool = False) -> Path:
+    """Create a starter sim.toml in the cwd. Idempotent unless ``force=True``."""
+    path = Path.cwd() / SIM_TOML_NAME
+    if path.exists() and not force:
+        return path
+    path.write_text(SIM_TOML_STUB, encoding="utf-8")
+    return path
+
+
+def load_sim_toml() -> dict[str, Any]:
+    """Load the project's sim.toml, walking up from cwd. Returns {} if none."""
+    path = project_sim_toml_path()
+    if not path.is_file():
+        return {}
+    try:
+        return tomllib.loads(path.read_text(encoding="utf-8"))
+    except (tomllib.TOMLDecodeError, OSError):
+        return {}
+
+
+def validate_sim_toml(path: Path) -> list[str]:
+    """Return a list of human-readable validation errors. Empty == valid.
+
+    Schema (informal):
+        [sim]
+        default_solver = <string>?
+        workspace      = <string>?
+        server_port    = <int>?
+
+        [[sim.plugins]]
+        name    = <string>           # required
+        version = <string>?
+        git     = <string>?
+        wheel   = <string>?          # local path
+    """
+    errors: list[str] = []
+    if not path.is_file():
+        errors.append(f"file not found: {path}")
+        return errors
+    try:
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
+    except tomllib.TOMLDecodeError as e:
+        errors.append(f"invalid TOML: {e}")
+        return errors
+
+    sim = data.get("sim")
+    if sim is None:
+        errors.append("missing [sim] table")
+        return errors
+    if not isinstance(sim, dict):
+        errors.append("[sim] must be a table")
+        return errors
+
+    if "default_solver" in sim and not isinstance(sim["default_solver"], str):
+        errors.append("[sim].default_solver must be a string")
+    if "workspace" in sim and not isinstance(sim["workspace"], str):
+        errors.append("[sim].workspace must be a string")
+    if "server_port" in sim and not isinstance(sim["server_port"], int):
+        errors.append("[sim].server_port must be an integer")
+
+    plugins = sim.get("plugins") or []
+    if not isinstance(plugins, list):
+        errors.append("[[sim.plugins]] must be an array of tables")
+    else:
+        for i, p in enumerate(plugins):
+            if not isinstance(p, dict):
+                errors.append(f"[[sim.plugins]] entry #{i} must be a table")
+                continue
+            if "name" not in p or not isinstance(p["name"], str):
+                errors.append(f"[[sim.plugins]] entry #{i} missing required 'name'")
+                continue
+            for k in ("version", "git", "wheel"):
+                if k in p and not isinstance(p[k], str):
+                    errors.append(f"[[sim.plugins]] {p['name']!r} field {k!r} must be a string")
+
+    return errors
+
+
+def derive_install_source(plugin_entry: dict[str, Any]) -> str:
+    """Translate one [[sim.plugins]] entry to an install-source string.
+
+    Resolution priority: explicit ``wheel`` path > explicit ``git`` URL
+    > ``name@version`` if version set > bare ``name``.
+    """
+    if "wheel" in plugin_entry:
+        return plugin_entry["wheel"]
+    if "git" in plugin_entry:
+        return f"git+{plugin_entry['git']}"
+    name = plugin_entry["name"]
+    version = plugin_entry.get("version")
+    if version:
+        # Strip leading == / >= so it composes with our @ form.
+        v = version.lstrip(">=<! ")
+        if version.startswith("=="):
+            return f"{name}@{v}"
+        # Range constraints: fall back to bare name and let pip resolve.
+        return name
+    return name

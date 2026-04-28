@@ -19,15 +19,18 @@ from sim.runner import execute_script
 @click.version_option(version=__version__)
 @click.option("--json", "output_json", is_flag=True, help="JSON output for all commands.")
 @click.option("--host", default=None,
-              help="Remote sim-server host (e.g. 100.90.110.79). "
+              help="Remote sim-server host. "
                    "Default: SIM_HOST env > config [server].host > localhost.")
 @click.option("--port", default=None, type=int,
               help="sim-server port. Default: SIM_PORT env > config [server].port > 7600.")
 @click.option("--session", "session_id", default=None,
               help="Target session id (multi-session). "
                    "Default: SIM_SESSION env > server's sole session.")
+@click.option("--no-interactive", "no_interactive", is_flag=True,
+              help="Fail fast (NONINTERACTIVE_INPUT_REQUIRED) instead of prompting. "
+                   "Auto-on when stdout is not a TTY.")
 @click.pass_context
-def main(ctx, output_json, host, port, session_id):
+def main(ctx, output_json, host, port, session_id, no_interactive):
     """sim — unified CLI for LLM agents to control CAD/CAE simulation software."""
     ctx.ensure_object(dict)
     ctx.obj["json"] = output_json
@@ -39,6 +42,12 @@ def main(ctx, output_json, host, port, session_id):
     ctx.obj["host"] = host or os.environ.get("SIM_HOST") or "localhost"
     ctx.obj["port"] = port if port is not None else _cfg.resolve_server_port()
     ctx.obj["session"] = session_id or os.environ.get("SIM_SESSION") or None
+    # --no-interactive: explicit flag wins; otherwise auto-on when piped.
+    ctx.obj["no_interactive"] = (
+        no_interactive
+        or os.environ.get("SIM_NO_INTERACTIVE") in ("1", "true", "True")
+        or not sys.stdin.isatty()
+    )
 
 
 # ── serve ────────────────────────────────────────────────────────────────────
@@ -76,9 +85,7 @@ def _is_local_host(host: str) -> bool:
 def _check_local(solver: str) -> dict:
     """Run on-demand detection in this process. Returns the same shape
     as the /detect/{solver} HTTP endpoint."""
-    from pathlib import Path
-
-    from sim.compat import load_compatibility, safe_detect_installed
+    from sim.compat import load_compatibility_by_name, safe_detect_installed
 
     try:
         driver = get_driver(solver)
@@ -88,11 +95,10 @@ def _check_local(solver: str) -> dict:
         return {"ok": False, "error": f"unknown solver: {solver}"}
 
     installs = safe_detect_installed(driver)
-    driver_dir = Path(__file__).parent / "drivers" / solver
     resolutions: list[dict] = []
     compat_dict: dict | None = None
-    try:
-        compat = load_compatibility(driver_dir)
+    compat = load_compatibility_by_name(solver)
+    if compat is not None:
         compat_dict = {
             "driver": compat.driver,
             "sdk_package": compat.sdk_package,
@@ -104,7 +110,7 @@ def _check_local(solver: str) -> dict:
                 "install": inst.to_dict(),
                 "profile": profile.to_dict() if profile else None,
             })
-    except FileNotFoundError:
+    else:
         for inst in installs:
             resolutions.append({"install": inst.to_dict(), "profile": None})
 
@@ -796,6 +802,444 @@ def config_init(ctx, scope):
         click.echo(json_mod.dumps({"ok": True, "path": str(path), "scope": scope}))
     else:
         click.echo(f"[sim] config: wrote {scope} stub at {path}")
+
+
+@config.command("validate")
+@click.argument("path", type=click.Path(exists=True, dir_okay=False, path_type=Path),
+                required=False)
+@click.pass_context
+def config_validate(ctx, path):
+    """Validate a sim.toml against the schema. Defaults to the current project's sim.toml."""
+    target = path or _cfg.project_sim_toml_path()
+    errors = _cfg.validate_sim_toml(target)
+    out = {"ok": not errors, "path": str(target), "errors": errors}
+    if ctx.obj["json"]:
+        click.echo(json_mod.dumps(out, indent=2))
+    else:
+        if not errors:
+            click.echo(f"[sim] config validate: {target} OK")
+        else:
+            click.echo(f"[sim] config validate: {target} FAIL", err=True)
+            for e in errors:
+                click.echo(f"  - {e}", err=True)
+    sys.exit(0 if not errors else 2)
+
+
+# ── init / setup (project bootstrap) ─────────────────────────────────────────
+
+
+@main.command()
+@click.option("--force", is_flag=True, help="Overwrite an existing sim.toml.")
+@click.pass_context
+def init(ctx, force):
+    """Create a starter sim.toml in the current directory.
+
+    Idempotent. Use --force to regenerate from the template.
+    """
+    path = _cfg.init_sim_toml(force=force)
+    out = {"ok": True, "path": str(path), "created": not (path.exists() and not force)}
+    if ctx.obj["json"]:
+        click.echo(json_mod.dumps(out, indent=2))
+    else:
+        click.echo(f"[sim] init: {path}")
+
+
+@main.command()
+@click.option("--config", "config_path", type=click.Path(exists=True, dir_okay=False, path_type=Path),
+              default=None, help="Override the sim.toml location.")
+@click.option("--offline", is_flag=True,
+              help="Resolve plugins from the cached index only (no network).")
+@click.option("--dry-run", is_flag=True,
+              help="Print what would happen without installing anything.")
+@click.pass_context
+def setup(ctx, config_path, offline, dry_run):
+    """Read sim.toml and install / verify everything it declares.
+
+    Idempotent: re-running after a successful setup is a no-op modulo plugin
+    upgrades. Designed to be the *one* command an agent runs to bring a
+    fresh checkout into a runnable state.
+    """
+    from sim._plugin_install import install_plugin
+
+    path = config_path or _cfg.project_sim_toml_path()
+    errors = _cfg.validate_sim_toml(path) if path.is_file() else ["sim.toml not found"]
+    if errors:
+        out = {"ok": False, "error_code": "PLUGIN_NOT_FOUND",
+               "message": "sim.toml is missing or invalid",
+               "errors": errors, "path": str(path)}
+        click.echo(json_mod.dumps(out, indent=2) if ctx.obj["json"]
+                   else f"[sim] setup: error — {out['message']}\n  " + "\n  ".join(errors),
+                   err=not ctx.obj["json"])
+        sys.exit(2)
+
+    import sys as _sys
+    if sys.version_info >= (3, 11):
+        import tomllib as _tomllib
+    else:
+        import tomli as _tomllib  # type: ignore[no-redef]
+    data = _tomllib.loads(path.read_text(encoding="utf-8"))
+
+    plugins = (data.get("sim") or {}).get("plugins") or []
+    actions: list[dict] = []
+    fail = False
+
+    for entry in plugins:
+        source = _cfg.derive_install_source(entry)
+        if dry_run:
+            actions.append({"name": entry.get("name"), "source": source, "action": "would-install"})
+            continue
+        report = install_plugin(source, offline=offline)
+        actions.append({
+            "name": entry.get("name"),
+            "source": source,
+            "ok": report.ok,
+            "message": report.message,
+        })
+        if not report.ok:
+            fail = True
+
+    summary = {
+        "ok": not fail,
+        "path": str(path),
+        "dry_run": dry_run,
+        "plugins": actions,
+    }
+    if ctx.obj["json"]:
+        click.echo(json_mod.dumps(summary, indent=2))
+    else:
+        verb = "would install" if dry_run else "installed"
+        click.echo(f"[sim] setup: {verb} {len(actions)} plugin(s) from {path}")
+        for a in actions:
+            mark = "OK" if a.get("ok", True) else "FAIL"
+            click.echo(f"  [{mark}] {a['name']} ← {a['source']}")
+            if a.get("message") and not a.get("ok", True):
+                click.echo(f"        {a['message']}")
+    sys.exit(0 if not fail else 4)
+
+
+# ── plugin (manage installed sim plugins) ────────────────────────────────────
+
+
+@main.group()
+def plugin():
+    """Manage installed sim plugins (drivers + bundled skills).
+
+    Plugins extend sim with additional solvers. Each plugin ships its
+    driver + skill in one wheel; see docs/plugin-install.md for the install
+    flows (online by name, local wheel, air-gapped bundle, etc.).
+    """
+
+
+@plugin.command("list")
+@click.pass_context
+def plugin_list(ctx):
+    """List every plugin currently registered with sim."""
+    from sim import plugins as _plugins
+
+    rows = _plugins.list_installed_plugins()
+    if ctx.obj["json"]:
+        click.echo(json_mod.dumps([r.to_dict() for r in rows], indent=2))
+        return
+
+    if not rows:
+        click.echo("[sim] plugin list: no plugins registered")
+        return
+
+    click.echo(f"[sim] {len(rows)} plugin(s) registered:")
+    for r in rows:
+        kind = "(builtin)" if r.builtin else "(plugin)"
+        ver = f" {r.version}" if r.version else ""
+        pkg = f" [{r.package}{ver}]" if r.package else ""
+        skills = " +skills" if r.has_skills else ""
+        click.echo(f"  {r.name:20s} {kind}{pkg}{skills}")
+        if r.summary:
+            click.echo(f"    {r.summary}")
+
+
+@plugin.command("info")
+@click.argument("name")
+@click.pass_context
+def plugin_info_cmd(ctx, name):
+    """Show one plugin's metadata + compatibility summary."""
+    from sim import plugins as _plugins
+    from sim.compat import load_compatibility_by_name
+
+    rows = {p.name: p for p in _plugins.list_installed_plugins()}
+    if name not in rows:
+        msg = {"ok": False, "error_code": "PLUGIN_NOT_FOUND",
+               "message": f"unknown plugin: {name!r}"}
+        click.echo(json_mod.dumps(msg) if ctx.obj["json"] else msg["message"], err=not ctx.obj["json"])
+        sys.exit(2)
+
+    plugin_row = rows[name]
+    compat = load_compatibility_by_name(name)
+    out = {
+        "ok": True,
+        "plugin": plugin_row.to_dict(),
+        "compatibility": (
+            {
+                "driver": compat.driver,
+                "sdk_package": compat.sdk_package,
+                "profiles": [p.to_dict() for p in compat.profiles],
+            } if compat else None
+        ),
+    }
+
+    if ctx.obj["json"]:
+        click.echo(json_mod.dumps(out, indent=2))
+        return
+
+    click.echo(f"[sim] plugin: {plugin_row.name}")
+    if plugin_row.solver_name:
+        click.echo(f"  solver:        {plugin_row.solver_name}")
+    if plugin_row.summary:
+        click.echo(f"  summary:       {plugin_row.summary}")
+    if plugin_row.package:
+        ver = f" {plugin_row.version}" if plugin_row.version else ""
+        click.echo(f"  package:       {plugin_row.package}{ver}")
+    click.echo(f"  module:        {plugin_row.driver_module}")
+    click.echo(f"  builtin:       {plugin_row.builtin}")
+    click.echo(f"  has skills:    {plugin_row.has_skills}")
+    if plugin_row.license_class:
+        click.echo(f"  license class: {plugin_row.license_class}")
+    if plugin_row.homepage:
+        click.echo(f"  homepage:      {plugin_row.homepage}")
+    if compat:
+        click.echo(f"  profiles:      {', '.join(p.name for p in compat.profiles)}")
+
+
+@plugin.command("install")
+@click.argument("source")
+@click.option("-e", "--editable", is_flag=True,
+              help="Editable install (pip install -e). For plugin authors.")
+@click.option("--upgrade", is_flag=True,
+              help="Pass --upgrade to pip.")
+@click.option("--offline", is_flag=True,
+              help="Use only the local cached index; no network calls.")
+@click.option("--no-sync", "no_sync", is_flag=True,
+              help="Skip sync-skills after install.")
+@click.option("--target", "sync_target", type=click.Path(file_okay=False, path_type=Path),
+              default=None,
+              help="Override sync-skills target dir (default: ./.claude/skills or ~/.claude/skills).")
+@click.pass_context
+def plugin_install(ctx, source, editable, upgrade, offline, no_sync, sync_target):
+    """Install a plugin from any supported source.
+
+    \b
+    Examples:
+      sim plugin install coolprop                          # by name (online index)
+      sim plugin install coolprop@0.1.0                    # pinned version
+      sim plugin install ./sim_plugin_coolprop-0.1.0-py3-none-any.whl
+      sim plugin install ./sim-plugin-coolprop -e          # editable, for authors
+      sim plugin install git+https://github.com/svd-ai-lab/sim-plugin-coolprop
+      sim plugin install --offline coolprop                # use cached index only
+    """
+    from sim._plugin_install import install_plugin
+
+    report = install_plugin(
+        source,
+        editable=editable, upgrade=upgrade, offline=offline,
+        sync_target=sync_target, skip_sync=no_sync,
+    )
+
+    if ctx.obj["json"]:
+        click.echo(json_mod.dumps(report.to_dict(), indent=2))
+    else:
+        if report.ok:
+            click.echo(f"[sim] plugin install: ok ({report.source_kind} → {report.pip_target})")
+            if report.sync_skills:
+                if report.sync_skills.get("ok"):
+                    linked = len(report.sync_skills.get("linked", []))
+                    copied = len(report.sync_skills.get("copied", []))
+                    if linked or copied:
+                        click.echo(f"[sim] sync-skills: {linked} linked, {copied} copied")
+        else:
+            click.echo(f"[sim] plugin install: FAIL — {report.message}", err=True)
+            if report.pip_stderr:
+                click.echo(report.pip_stderr.rstrip(), err=True)
+
+    sys.exit(0 if report.ok else 4)
+
+
+@plugin.command("uninstall")
+@click.argument("name")
+@click.pass_context
+def plugin_uninstall(ctx, name):
+    """Uninstall a plugin and remove its synced skill directory."""
+    from sim._plugin_install import uninstall_plugin
+
+    result = uninstall_plugin(name)
+    if ctx.obj["json"]:
+        click.echo(json_mod.dumps(result, indent=2))
+    else:
+        if result["ok"]:
+            click.echo(f"[sim] plugin uninstall: removed {result['package']}")
+        else:
+            click.echo(f"[sim] plugin uninstall: FAIL — {result.get('message')}", err=True)
+    sys.exit(0 if result.get("ok") else 4)
+
+
+@plugin.command("bundle")
+@click.argument("names", nargs=-1, required=True)
+@click.option("--output", "-o", type=click.Path(file_okay=False, path_type=Path),
+              default=Path("./plugins-bundle"),
+              help="Output directory for wheels + filtered index.json.")
+@click.pass_context
+def plugin_bundle(ctx, names, output):
+    """Download wheels for the named plugins into a directory for offline install.
+
+    \b
+    Examples:
+      sim plugin bundle coolprop simpy gmsh -o ./plugins-bundle/
+      sim plugin install --offline --from-dir ./plugins-bundle/ coolprop
+    """
+    from sim._plugin_install import bundle_plugins
+
+    result = bundle_plugins(list(names), output)
+
+    if ctx.obj["json"]:
+        click.echo(json_mod.dumps(result, indent=2))
+    else:
+        if result["ok"]:
+            click.echo(f"[sim] plugin bundle: wrote {len(result['fetched'])} plugin(s) to {result['output']}")
+            for n in result["fetched"]:
+                click.echo(f"  + {n}")
+        else:
+            click.echo(f"[sim] plugin bundle: PARTIAL — {len(result['fetched'])} ok, {len(result['errors'])} failed", err=True)
+            for err in result["errors"]:
+                click.echo(f"  ! {err['name']}: {err['error']}", err=True)
+    sys.exit(0 if result.get("ok") else 4)
+
+
+@plugin.command("sync-skills")
+@click.option("--target", type=click.Path(file_okay=False, path_type=Path), default=None,
+              help="Where to materialize plugin _skills/ dirs (default: per-project .claude/skills/).")
+@click.option("--copy", "copy_mode", is_flag=True,
+              help="Copy instead of symlink (Windows-friendly).")
+@click.pass_context
+def plugin_sync_skills(ctx, target, copy_mode):
+    """Materialize every installed plugin's bundled skill into a target dir.
+
+    Idempotent. Symlinks where supported; ``--copy`` on environments where
+    symlinks aren't available (Windows without dev mode).
+    """
+    from sim import plugins as _plugins
+    from sim._plugin_install import _default_skills_target
+
+    dest = target or _default_skills_target()
+    result = _plugins.sync_skills_to(dest, copy=copy_mode)
+
+    if ctx.obj["json"]:
+        click.echo(json_mod.dumps(result, indent=2))
+    else:
+        click.echo(f"[sim] plugin sync-skills: target={result['target']}")
+        if result.get("linked"):
+            click.echo(f"  linked: {', '.join(result['linked'])}")
+        if result.get("copied"):
+            click.echo(f"  copied: {', '.join(result['copied'])}")
+        if result.get("skipped"):
+            click.echo(f"  skipped (no _skills bundle): {len(result['skipped'])} plugin(s)")
+    sys.exit(0 if result.get("ok") else 4)
+
+
+@plugin.command("doctor")
+@click.argument("name", required=False)
+@click.option("--all", "all_plugins", is_flag=True,
+              help="Run doctor on every registered plugin.")
+@click.option("--deep", is_flag=True,
+              help="Also call detect_installed() to check the solver itself.")
+@click.pass_context
+def plugin_doctor(ctx, name, all_plugins, deep):
+    """Validate that a plugin loads, conforms to DriverProtocol, and has skills.
+
+    Exit code is the count of FAILed checks; 0 means clean. Use this in CI
+    to catch plugin-side regressions, and in `sim setup` to verify a fresh
+    install.
+    """
+    from sim import plugins as _plugins
+
+    if not name and not all_plugins:
+        msg = "specify a plugin name or pass --all"
+        click.echo(json_mod.dumps({"ok": False, "error_code": "PLUGIN_NOT_FOUND",
+                                    "message": msg}) if ctx.obj["json"] else f"[sim] error: {msg}")
+        sys.exit(2)
+
+    if all_plugins:
+        reports = _plugins.doctor_all(deep=deep)
+    else:
+        reports = [_plugins.doctor(name, deep=deep)]
+
+    fails = sum(r.fail_count for r in reports)
+
+    if ctx.obj["json"]:
+        click.echo(json_mod.dumps({
+            "ok": fails == 0,
+            "fail_count": fails,
+            "warn_count": sum(r.warn_count for r in reports),
+            "reports": [r.to_dict() for r in reports],
+        }, indent=2))
+    else:
+        for r in reports:
+            mark = "OK" if r.ok else f"FAIL ({r.fail_count})"
+            click.echo(f"[sim] plugin doctor {r.name}: {mark}")
+            for c in r.checks:
+                click.echo(f"  [{c.status:4s}] {c.label:20s} {c.message}")
+        click.echo(f"\n[sim] {fails} fail(s), {sum(r.warn_count for r in reports)} warn(s) "
+                   f"across {len(reports)} plugin(s)")
+
+    sys.exit(fails)
+
+
+# ── describe (CLI manifest for agents) ───────────────────────────────────────
+
+
+@main.command()
+@click.argument("target", required=False)
+@click.option("--schema", "schema_name", default=None,
+              help="Print one schema by name (RunResult, LintResult, ...).")
+@click.option("--error-codes", "error_codes_only", is_flag=True,
+              help="Print just the closed enum of error codes.")
+@click.pass_context
+def describe(ctx, target, schema_name, error_codes_only):
+    """Emit the full CLI manifest as JSON.
+
+    Agents call this once at session start to learn every command, flag,
+    error code, and output schema. ``sim describe <command>`` returns one
+    command's contract; ``sim describe --schema RunResult`` returns one
+    type's JSON Schema; ``sim describe --error-codes`` returns the closed
+    enum.
+    """
+    from sim import describe as _describe
+
+    out: object
+    if error_codes_only:
+        out = [{"code": code, "description": desc}
+               for code, desc in _describe.ERROR_CODES.items()]
+    elif schema_name:
+        schema = _describe.SCHEMAS.get(schema_name)
+        if schema is None:
+            click.echo(json_mod.dumps({
+                "ok": False,
+                "error_code": "PLUGIN_NOT_FOUND",  # close-enough generic; schema lookup fail
+                "message": f"unknown schema: {schema_name!r}",
+            }))
+            sys.exit(2)
+        out = schema
+    elif target:
+        entry = _describe.build_command_entry(main, target)
+        if entry is None:
+            click.echo(json_mod.dumps({
+                "ok": False,
+                "error_code": "PLUGIN_NOT_FOUND",
+                "message": f"unknown command: {target!r}",
+            }))
+            sys.exit(2)
+        out = entry
+    else:
+        out = _describe.build_manifest(main, version=__version__)
+
+    # describe is JSON-by-default — agents are the primary consumer.
+    click.echo(json_mod.dumps(out, indent=2, default=str))
 
 
 # ── logs (run history) ───────────────────────────────────────────────────────
