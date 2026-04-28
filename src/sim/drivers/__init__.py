@@ -35,21 +35,15 @@ log = logging.getLogger(__name__)
 _ENTRY_POINT_GROUP = "sim.drivers"
 
 
+# Pure-plugin architecture (Phase 3b, 2026-04-28): every driver — including
+# the historical canaries openfoam and coolprop — ships as an out-of-tree
+# `sim-plugin-<name>` package, discovered via the `sim.drivers` entry-point
+# group below. The built-in registry is intentionally empty; sim-cli core
+# carries no solver-specific code or dependencies.
+#
 # (driver_name, "module:Class") — order controls `solvers list` output order
-# and `lint` first-match priority.
-_BUILTIN_REGISTRY: list[tuple[str, str]] = [
-    # openfoam: Phase 3a plugin-extraction canary (2026-04-28). Held as the
-    # soak safety net while sim-plugin-openfoam ships the external counter-
-    # part. Earlier "has a real session implementation, not a drop-in
-    # extraction candidate" framing was wrong — the driver is a generic
-    # HTTP client over sim-server's normal endpoints, structurally identical
-    # to coolprop. Empty-registry cut tracked in svd-ai-lab/sim-proj#69.
-    ("openfoam", "sim.drivers.openfoam:OpenFOAMDriver"),
-    # coolprop: Phase 1 plugin-extraction canary. Held in the registry as
-    # the safety net during the 1-week soak; sim-plugin-coolprop ships the
-    # external counterpart. Removal lands in a follow-up PR after soak.
-    ("coolprop", "sim.drivers.coolprop:CoolPropDriver"),
-]
+# and `lint` first-match priority. Externals from entry_points are appended.
+_BUILTIN_REGISTRY: list[tuple[str, str]] = []
 
 
 def _is_valid_spec(spec: str) -> bool:

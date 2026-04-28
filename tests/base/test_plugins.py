@@ -1,6 +1,9 @@
 """Tests for ``sim plugin`` commands and the underlying discovery layer.
 
-Pure unit tests against the in-tree built-in registry. Tests for actually
+Post-Phase-3b ``_BUILTIN_REGISTRY`` is empty. The conftest synthetic
+``coolprop`` driver (autouse fixture, ``tests/base/`` only) is what makes
+these tests find anything at all — when it's active, plugin/list/doctor
+see a single registered driver named "coolprop". Tests for actually
 installing external plugins (`sim plugin install <wheel>`) live in
 test_plugin_install.py.
 """
@@ -23,22 +26,20 @@ def runner() -> CliRunner:
 # ── Discovery layer ─────────────────────────────────────────────────────────
 
 
-def test_list_installed_plugins_returns_all_built_ins():
+def test_list_installed_plugins_returns_synthetic_coolprop():
     rows = _plugins.list_installed_plugins()
-    assert rows
+    assert rows, "synthetic coolprop should be visible via the conftest fixture"
     names = {r.name for r in rows}
-    # The registry post-Phase-2D contains only the still-bundled drivers.
-    # OSS-no-GUI drivers are extracted into sim-plugin-* repos.
-    for required in ("openfoam", "coolprop"):
-        assert required in names, f"missing built-in: {required}"
+    assert "coolprop" in names, f"missing synthetic driver: {sorted(names)}"
 
 
-def test_built_in_rows_marked_builtin_true():
+def test_synthetic_row_marked_builtin_true():
     rows = _plugins.list_installed_plugins()
-    for r in rows:
-        # The current registry has all built-ins; no externals installed in test env.
-        assert r.builtin is True
-        assert r.driver_module.startswith("sim.drivers.")
+    coolprop = next((r for r in rows if r.name == "coolprop"), None)
+    assert coolprop is not None
+    # Conftest injects the synthetic into _BUILTIN_REGISTRY for the duration
+    # of each tests/base/ test, so it appears as a builtin.
+    assert coolprop.builtin is True
 
 
 def test_plugin_info_for_unknown_returns_none():
@@ -122,10 +123,9 @@ def test_cli_plugin_doctor_all_built_ins(runner):
     assert r.exit_code == 0, r.output
     data = json.loads(r.output)
     assert data["ok"] is True
-    # Post-cleanup the registry holds only openfoam (built-in by design;
-    # has the sim-server bridge) plus coolprop (Phase 1 canary, soak ends
-    # 2026-05-05). OSS-no-GUI drivers ship as out-of-tree plugins.
-    assert len(data["reports"]) >= 2
+    # Post-Phase-3b _BUILTIN_REGISTRY is empty; only the conftest synthetic
+    # coolprop driver is registered for tests/base/ scope.
+    assert len(data["reports"]) >= 1
 
 
 def test_cli_plugin_doctor_unknown_fails(runner):

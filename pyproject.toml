@@ -1,6 +1,6 @@
 [project]
 name = "sim-cli-core"
-version = "0.2.4"
+version = "0.3.0"
 description = "Make every engineering tool agent-native — a CLI runtime that lets LLM agents launch, drive, and observe CAD/CAE software"
 readme = "README.md"
 license = "Apache-2.0"
@@ -9,7 +9,7 @@ authors = [{ name = "Weiqi Ji", email = "jiweiqi10@gmail.com" }]
 keywords = [
     "simulation", "cae", "cad", "cfd", "fea",
     "llm", "agent", "agentic",
-    "openfoam", "coolprop",
+    "plugins", "out-of-tree",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",

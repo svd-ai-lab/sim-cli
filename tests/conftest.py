@@ -14,15 +14,15 @@ EXECUTION = Path(__file__).parent / "execution"
 
 # ── Synthetic driver injected for registry-dependent CLI tests ─────────────
 #
-# Phase 2D extracted every OSS-no-GUI driver into out-of-tree plugins, so the
-# in-tree registry now holds only openfoam (session-capable, kept by design)
-# plus the coolprop soak canary (gates ``run_file`` on a real SDK install,
-# which fails in CI). Several CLI tests need a *registered* driver that can
-# run an arbitrary ``.py`` script as a subprocess (mock_solver.py); that
-# contract used to be served by the built-in pybamm driver. Replace it with a
-# session-scoped autouse fixture that injects a synthetic ``coolprop`` driver
-# implementation — keeping the test command lines unchanged
-# (``--solver=coolprop``) while bypassing the SDK-install gate.
+# Pure-plugin architecture (Phase 3b): ``_BUILTIN_REGISTRY`` is empty —
+# every driver, including the historical canaries openfoam and coolprop,
+# now ships as an out-of-tree ``sim-plugin-<name>`` package. Several CLI
+# tests need a *registered* driver that can run an arbitrary ``.py`` script
+# as a subprocess (mock_solver.py); that contract used to be served by the
+# in-tree pybamm/coolprop drivers. The fixture below injects a synthetic
+# ``coolprop`` driver into both the registry and instance cache — keeping
+# test command lines unchanged (``--solver=coolprop``) without needing
+# any real plugin installed in the CI env.
 #
 # Active only for tests under ``tests/base/``; driver-specific suites (e.g.
 # ``tests/drivers/<name>/``) opt out so their real driver code is exercised.
@@ -91,11 +91,13 @@ class _SyntheticPyDriver:
 
 @pytest.fixture(autouse=True)
 def _inject_synthetic_coolprop(request):
-    """Replace the registry's coolprop driver with a synthetic one for base CLI tests.
+    """Inject a synthetic ``coolprop`` driver into the registry for base CLI tests.
 
     Active only under ``tests/base/``; driver-specific suites still exercise
-    the real classes. Patches the ``_INSTANCE_CACHE`` so resolves return the
-    synthetic driver without going through the real coolprop module.
+    the real classes. Post-Phase-3b ``_BUILTIN_REGISTRY`` is empty, so the
+    fixture patches BOTH the registry entries (so ``iter_drivers`` /
+    ``sim solvers list`` / ``sim check`` see the synthetic) AND
+    ``_INSTANCE_CACHE`` (so ``get_driver("coolprop")`` skips re-import).
     """
     if "tests/base/" not in str(request.fspath).replace("\\", "/"):
         yield
@@ -104,11 +106,20 @@ def _inject_synthetic_coolprop(request):
     from sim import drivers as _drivers_pkg
 
     instance = _SyntheticPyDriver()
-    original = _drivers_pkg._INSTANCE_CACHE.pop("coolprop", None)
+    fake_spec = ("coolprop", "tests.conftest:_SyntheticPyDriver")
+
+    orig_builtin = list(_drivers_pkg._BUILTIN_REGISTRY)
+    orig_registry = list(_drivers_pkg._REGISTRY)
+    orig_cache = _drivers_pkg._INSTANCE_CACHE.pop("coolprop", None)
+
+    _drivers_pkg._BUILTIN_REGISTRY.append(fake_spec)
+    _drivers_pkg._REGISTRY.append(fake_spec)
     _drivers_pkg._INSTANCE_CACHE["coolprop"] = instance
     try:
         yield
     finally:
+        _drivers_pkg._BUILTIN_REGISTRY[:] = orig_builtin
+        _drivers_pkg._REGISTRY[:] = orig_registry
         _drivers_pkg._INSTANCE_CACHE.pop("coolprop", None)
-        if original is not None:
-            _drivers_pkg._INSTANCE_CACHE["coolprop"] = original
+        if orig_cache is not None:
+            _drivers_pkg._INSTANCE_CACHE["coolprop"] = orig_cache

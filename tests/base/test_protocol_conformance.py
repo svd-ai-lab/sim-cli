@@ -172,17 +172,7 @@ def test_assert_message_lists_every_failure():
     assert "session:disconnect" in msg
 
 
-# ── Real built-in driver smoke ──────────────────────────────────────────────
-
-
-def test_built_in_coolprop_driver_check_runs():
-    """We don't assert ``failures == []`` for built-ins (they may legitimately
-    be in flux), only that the harness runs against a real driver class
-    without crashing. This is a smoke test for the harness itself.
-    """
-    from sim.drivers.coolprop.driver import CoolPropDriver
-    failures = check_driver(CoolPropDriver)
-    assert isinstance(failures, list)
+# ── Built-in registry conformance ───────────────────────────────────────────
 
 
 def test_every_built_in_driver_matches_protocol():

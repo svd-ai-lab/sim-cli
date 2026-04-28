@@ -66,9 +66,9 @@ def test_check_all_json_shape():
             for k in ("version", "path", "source"):
                 assert k in row, f"installed row missing {k}: {row}"
 
-    # at least one driver known to be in DRIVERS should appear
+    # the conftest synthetic driver (registered as "coolprop") should appear
     names = {row["name"] for row in solvers}
-    assert "openfoam" in names
+    assert "coolprop" in names
 
     # ordering is stable: by name alphabetical
     names_list = [row["name"] for row in solvers]
