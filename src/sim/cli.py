@@ -76,9 +76,7 @@ def _is_local_host(host: str) -> bool:
 def _check_local(solver: str) -> dict:
     """Run on-demand detection in this process. Returns the same shape
     as the /detect/{solver} HTTP endpoint."""
-    from pathlib import Path
-
-    from sim.compat import load_compatibility, safe_detect_installed
+    from sim.compat import load_compatibility_by_name, safe_detect_installed
 
     try:
         driver = get_driver(solver)
@@ -88,11 +86,10 @@ def _check_local(solver: str) -> dict:
         return {"ok": False, "error": f"unknown solver: {solver}"}
 
     installs = safe_detect_installed(driver)
-    driver_dir = Path(__file__).parent / "drivers" / solver
     resolutions: list[dict] = []
     compat_dict: dict | None = None
-    try:
-        compat = load_compatibility(driver_dir)
+    compat = load_compatibility_by_name(solver)
+    if compat is not None:
         compat_dict = {
             "driver": compat.driver,
             "sdk_package": compat.sdk_package,
@@ -104,7 +101,7 @@ def _check_local(solver: str) -> dict:
                 "install": inst.to_dict(),
                 "profile": profile.to_dict() if profile else None,
             })
-    except FileNotFoundError:
+    else:
         for inst in installs:
             resolutions.append({"install": inst.to_dict(), "profile": None})
 
