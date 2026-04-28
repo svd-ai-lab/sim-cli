@@ -318,13 +318,50 @@ def _copy_file(src: Path, dst: Path, dry_run: bool = False) -> None:
 
 
 def _rewrite_imports(text: str, name: str) -> str:
-    """Convert sim-cli test imports to plugin imports.
+    """Convert sim-cli test imports + string-form module paths to plugin paths.
 
-    e.g.   from sim.drivers.coolprop import CoolPropDriver
-       ->  from sim_plugin_coolprop import CoolPropDriver
+    Handles three forms:
+
+    1. Statement imports (with submodule):
+         from sim.drivers.coolprop.driver import CoolPropDriver
+       -> from sim_plugin_coolprop.driver import CoolPropDriver
+
+    2. Statement imports (top-level only):
+         from sim.drivers.coolprop import CoolPropDriver
+       -> from sim_plugin_coolprop import CoolPropDriver
+
+    3. String paths inside ``monkeypatch.setattr(...)`` etc.:
+         "sim.drivers.coolprop.driver.run_net"
+       -> "sim_plugin_coolprop.driver.run_net"
+
+    Form (3) is essential for tests that patch private helpers via the
+    string form of ``importlib``-style paths. Without it, monkeypatch
+    silently no-ops because the original module never existed under its
+    sim-cli name in the plugin venv.
     """
-    pattern = re.compile(rf"from\s+sim\.drivers\.{re.escape(name)}(\.\w+)?\s+import")
-    return pattern.sub(f"from sim_plugin_{name} import", text)
+    sub = name  # short alias for readability inside the lambdas
+
+    # Form 1 + 2 — statement-level imports.
+    text = re.sub(
+        rf"from\s+sim\.drivers\.{re.escape(sub)}\.(\w+)\s+import",
+        rf"from sim_plugin_{sub}.\1 import",
+        text,
+    )
+    text = re.sub(
+        rf"from\s+sim\.drivers\.{re.escape(sub)}\s+import",
+        f"from sim_plugin_{sub} import",
+        text,
+    )
+
+    # Form 3 — string-form dotted paths inside calls (monkeypatch, importlib,
+    # patch decorators, etc.). Match within quoted strings only.
+    text = re.sub(
+        rf"\bsim\.drivers\.{re.escape(sub)}\b",
+        f"sim_plugin_{sub}",
+        text,
+    )
+
+    return text
 
 
 # ── Inferred metadata ──────────────────────────────────────────────────────
