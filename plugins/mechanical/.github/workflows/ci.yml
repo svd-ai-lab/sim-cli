@@ -1,0 +1,26 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint-and-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python: ["3.10", "3.12"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python }}
+      # setup-uv@v5 pre-creates a venv at $VIRTUAL_ENV; uv pip install
+      # without --system targets that venv automatically.
+      - run: uv pip install -e .[test]
+      # Skip integration-marked tests in CI (Ansys Mechanical is not
+      # installed/licensed on the runner).
+      - run: uv run --no-sync pytest tests -v -m "not integration"
