@@ -361,6 +361,19 @@ def _rewrite_imports(text: str, name: str) -> str:
         text,
     )
 
+    # Form 4 — fixture-path computation. sim-cli tests live at
+    # ``tests/drivers/<name>/file.py`` (3 dirs deep from project root) so
+    # they use ``Path(__file__).parent.parent.parent / "fixtures"``.
+    # Plugin tests live at ``tests/file.py`` (1 dir deep) so the same
+    # target is ``Path(__file__).parent.parent / "fixtures"``. Drop one
+    # ``.parent`` level on patterns reaching for sibling dirs (fixtures,
+    # execution, scripts).
+    text = re.sub(
+        r'Path\(__file__\)\.parent\.parent\.parent\s*/\s*"(fixtures|execution|scripts)"',
+        r'Path(__file__).parent.parent / "\1"',
+        text,
+    )
+
     return text
 
 
