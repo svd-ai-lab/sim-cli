@@ -72,12 +72,12 @@ For the full driver protocol, server endpoints, and execution pipeline see [CLAU
 
 ## 🚀 Quick Start
 
-> **Names at a glance:** repo `svd-ai-lab/sim-cli` · PyPI distribution `sim-runtime` · console command `sim` · import `import sim`. Yes, three different strings — the repo name predates the PyPI publish; the rest follow Python packaging convention.
+> **Names at a glance:** repo `svd-ai-lab/sim-cli` · PyPI distribution `sim-cli-core` · console command `sim` · import `import sim`. Yes, three different strings — the repo name predates the PyPI publish; the rest follow Python packaging convention.
 
 ```bash
 # 1. On the host that has the solver installed, install sim core only
 #    — no driver choice yet:
-uv pip install sim-runtime
+uv pip install sim-cli-core
 
 # 2. Install the plugin for the solver you actually want (browse the
 #    index with `sim plugin list`):
@@ -220,12 +220,12 @@ See [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) for setup, project layout, addi
 
 ## 🌐 Remote deployment
 
-When the solver lives on a different machine (an HPC login node, a lab box, or any host with the solver installed) and you want to drive it from your laptop, a notebook, or an LLM agent — install `sim-runtime` on **both** ends and run `sim serve` on the remote.
+When the solver lives on a different machine (an HPC login node, a lab box, or any host with the solver installed) and you want to drive it from your laptop, a notebook, or an LLM agent — install `sim-cli-core` on **both** ends and run `sim serve` on the remote.
 
 ```bash
 # On the solver host (the machine with the solver installed)
 ssh user@solver-host
-pip install sim-runtime
+pip install sim-cli-core
 sim serve --host 0.0.0.0 --port 7600     # bind to all interfaces
 
 # On your local control machine
@@ -236,7 +236,7 @@ sim --host <solver-host-ip> disconnect
 sim --host <solver-host-ip> stop          # shut down the remote server when done
 ```
 
-That is the entire setup — same `sim-runtime` package on both sides, same wire protocol whether it is talking to a local or a remote server. Bind `--host 0.0.0.0` only on networks you trust (Tailscale, VPN, LAN behind a firewall); there is **no auth layer** on `/connect` and `/exec` execute arbitrary Python.
+That is the entire setup — same `sim-cli-core` package on both sides, same wire protocol whether it is talking to a local or a remote server. Bind `--host 0.0.0.0` only on networks you trust (Tailscale, VPN, LAN behind a firewall); there is **no auth layer** on `/connect` and `/exec` execute arbitrary Python.
 
 ---
 

@@ -34,7 +34,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/p/sim-runtime
+      url: https://pypi.org/p/sim-cli-core
     permissions:
       id-token: write
     steps:

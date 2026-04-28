@@ -4,7 +4,7 @@
 > **Audience:** sim-cli maintainers, plugin authors.
 > **Last reviewed:** 2026-04-27.
 
-This document used to carry a long, driver-specific compatibility-matrix design. Most of that material now lives **inside individual plugin packages** — every commercial-solver driver ships as its own out-of-tree plugin, and each plugin owns the version-compat data for its own SDK and solver releases. The design intent is preserved here in summary form so the public `sim-runtime` repo still describes the contract that plugins implement.
+This document used to carry a long, driver-specific compatibility-matrix design. Most of that material now lives **inside individual plugin packages** — every commercial-solver driver ships as its own out-of-tree plugin, and each plugin owns the version-compat data for its own SDK and solver releases. The design intent is preserved here in summary form so the public `sim-cli-core` repo still describes the contract that plugins implement.
 
 If you are looking for the per-plugin compatibility data, read each plugin's own `compatibility.yaml` and its own architecture notes.
 
@@ -14,7 +14,7 @@ If you are looking for the per-plugin compatibility data, read each plugin's own
 
 Every supported solver has its own version sprawl, each with its own SDK or scripting interface that pins to a narrow window of solver versions, and each with skill content that is implicitly tied to a specific API surface. A single global pin in `pyproject.toml` cannot represent that. We solve it by:
 
-- shipping a small **core** runtime (`sim-runtime`) that holds no solver SDK as a hard dependency,
+- shipping a small **core** runtime (`sim-cli-core`) that holds no solver SDK as a hard dependency,
 - letting each driver — built-in or external — carry its own `compatibility.yaml` next to its `driver.py`,
 - discovering external drivers at import time through a standard Python entry-point group.
 
@@ -107,7 +107,7 @@ The core sim process never imports any solver SDK directly — all SDK imports h
 When a driver opts into a profile env, its layout is:
 
 ```
-sim-runtime core process               profile env
+sim-cli-core process                   profile env
 ─────────────────────                  ─────────────────────────
 sim CLI / sim serve                    .sim/envs/<profile>/
    │                                       ├─ bin/python
@@ -125,6 +125,6 @@ This is the same primitive LSP, DAP, and MCP use. It costs no port allocation, n
 
 ## 6. Where the rest of the design lives
 
-Per-driver compatibility matrices, detection patterns, and runner implementations live in the driver itself — inside this repo for built-in OSS drivers, inside the plugin package for everything else. The public `sim-runtime` repo intentionally stays thin and version-agnostic; it owns the contract, not the data.
+Per-driver compatibility matrices, detection patterns, and runner implementations live in the driver itself — inside this repo for built-in OSS drivers, inside the plugin package for everything else. The public `sim-cli-core` repo intentionally stays thin and version-agnostic; it owns the contract, not the data.
 
 For the layered skill-content design that consumes `active_sdk_layer` / `active_solver_layer`, see [`skills-layering-plan.md`](skills-layering-plan.md).

@@ -3,6 +3,9 @@
 from importlib.metadata import PackageNotFoundError, version
 
 try:
-    __version__ = version("sim-runtime")
+    __version__ = version("sim-cli-core")
 except PackageNotFoundError:
-    __version__ = "0.0.0+unknown"
+    try:
+        __version__ = version("sim-runtime")
+    except PackageNotFoundError:
+        __version__ = "0.0.0+unknown"

@@ -44,7 +44,7 @@ def test_python_m_sim_invocation():
     # Click reports prog_name as "python -m sim" here (sys.argv[0] is the
     # module path); accept either form alongside the actual version string.
     assert "version" in result.stdout
-    assert version("sim-runtime") in result.stdout
+    assert version("sim-cli-core") in result.stdout
 
 
 def test_check_all_json_shape():

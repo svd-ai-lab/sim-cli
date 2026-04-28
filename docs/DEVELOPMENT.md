@@ -65,7 +65,7 @@ re-prepares the editable install on every sync, which means rewriting
 is open as a process, and the entire sync aborts. Launching via
 `python -m sim` keeps `sim.exe` free, so `uv sync` can complete in-place
 while `--reload` continues to pick up source changes. End-user PyPI
-workflows aren't affected — they install `sim-runtime` as a regular wheel
+workflows aren't affected — they install `sim-cli-core` as a regular wheel
 and never re-prepare the editable.
 
 ### `sim disconnect --stop-server`

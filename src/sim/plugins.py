@@ -245,7 +245,8 @@ def _ep_distribution_info_for_host() -> tuple[str, str | None]:
     """Look up the host package (sim-cli itself) — used for built-in driver rows."""
     try:
         from importlib.metadata import distribution
-        # Try the current PyPI name first; rename to sim-cli-core lands in Phase 4.
+        # sim-cli-core is the canonical PyPI dist name; sim-runtime is kept
+        # as a fallback for editable installs predating the Phase 4 rename.
         for candidate in ("sim-cli-core", "sim-runtime"):
             try:
                 dist = distribution(candidate)
