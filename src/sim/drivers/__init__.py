@@ -67,6 +67,9 @@ _BUILTIN_REGISTRY: list[tuple[str, str]] = [
     ("scikit_rf", "sim.drivers.scikitrf:ScikitRfDriver"),
     ("pandapower", "sim.drivers.pandapower:PandapowerDriver"),
     ("paraview", "sim.drivers.paraview:ParaViewDriver"),
+    # ltspice: Phase 2A plugin-extraction canary. Held in the registry as
+    # the safety net during the soak; sim-plugin-ltspice ships the
+    # external counterpart. Removal lands in a follow-up PR after soak.
     ("ltspice", "sim.drivers.ltspice:LTspiceDriver"),
 ]
 
