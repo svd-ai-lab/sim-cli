@@ -95,7 +95,17 @@ def skill_dir(name: str) -> Path:
 
 
 def fixtures_for(name: str) -> list[Path]:
-    return sorted((SIM_CLI / "tests/fixtures").glob(f"{name}_*.py"))
+    """Match any test fixture starting with ``<name>_``, regardless of suffix.
+
+    coolprop fixtures are ``.py`` files; ltspice fixtures are ``.net`` files;
+    other drivers may ship ``.json`` / ``.csv`` / etc. The previous glob was
+    ``<name>_*.py`` and silently dropped non-``.py`` fixtures.
+    """
+    fixtures_dir = SIM_CLI / "tests/fixtures"
+    return sorted(
+        p for p in fixtures_dir.glob(f"{name}_*")
+        if p.is_file() and "__pycache__" not in p.parts
+    )
 
 
 def driver_tests_dir(name: str) -> Path:
@@ -466,7 +476,7 @@ def removal_plan(entry: RegistryEntry) -> list[str]:
     out = [
         f"sim-cli:    rm -rf src/sim/drivers/{entry.name}/",
         f"sim-cli:    rm -rf tests/drivers/{entry.name}/",
-        f"sim-cli:    rm tests/fixtures/{entry.name}_*.py",
+        f"sim-cli:    rm tests/fixtures/{entry.name}_*",
         f"sim-cli:    rm -rf tests/execution/{entry.name}/  (if present)",
         f"sim-cli:    drop the registry row for {entry.name!r} in src/sim/drivers/__init__.py",
         f"sim-skills: rm -rf {entry.name}/",
