@@ -798,6 +798,58 @@ def config_init(ctx, scope):
         click.echo(f"[sim] config: wrote {scope} stub at {path}")
 
 
+# ── describe (CLI manifest for agents) ───────────────────────────────────────
+
+
+@main.command()
+@click.argument("target", required=False)
+@click.option("--schema", "schema_name", default=None,
+              help="Print one schema by name (RunResult, LintResult, ...).")
+@click.option("--error-codes", "error_codes_only", is_flag=True,
+              help="Print just the closed enum of error codes.")
+@click.pass_context
+def describe(ctx, target, schema_name, error_codes_only):
+    """Emit the full CLI manifest as JSON.
+
+    Agents call this once at session start to learn every command, flag,
+    error code, and output schema. ``sim describe <command>`` returns one
+    command's contract; ``sim describe --schema RunResult`` returns one
+    type's JSON Schema; ``sim describe --error-codes`` returns the closed
+    enum.
+    """
+    from sim import describe as _describe
+
+    out: object
+    if error_codes_only:
+        out = [{"code": code, "description": desc}
+               for code, desc in _describe.ERROR_CODES.items()]
+    elif schema_name:
+        schema = _describe.SCHEMAS.get(schema_name)
+        if schema is None:
+            click.echo(json_mod.dumps({
+                "ok": False,
+                "error_code": "PLUGIN_NOT_FOUND",  # close-enough generic; schema lookup fail
+                "message": f"unknown schema: {schema_name!r}",
+            }))
+            sys.exit(2)
+        out = schema
+    elif target:
+        entry = _describe.build_command_entry(main, target)
+        if entry is None:
+            click.echo(json_mod.dumps({
+                "ok": False,
+                "error_code": "PLUGIN_NOT_FOUND",
+                "message": f"unknown command: {target!r}",
+            }))
+            sys.exit(2)
+        out = entry
+    else:
+        out = _describe.build_manifest(main, version=__version__)
+
+    # describe is JSON-by-default — agents are the primary consumer.
+    click.echo(json_mod.dumps(out, indent=2, default=str))
+
+
 # ── logs (run history) ───────────────────────────────────────────────────────
 
 @main.command()
