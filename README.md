@@ -246,17 +246,8 @@ Users are responsible for obtaining a valid license for each underlying solver a
 
 ### Trademarks
 
-All product, solver, and company names appearing in this repository are used for identification purposes only. Ownership is retained by the respective holders:
+`sim-cli` is an independent open-source project and is **not affiliated with, endorsed by, or sponsored by** any solver vendor. Product, solver, and company names referenced anywhere in this repository remain the property of their respective owners:
 
-- **Ansys®**, **Fluent®**, **Workbench®**, **Mechanical®**, **MAPDL**, **CFX®**, **LS-DYNA®**, **ICEM CFD™**, **DPF** are trademarks or registered trademarks of **ANSYS, Inc.**
-- **Abaqus®**, **SIMULIA®** are trademarks of **Dassault Systèmes**.
-- **COMSOL Multiphysics®** is a trademark of **COMSOL AB**.
-- **MATLAB®** is a registered trademark of **The MathWorks, Inc.**
-- **Simcenter™ STAR-CCM+**, **Simcenter Flotherm™** are trademarks of **Siemens Digital Industries Software**.
-- **ANSA®** is a trademark of **BETA CAE Systems**.
-- **HyperMesh®**, **Altair®** are trademarks of **Altair Engineering, Inc.**
-- **ParaView®** is a trademark of **Kitware, Inc.**
 - **OpenFOAM®** is a registered trademark of **OpenCFD Ltd.**
+- **ParaView®** is a trademark of **Kitware, Inc.**
 - All other solver and product names are trademarks of their respective owners.
-
-`sim-cli` is an independent open-source project and is **not affiliated with, endorsed by, or sponsored by** any of the vendors listed above.
