@@ -795,6 +795,145 @@ def config_init(ctx, scope):
         click.echo(f"[sim] config: wrote {scope} stub at {path}")
 
 
+# ── plugin (manage installed sim plugins) ────────────────────────────────────
+
+
+@main.group()
+def plugin():
+    """Manage installed sim plugins (drivers + bundled skills).
+
+    Plugins extend sim with additional solvers. Each plugin ships its
+    driver + skill in one wheel; see docs/plugin-install.md for the install
+    flows (online by name, local wheel, air-gapped bundle, etc.).
+    """
+
+
+@plugin.command("list")
+@click.pass_context
+def plugin_list(ctx):
+    """List every plugin currently registered with sim."""
+    from sim import plugins as _plugins
+
+    rows = _plugins.list_installed_plugins()
+    if ctx.obj["json"]:
+        click.echo(json_mod.dumps([r.to_dict() for r in rows], indent=2))
+        return
+
+    if not rows:
+        click.echo("[sim] plugin list: no plugins registered")
+        return
+
+    click.echo(f"[sim] {len(rows)} plugin(s) registered:")
+    for r in rows:
+        kind = "(builtin)" if r.builtin else "(plugin)"
+        ver = f" {r.version}" if r.version else ""
+        pkg = f" [{r.package}{ver}]" if r.package else ""
+        skills = " +skills" if r.has_skills else ""
+        click.echo(f"  {r.name:20s} {kind}{pkg}{skills}")
+        if r.summary:
+            click.echo(f"    {r.summary}")
+
+
+@plugin.command("info")
+@click.argument("name")
+@click.pass_context
+def plugin_info_cmd(ctx, name):
+    """Show one plugin's metadata + compatibility summary."""
+    from sim import plugins as _plugins
+    from sim.compat import load_compatibility_by_name
+
+    rows = {p.name: p for p in _plugins.list_installed_plugins()}
+    if name not in rows:
+        msg = {"ok": False, "error_code": "PLUGIN_NOT_FOUND",
+               "message": f"unknown plugin: {name!r}"}
+        click.echo(json_mod.dumps(msg) if ctx.obj["json"] else msg["message"], err=not ctx.obj["json"])
+        sys.exit(2)
+
+    plugin_row = rows[name]
+    compat = load_compatibility_by_name(name)
+    out = {
+        "ok": True,
+        "plugin": plugin_row.to_dict(),
+        "compatibility": (
+            {
+                "driver": compat.driver,
+                "sdk_package": compat.sdk_package,
+                "profiles": [p.to_dict() for p in compat.profiles],
+            } if compat else None
+        ),
+    }
+
+    if ctx.obj["json"]:
+        click.echo(json_mod.dumps(out, indent=2))
+        return
+
+    click.echo(f"[sim] plugin: {plugin_row.name}")
+    if plugin_row.solver_name:
+        click.echo(f"  solver:        {plugin_row.solver_name}")
+    if plugin_row.summary:
+        click.echo(f"  summary:       {plugin_row.summary}")
+    if plugin_row.package:
+        ver = f" {plugin_row.version}" if plugin_row.version else ""
+        click.echo(f"  package:       {plugin_row.package}{ver}")
+    click.echo(f"  module:        {plugin_row.driver_module}")
+    click.echo(f"  builtin:       {plugin_row.builtin}")
+    click.echo(f"  has skills:    {plugin_row.has_skills}")
+    if plugin_row.license_class:
+        click.echo(f"  license class: {plugin_row.license_class}")
+    if plugin_row.homepage:
+        click.echo(f"  homepage:      {plugin_row.homepage}")
+    if compat:
+        click.echo(f"  profiles:      {', '.join(p.name for p in compat.profiles)}")
+
+
+@plugin.command("doctor")
+@click.argument("name", required=False)
+@click.option("--all", "all_plugins", is_flag=True,
+              help="Run doctor on every registered plugin.")
+@click.option("--deep", is_flag=True,
+              help="Also call detect_installed() to check the solver itself.")
+@click.pass_context
+def plugin_doctor(ctx, name, all_plugins, deep):
+    """Validate that a plugin loads, conforms to DriverProtocol, and has skills.
+
+    Exit code is the count of FAILed checks; 0 means clean. Use this in CI
+    to catch plugin-side regressions, and in `sim setup` to verify a fresh
+    install.
+    """
+    from sim import plugins as _plugins
+
+    if not name and not all_plugins:
+        msg = "specify a plugin name or pass --all"
+        click.echo(json_mod.dumps({"ok": False, "error_code": "PLUGIN_NOT_FOUND",
+                                    "message": msg}) if ctx.obj["json"] else f"[sim] error: {msg}")
+        sys.exit(2)
+
+    if all_plugins:
+        reports = _plugins.doctor_all(deep=deep)
+    else:
+        reports = [_plugins.doctor(name, deep=deep)]
+
+    fails = sum(r.fail_count for r in reports)
+
+    if ctx.obj["json"]:
+        click.echo(json_mod.dumps({
+            "ok": fails == 0,
+            "fail_count": fails,
+            "warn_count": sum(r.warn_count for r in reports),
+            "reports": [r.to_dict() for r in reports],
+        }, indent=2))
+    else:
+        for r in reports:
+            mark = "OK" if r.ok else f"FAIL ({r.fail_count})"
+            click.echo(f"[sim] plugin doctor {r.name}: {mark}")
+            for c in r.checks:
+                click.echo(f"  [{c.status:4s}] {c.label:20s} {c.message}")
+        click.echo(f"\n[sim] {fails} fail(s), {sum(r.warn_count for r in reports)} warn(s) "
+                   f"across {len(reports)} plugin(s)")
+
+    sys.exit(fails)
+
+
 # ── describe (CLI manifest for agents) ───────────────────────────────────────
 
 
