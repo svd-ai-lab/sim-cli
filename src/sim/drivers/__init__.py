@@ -60,6 +60,9 @@ _BUILTIN_REGISTRY: list[tuple[str, str]] = [
     ("simpy", "sim.drivers.simpy:SimpyDriver"),
     ("trimesh", "sim.drivers.trimesh:TrimeshDriver"),
     ("devito", "sim.drivers.devito:DevitoDriver"),
+    # coolprop: Phase 1 plugin-extraction canary. Held in the registry as
+    # the safety net during the 1-week soak; sim-plugin-coolprop ships the
+    # external counterpart. Removal lands in a follow-up PR after soak.
     ("coolprop", "sim.drivers.coolprop:CoolPropDriver"),
     ("scikit_rf", "sim.drivers.scikitrf:ScikitRfDriver"),
     ("pandapower", "sim.drivers.pandapower:PandapowerDriver"),

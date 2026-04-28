@@ -68,3 +68,23 @@ class TestRunFile:
             with pytest.raises(RuntimeError, match="(?i)coolprop"):
                 d.run_file(p)
         finally: os.unlink(p)
+
+
+class TestSessionStubs:
+    """CoolProp is one-shot; DriverProtocol still requires the methods exist."""
+
+    def setup_method(self): self.d = CoolPropDriver()
+
+    def test_supports_session_false(self): assert self.d.supports_session is False
+
+    def test_launch_raises(self):
+        with pytest.raises(NotImplementedError, match="(?i)session"):
+            self.d.launch()
+
+    def test_run_raises(self):
+        with pytest.raises(NotImplementedError, match="(?i)session"):
+            self.d.run("PropsSI('T', 'P', 1e5, 'Q', 0, 'Water')")
+
+    def test_disconnect_idempotent(self):
+        r = self.d.disconnect()
+        assert r == {"ok": True, "disconnected": True}
