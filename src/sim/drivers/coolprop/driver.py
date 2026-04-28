@@ -170,3 +170,14 @@ class CoolPropDriver:
         return run_subprocess(
             [python_exe, str(script)], script=script, solver=self.name,
         )
+
+    # Session lifecycle stubs — CoolProp is one-shot, but DriverProtocol is
+    # runtime_checkable so every method must exist. See `sim.driver`.
+    def launch(self, **kwargs) -> dict:
+        raise NotImplementedError("coolprop driver does not support sessions")
+
+    def run(self, code: str, label: str = "") -> dict:
+        raise NotImplementedError("coolprop driver does not support sessions")
+
+    def disconnect(self) -> dict:
+        return {"ok": True, "disconnected": True}
