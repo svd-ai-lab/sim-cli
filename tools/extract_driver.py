@@ -39,7 +39,7 @@ Sources of truth (do NOT hard-code paths inside this script unless tested):
   * Registry tuple                  -> sim/drivers/__init__.py
   * Plugin's compatibility.yaml     -> if present in sim/drivers/<name>/
   * License (Apache-2.0)            -> shared template
-  * sim-runtime pin                 -> CLI flag (defaults to current main)
+  * sim-cli-core pin                -> CLI flag (defaults to current main)
 
 The reference dry-run target is ``coolprop``: running this codemod
 against coolprop SHOULD produce a tree byte-for-byte identical (modulo
@@ -143,7 +143,7 @@ classifiers = [
     "License :: OSI Approved :: Apache Software License",
 ]
 dependencies = [
-    "sim-runtime @ git+https://github.com/svd-ai-lab/sim-cli@{sim_runtime_pin}",
+    "sim-cli-core @ git+https://github.com/svd-ai-lab/sim-cli@{sim_cli_core_pin}",
 {extra_deps}
 ]
 
@@ -167,7 +167,7 @@ Homepage = "https://github.com/svd-ai-lab/sim-plugin-{name}"
 Issues = "https://github.com/svd-ai-lab/sim-plugin-{name}/issues"
 
 [tool.hatch.metadata]
-# Required because `sim-runtime` is pinned to a git+https URL — sim-cli is
+# Required because `sim-cli-core` is pinned to a git+https URL — sim-cli is
 # distributed via GitHub, not PyPI. See sim-proj memory: plugin distribution
 # is GitHub-only.
 allow-direct-references = true
@@ -410,7 +410,7 @@ def collect_extra_deps(entry: RegistryEntry) -> str:
 # ── Main ───────────────────────────────────────────────────────────────────
 
 
-def assemble_plugin(entry: RegistryEntry, output: Path, sim_runtime_pin: str,
+def assemble_plugin(entry: RegistryEntry, output: Path, sim_cli_core_pin: str,
                      dry_run: bool) -> None:
     summary = infer_summary(entry)
     display_name = infer_display_name(entry)
@@ -465,7 +465,7 @@ def assemble_plugin(entry: RegistryEntry, output: Path, sim_runtime_pin: str,
     # Plumbing files.
     _write(output / "pyproject.toml", PYPROJECT_TEMPLATE.format(
         name=entry.name, class_name=entry.class_name, summary=summary,
-        sim_runtime_pin=sim_runtime_pin, extra_deps=extra_deps,
+        sim_cli_core_pin=sim_cli_core_pin, extra_deps=extra_deps,
     ), dry_run=dry_run)
     _write(output / ".gitignore", GITIGNORE, dry_run=dry_run)
     _write(output / "README.md", _readme_for(entry.name, display_name, summary), dry_run=dry_run)
@@ -541,14 +541,14 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--output", "-o", required=True, help="output dir for the plugin tree")
     p.add_argument("--dry-run", action="store_true", help="don't write anything; just describe")
     p.add_argument(
-        "--sim-runtime-pin",
-        default=_default_sim_runtime_pin(),
-        help="git ref to pin sim-runtime to in the plugin's pyproject (default: current sim-cli main commit)",
+        "--sim-cli-core-pin",
+        default=_default_sim_cli_core_pin(),
+        help="git ref to pin sim-cli-core to in the plugin's pyproject (default: current sim-cli main commit)",
     )
     return p.parse_args(argv)
 
 
-def _default_sim_runtime_pin() -> str:
+def _default_sim_cli_core_pin() -> str:
     """Resolve a default pin: latest tag if available, otherwise main commit."""
     try:
         tag = subprocess.check_output(
@@ -572,11 +572,11 @@ def main(argv: list[str]) -> int:
 
     print(f"[extract] driver={entry.name} class={entry.class_name}")
     print(f"[extract] output={output}")
-    print(f"[extract] sim-runtime pin={args.sim_runtime_pin}")
+    print(f"[extract] sim-cli-core pin={args.sim_cli_core_pin}")
     print(f"[extract] dry-run={args.dry_run}")
     print()
 
-    assemble_plugin(entry, output, args.sim_runtime_pin, dry_run=args.dry_run)
+    assemble_plugin(entry, output, args.sim_cli_core_pin, dry_run=args.dry_run)
 
     print()
     print("[extract] sim-cli + sim-skills + sim-plugin-index removal plan:")

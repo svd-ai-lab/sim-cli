@@ -86,7 +86,7 @@ The server supports multiple concurrent sessions keyed by session_id. Each `Sess
 
 Drivers are resolved lazily through two channels:
 
-- **`_BUILTIN_REGISTRY`** — an ordered list of `(name, "module:Class")` tuples for the open-source drivers that ship with `sim-runtime` itself (PyBaMM, OpenFOAM, CalculiX, gmsh, SU2, LAMMPS, Elmer, scikit-fem, MFEM, OpenSeesPy, SfePy, OpenMDAO, FiPy, pymoo, Pyomo, SimPy, Trimesh, Devito, CoolProp, scikit-rf, pandapower, ParaView, meshio, PyVista, Newton, Isaac Sim, LTspice). The canonical list lives in `src/sim/drivers/__init__.py`.
+- **`_BUILTIN_REGISTRY`** — an ordered list of `(name, "module:Class")` tuples for the open-source drivers that ship with `sim-cli-core` itself (PyBaMM, OpenFOAM, CalculiX, gmsh, SU2, LAMMPS, Elmer, scikit-fem, MFEM, OpenSeesPy, SfePy, OpenMDAO, FiPy, pymoo, Pyomo, SimPy, Trimesh, Devito, CoolProp, scikit-rf, pandapower, ParaView, meshio, PyVista, Newton, Isaac Sim, LTspice). The canonical list lives in `src/sim/drivers/__init__.py`.
 - **`sim.drivers` entry-point group** — external/closed-source drivers register themselves via standard Python entry points and are discovered at import time, validated, and appended after the built-ins. Built-ins win on name collisions. This is the path used by every commercial-solver plugin (each lives in its own out-of-tree package with its own `compatibility.yaml`).
 
 A driver may set `supports_session = True` to implement the persistent-session lifecycle (`launch`/`run`/`query`/`disconnect`); the rest are one-shot only. `get_driver(name)` looks up by `.name` attribute and lazily imports the implementation module on first use, so a broken plugin does not crash the CLI.
@@ -147,9 +147,9 @@ Tests for out-of-tree plugin drivers live in their own plugin repos. Tests in th
 
 ## Releases
 
-- **PyPI distribution name:** `sim-runtime` (not `sim-cli` — that was rejected as too similar to the existing `simcli` placeholder).
-- **Console script + import name:** `sim`. The PyPI dist name and the import name intentionally differ; `src/sim/__init__.py` looks up `version("sim-runtime")` (wrapped in `try/except PackageNotFoundError` for source/editable installs).
-- **Trusted publisher:** GitHub OIDC, repo `svd-ai-lab/sim-cli`, workflow `.github/workflows/publish.yml`, environment `pypi`. Configured at https://pypi.org/manage/project/sim-runtime/settings/publishing/.
+- **PyPI distribution name:** `sim-cli-core` (renamed from `sim-runtime` in Phase 4 — see `src/sim/plugins.py` dual-lookup; `sim-runtime 0.2.1`–`0.2.3` remain on PyPI but are no longer released against). Both names were rejected for `sim-cli` itself, which is too similar to the existing `simcli` placeholder.
+- **Console script + import name:** `sim`. The PyPI dist name and the import name intentionally differ; `src/sim/__init__.py` looks up `version("sim-cli-core")` first, falling back to `version("sim-runtime")` for editable installs predating the rename, and `try/except PackageNotFoundError` for source checkouts.
+- **Trusted publisher:** GitHub OIDC, repo `svd-ai-lab/sim-cli`, workflow `.github/workflows/publish.yml`, environment `pypi`. Configured at https://pypi.org/manage/project/sim-cli-core/settings/publishing/.
 - **Tag format:** `v<MAJOR.MINOR.PATCH>` matching `pyproject.toml` `version` exactly. Always tag from `main` after PR-merging a release branch.
 - **Don't skip the clean-venv smoke test before tagging.** 0.2.1 shipped broken (`__init__.py` referenced `version("sim-cli")` after the rename) because no one ran `sim --version` in a fresh venv before pushing the tag. Twine check verifies packaging, not import.
 
