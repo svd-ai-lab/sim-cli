@@ -102,7 +102,7 @@ def test_run_failure_surfaces_stdout_tail(tmp_path):
         "import sys; sys.exit(1)\n"
     )
     runner = CliRunner()
-    result = runner.invoke(main, ["run", "--solver", "pybamm", str(script)])
+    result = runner.invoke(main, ["run", "--solver", "coolprop", str(script)])
     assert result.exit_code != 0
     assert "[sim] status: failed" in result.output
     assert "blockMesh failed" in result.output
@@ -122,7 +122,7 @@ def test_run_failure_lists_workspace_delta(tmp_path, monkeypatch):
         "import sys; sys.exit(1)\n"
     )
     runner = CliRunner()
-    result = runner.invoke(main, ["run", "--solver", "pybamm", str(script)])
+    result = runner.invoke(main, ["run", "--solver", "coolprop", str(script)])
     assert result.exit_code != 0
     assert "[sim] workspace files written" in result.output
     assert "solver.log" in result.output
@@ -144,7 +144,7 @@ def test_run_success_also_lists_workspace_delta(tmp_path, monkeypatch):
         "print('done')\n"
     )
     runner = CliRunner()
-    result = runner.invoke(main, ["run", "--solver", "pybamm", str(script)])
+    result = runner.invoke(main, ["run", "--solver", "coolprop", str(script)])
     assert result.exit_code == 0
     assert "[sim] status: converged" in result.output
     # Workspace delta MUST appear on success — that's the whole point of
@@ -165,7 +165,7 @@ def test_run_persists_stdout_to_grep_friendly_file(tmp_path, monkeypatch):
         "for i in range(50): print(f'line {i}: residual = 1e-{i}')\n"
     )
     runner = CliRunner()
-    result = runner.invoke(main, ["run", "--solver", "pybamm", str(script)])
+    result = runner.invoke(main, ["run", "--solver", "coolprop", str(script)])
     assert result.exit_code == 0
     runs_dir = tmp_path / "sim_home" / "runs"
     files = list(runs_dir.glob("*.stdout"))
@@ -181,7 +181,7 @@ def test_logs_field_workspace_returns_delta(tmp_path, monkeypatch):
     script = tmp_path / "writer.py"
     script.write_text("open('a.dat','w').write('x'); open('b.dat','w').write('y')\n")
     runner = CliRunner()
-    r1 = runner.invoke(main, ["run", "--solver", "pybamm", str(script)])
+    r1 = runner.invoke(main, ["run", "--solver", "coolprop", str(script)])
     assert r1.exit_code == 0
     # Pull the run_id from the "saved as #N" line.
     rid = None
@@ -203,7 +203,7 @@ def test_logs_field_stdout_reads_persisted_file(tmp_path, monkeypatch):
     script = tmp_path / "shout.py"
     script.write_text("print('UNIQUE_NEEDLE_SENTINEL')\n")
     runner = CliRunner()
-    r1 = runner.invoke(main, ["run", "--solver", "pybamm", str(script)])
+    r1 = runner.invoke(main, ["run", "--solver", "coolprop", str(script)])
     assert r1.exit_code == 0
     rid = next(l.split("#", 1)[1].strip() for l in r1.output.splitlines() if "saved as #" in l)
     r2 = runner.invoke(main, ["logs", rid, "--field", "stdout"])

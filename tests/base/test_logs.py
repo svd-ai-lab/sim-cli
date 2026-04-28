@@ -17,7 +17,7 @@ class TestLogsCLI:
     def _run_mock(self, runner, env):
         return runner.invoke(
             main,
-            ["run", "--solver=pybamm", str(FIXTURES / "mock_solver.py")],
+            ["run", "--solver=coolprop", str(FIXTURES / "mock_solver.py")],
             env=env,
         )
 
@@ -35,7 +35,7 @@ class TestLogsCLI:
         result = runner.invoke(main, ["logs", "--all"], env=env)
         assert result.exit_code == 0
         assert "001" in result.output
-        assert "pybamm" in result.output
+        assert "coolprop" in result.output
 
     def test_list_json(self, tmp_path):
         runner = CliRunner()
@@ -46,7 +46,7 @@ class TestLogsCLI:
         data = json.loads(result.output)
         assert isinstance(data, list)
         assert len(data) == 1
-        assert data[0]["solver"] == "pybamm"
+        assert data[0]["solver"] == "coolprop"
 
     def test_show_last(self, tmp_path):
         runner = CliRunner()
@@ -92,7 +92,7 @@ class TestLogsCLI:
         runner = CliRunner()
         env = {"SIM_HOME": str(tmp_path / ".sim")}
         self._run_mock(runner, env)
-        result = runner.invoke(main, ["logs", "--solver=pybamm", "--all"], env=env)
+        result = runner.invoke(main, ["logs", "--solver=coolprop", "--all"], env=env)
         assert result.exit_code == 0
         assert "001" in result.output
         result2 = runner.invoke(main, ["logs", "--solver=fluent", "--all"], env=env)

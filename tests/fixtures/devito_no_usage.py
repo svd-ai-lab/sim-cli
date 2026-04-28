@@ -1,2 +1,0 @@
-import devito
-print("loaded")

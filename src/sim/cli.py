@@ -321,10 +321,20 @@ def lint(ctx, script):
             driver = d
             break
     if driver is None:
-        from sim.drivers.pybamm import PyBaMMLDriver
-        driver = PyBaMMLDriver()
-
-    result = driver.lint(script_path)
+        from sim.driver import Diagnostic, LintResult
+        result = LintResult(
+            ok=False,
+            diagnostics=[Diagnostic(
+                level="error",
+                message=(
+                    f"No registered driver claims {script_path.name!r}. "
+                    "Install the matching plugin (e.g. `sim plugin install <solver>`) "
+                    "or pass `sim run` if you want to attempt execution anyway."
+                ),
+            )],
+        )
+    else:
+        result = driver.lint(script_path)
     if ctx.obj["json"]:
         click.echo(json_mod.dumps(result.to_dict(), indent=2))
     else:

@@ -1,2 +1,0 @@
-import sfepy
-def broken(:

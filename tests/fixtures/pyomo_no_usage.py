@@ -1,2 +1,0 @@
-import pyomo
-print("loaded")

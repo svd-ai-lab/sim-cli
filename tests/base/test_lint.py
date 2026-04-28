@@ -1,71 +1,49 @@
-"""Tests for sim lint — Phase 1."""
+"""Tests for `sim lint` — driver-agnostic CLI behavior.
+
+Driver-specific lint tests live in each plugin's own test suite (e.g.
+`sim-plugin-coolprop/tests/test_coolprop_driver.py`) since the lint
+logic moved out of sim-cli's tree alongside its driver in the Phase 2
+extractions.
+
+This file covers the parts that are still sim-cli's responsibility:
+
+  - lint exits non-zero when no registered driver matches the script.
+  - JSON output mode emits a structured LintResult.
+"""
+from __future__ import annotations
+
+import json
 from pathlib import Path
 
 from click.testing import CliRunner
 
 from sim.cli import main
-from sim.drivers.pybamm import PyBaMMLDriver
+
 
 FIXTURES = Path(__file__).parent.parent / "fixtures"
 
 
-class TestPyBaMMDetect:
-    def test_detects_pybamm_script(self):
-        driver = PyBaMMLDriver()
-        assert driver.detect(FIXTURES / "pybamm" / "pybamm_spm_good.py") is True
-
-    def test_rejects_non_pybamm_script(self):
-        driver = PyBaMMLDriver()
-        assert driver.detect(FIXTURES / "not_simulation.py") is False
-
-    def test_detects_bad_import_script(self):
-        """Script uses pybamm without importing — detect should return False."""
-        driver = PyBaMMLDriver()
-        assert driver.detect(FIXTURES / "pybamm" / "pybamm_bad_import.py") is False
-
-
-class TestPyBaMMLint:
-    def test_good_script_passes(self):
-        driver = PyBaMMLDriver()
-        result = driver.lint(FIXTURES / "pybamm" / "pybamm_spm_good.py")
-        assert result.ok is True
-        assert not any(d.level == "error" for d in result.diagnostics)
-
-    def test_missing_import_fails(self):
-        driver = PyBaMMLDriver()
-        result = driver.lint(FIXTURES / "pybamm" / "pybamm_bad_import.py")
-        assert result.ok is False
-        errors = [d for d in result.diagnostics if d.level == "error"]
-        assert len(errors) >= 1
-        assert "import" in errors[0].message.lower()
-
-    def test_no_solve_warns(self):
-        driver = PyBaMMLDriver()
-        result = driver.lint(FIXTURES / "pybamm" / "pybamm_no_solve.py")
-        warnings = [d for d in result.diagnostics if d.level == "warning"]
-        assert len(warnings) >= 1
-        assert "solve" in warnings[0].message.lower()
-
-
 class TestLintCLI:
-    def test_exit_code_zero_good(self):
-        runner = CliRunner()
-        result = runner.invoke(main, ["lint", str(FIXTURES / "pybamm" / "pybamm_spm_good.py")])
-        assert result.exit_code == 0
+    def test_no_driver_matched_exits_nonzero(self, tmp_path: Path):
+        """A plain Python script that no driver claims should fail lint."""
+        plain = tmp_path / "plain.py"
+        plain.write_text("print('hello')\n")
 
-    def test_exit_code_one_bad(self):
         runner = CliRunner()
-        result = runner.invoke(main, ["lint", str(FIXTURES / "pybamm" / "pybamm_bad_import.py")])
+        result = runner.invoke(main, ["lint", str(plain)])
+        # Lint exits 1 on failure (sim.cli.lint sys.exit at end).
         assert result.exit_code == 1
+        assert "no registered driver" in result.output.lower()
 
-    def test_json_output(self):
-        import json
+    def test_json_output_emits_lint_result(self, tmp_path: Path):
+        plain = tmp_path / "plain.py"
+        plain.write_text("print('hello')\n")
 
         runner = CliRunner()
-        result = runner.invoke(
-            main, ["--json", "lint", str(FIXTURES / "pybamm" / "pybamm_spm_good.py")]
-        )
-        assert result.exit_code == 0
+        result = runner.invoke(main, ["--json", "lint", str(plain)])
+        # Parse the JSON; ok must be False, diagnostics must be present.
         data = json.loads(result.output)
-        assert "ok" in data
+        assert data["ok"] is False
         assert "diagnostics" in data
+        assert any("driver" in d.get("message", "").lower()
+                   for d in data["diagnostics"])

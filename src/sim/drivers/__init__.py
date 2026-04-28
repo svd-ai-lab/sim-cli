@@ -38,35 +38,13 @@ _ENTRY_POINT_GROUP = "sim.drivers"
 # (driver_name, "module:Class") — order controls `solvers list` output order
 # and `lint` first-match priority.
 _BUILTIN_REGISTRY: list[tuple[str, str]] = [
-    ("pybamm", "sim.drivers.pybamm:PyBaMMLDriver"),
+    # openfoam stays as a built-in: it has a real session implementation
+    # (sim-server bridge) so it isn't a drop-in extraction candidate yet.
     ("openfoam", "sim.drivers.openfoam:OpenFOAMDriver"),
-    ("isaac", "sim.drivers.isaac:IsaacDriver"),
-    ("newton", "sim.drivers.newton:NewtonDriver"),
-    ("calculix", "sim.drivers.calculix:CalculixDriver"),
-    ("gmsh", "sim.drivers.gmsh:GmshDriver"),
-    ("su2", "sim.drivers.su2:Su2Driver"),
-    ("lammps", "sim.drivers.lammps:LammpsDriver"),
-    ("scikit_fem", "sim.drivers.scikit_fem:ScikitFemDriver"),
-    ("elmer", "sim.drivers.elmer:ElmerDriver"),
-    ("meshio", "sim.drivers.meshio:MeshioDriver"),
-    ("pyvista", "sim.drivers.pyvista:PyvistaDriver"),
-    ("pymfem", "sim.drivers.pymfem:PymfemDriver"),
-    ("openseespy", "sim.drivers.openseespy:OpenSeesPyDriver"),
-    ("sfepy", "sim.drivers.sfepy:SfepyDriver"),
-    ("openmdao", "sim.drivers.openmdao:OpenMDAODriver"),
-    ("fipy", "sim.drivers.fipy:FipyDriver"),
-    ("pymoo", "sim.drivers.pymoo:PymooDriver"),
-    ("pyomo", "sim.drivers.pyomo:PyomoDriver"),
-    ("simpy", "sim.drivers.simpy:SimpyDriver"),
-    ("trimesh", "sim.drivers.trimesh:TrimeshDriver"),
-    ("devito", "sim.drivers.devito:DevitoDriver"),
     # coolprop: Phase 1 plugin-extraction canary. Held in the registry as
     # the safety net during the 1-week soak; sim-plugin-coolprop ships the
     # external counterpart. Removal lands in a follow-up PR after soak.
     ("coolprop", "sim.drivers.coolprop:CoolPropDriver"),
-    ("scikit_rf", "sim.drivers.scikitrf:ScikitRfDriver"),
-    ("pandapower", "sim.drivers.pandapower:PandapowerDriver"),
-    ("paraview", "sim.drivers.paraview:ParaViewDriver"),
     # ltspice: Phase 2A plugin-extraction canary. Held in the registry as
     # the safety net during the soak; sim-plugin-ltspice ships the
     # external counterpart. Removal lands in a follow-up PR after soak.

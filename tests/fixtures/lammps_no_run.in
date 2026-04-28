@@ -1,6 +1,0 @@
-# Has units + atom_style but no run - lint should warn
-units           lj
-atom_style      atomic
-dimension       3
-pair_style      lj/cut 2.5
-pair_coeff      1 1 1.0 1.0 2.5

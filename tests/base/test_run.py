@@ -110,7 +110,7 @@ class TestRunCLI:
         runner = CliRunner()
         result = runner.invoke(
             main,
-            ["run", "--solver=pybamm", str(FIXTURES / "mock_solver.py")],
+            ["run", "--solver=coolprop", str(FIXTURES / "mock_solver.py")],
         )
         assert result.exit_code == 0
         assert "3.72" in result.output or "converged" in result.output.lower() or "exit_code" in result.output.lower()
@@ -119,7 +119,7 @@ class TestRunCLI:
         runner = CliRunner()
         result = runner.invoke(
             main,
-            ["--json", "run", "--solver=pybamm", str(FIXTURES / "mock_solver.py")],
+            ["--json", "run", "--solver=coolprop", str(FIXTURES / "mock_solver.py")],
         )
         assert result.exit_code == 0
         data = json.loads(result.output)

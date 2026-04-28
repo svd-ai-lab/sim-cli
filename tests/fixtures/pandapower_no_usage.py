@@ -1,2 +1,0 @@
-import pandapower
-print("loaded")

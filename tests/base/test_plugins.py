@@ -27,8 +27,9 @@ def test_list_installed_plugins_returns_all_built_ins():
     rows = _plugins.list_installed_plugins()
     assert rows
     names = {r.name for r in rows}
-    # Spot-check a handful of OSS built-ins.
-    for required in ("coolprop", "pybamm", "gmsh", "simpy"):
+    # The registry post-Phase-2D contains only the still-bundled drivers.
+    # OSS-no-GUI drivers are extracted into sim-plugin-* repos.
+    for required in ("openfoam", "coolprop", "ltspice"):
         assert required in names, f"missing built-in: {required}"
 
 
@@ -121,7 +122,10 @@ def test_cli_plugin_doctor_all_built_ins(runner):
     assert r.exit_code == 0, r.output
     data = json.loads(r.output)
     assert data["ok"] is True
-    assert len(data["reports"]) >= 20
+    # Post-Phase-2D the registry holds only the still-bundled drivers
+    # (openfoam + the two soak canaries coolprop/ltspice). OSS-no-GUI
+    # drivers ship as out-of-tree plugins.
+    assert len(data["reports"]) >= 3
 
 
 def test_cli_plugin_doctor_unknown_fails(runner):

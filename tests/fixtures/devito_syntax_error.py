@@ -1,2 +1,0 @@
-import devito
-def broken(:
