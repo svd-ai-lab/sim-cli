@@ -45,10 +45,6 @@ _BUILTIN_REGISTRY: list[tuple[str, str]] = [
     # the safety net during the 1-week soak; sim-plugin-coolprop ships the
     # external counterpart. Removal lands in a follow-up PR after soak.
     ("coolprop", "sim.drivers.coolprop:CoolPropDriver"),
-    # ltspice: Phase 2A plugin-extraction canary. Held in the registry as
-    # the safety net during the soak; sim-plugin-ltspice ships the
-    # external counterpart. Removal lands in a follow-up PR after soak.
-    ("ltspice", "sim.drivers.ltspice:LTspiceDriver"),
 ]
 
 
