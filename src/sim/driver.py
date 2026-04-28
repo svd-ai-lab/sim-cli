@@ -137,6 +137,19 @@ class DriverProtocol(Protocol):
     # -- Session lifecycle (optional) ----------------------------------------
     # Drivers that support persistent sessions (connect/exec/disconnect)
     # must set supports_session = True and implement launch/run/disconnect.
+    #
+    # ## Return-shape contract (v1.0)
+    #
+    # Every session method returns a dict with at least ``{"ok": bool}``.
+    # On failure, drivers SHOULD also include ``"error_code"`` (from the
+    # closed enum in ``sim.describe.ERROR_CODES``) and ``"message"`` (≤280
+    # chars). Long output goes in ``"stdout"`` / ``"stderr"`` / ``"details"``,
+    # never inline in ``"message"``. See ``docs/agent-readability.md``.
+    #
+    # Drivers that don't support sessions should still implement these
+    # methods and have launch/run raise NotImplementedError; ``disconnect``
+    # is allowed to be a no-op (return ``{"ok": True, "disconnected": True}``).
+    # Both behaviors keep the structural protocol check happy.
 
     @property
     def supports_session(self) -> bool:
@@ -146,7 +159,9 @@ class DriverProtocol(Protocol):
     def launch(self, **kwargs) -> dict:
         """Start a persistent solver session.
 
-        Returns dict with at minimum ``{"ok": True, "session_id": "..."}``.
+        Required keys: ``ok`` (bool), ``session_id`` (str on success).
+        On failure: ``error_code`` (closed enum), ``message`` (≤280 chars).
+
         Accepts keyword arguments from the connect request; each driver
         picks what it needs and ignores the rest.
         """
@@ -155,13 +170,21 @@ class DriverProtocol(Protocol):
     def run(self, code: str, label: str = "") -> dict:
         """Execute code in the active session.
 
-        Returns dict with at minimum ``{"ok": bool}``.
+        Required keys: ``ok`` (bool). Drivers SHOULD also return
+        ``stdout``, ``stderr``, ``duration_s`` for parity with RunResult.
+        On failure: ``error_code`` (closed enum), ``message``.
+
+        ``label`` is an opaque tag the agent can use to correlate calls;
+        drivers should pass it through to logs but not interpret it.
         """
         ...
 
     def disconnect(self) -> dict:
         """Tear down the active session. Must be idempotent.
 
-        Returns ``{"ok": True, "disconnected": True}``.
+        Required keys: ``ok`` (bool), ``disconnected`` (bool).
+        Calling on an already-disconnected driver returns
+        ``{"ok": True, "disconnected": True}`` — that is, idempotent
+        success, not an error.
         """
         ...
