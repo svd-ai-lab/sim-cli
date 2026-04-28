@@ -1,7 +1,0 @@
-* RC low-pass smoke test
-V1 in 0 PULSE(0 1 0 1u 1u 1m 2m)
-R1 in out 1k
-C1 out 0 100n
-.tran 5m
-.meas TRAN vout_pk MAX V(out)
-.end

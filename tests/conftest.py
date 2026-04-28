@@ -15,8 +15,8 @@ EXECUTION = Path(__file__).parent / "execution"
 # ── Synthetic driver injected for registry-dependent CLI tests ─────────────
 #
 # Phase 2D extracted every OSS-no-GUI driver into out-of-tree plugins, so the
-# in-tree registry now holds only openfoam (session-capable) plus the two soak
-# canaries (coolprop / ltspice — both gate ``run_file`` on a real SDK install,
+# in-tree registry now holds only openfoam (session-capable, kept by design)
+# plus the coolprop soak canary (gates ``run_file`` on a real SDK install,
 # which fails in CI). Several CLI tests need a *registered* driver that can
 # run an arbitrary ``.py`` script as a subprocess (mock_solver.py); that
 # contract used to be served by the built-in pybamm driver. Replace it with a

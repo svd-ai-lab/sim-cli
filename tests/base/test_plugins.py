@@ -29,7 +29,7 @@ def test_list_installed_plugins_returns_all_built_ins():
     names = {r.name for r in rows}
     # The registry post-Phase-2D contains only the still-bundled drivers.
     # OSS-no-GUI drivers are extracted into sim-plugin-* repos.
-    for required in ("openfoam", "coolprop", "ltspice"):
+    for required in ("openfoam", "coolprop"):
         assert required in names, f"missing built-in: {required}"
 
 
@@ -122,10 +122,10 @@ def test_cli_plugin_doctor_all_built_ins(runner):
     assert r.exit_code == 0, r.output
     data = json.loads(r.output)
     assert data["ok"] is True
-    # Post-Phase-2D the registry holds only the still-bundled drivers
-    # (openfoam + the two soak canaries coolprop/ltspice). OSS-no-GUI
-    # drivers ship as out-of-tree plugins.
-    assert len(data["reports"]) >= 3
+    # Post-cleanup the registry holds only openfoam (built-in by design;
+    # has the sim-server bridge) plus coolprop (Phase 1 canary, soak ends
+    # 2026-05-05). OSS-no-GUI drivers ship as out-of-tree plugins.
+    assert len(data["reports"]) >= 2
 
 
 def test_cli_plugin_doctor_unknown_fails(runner):
