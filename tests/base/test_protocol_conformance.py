@@ -183,3 +183,40 @@ def test_built_in_coolprop_driver_check_runs():
     from sim.drivers.coolprop.driver import CoolPropDriver
     failures = check_driver(CoolPropDriver)
     assert isinstance(failures, list)
+
+
+def test_every_built_in_driver_matches_protocol():
+    """Every driver in ``_BUILTIN_REGISTRY`` must satisfy
+    ``isinstance(driver, DriverProtocol)``.
+
+    Why this is a hard assertion (unlike the smoke test above): plugins
+    extracted out of the registry are required to pass
+    :func:`assert_protocol_conformance` to ship. If built-ins drift below
+    that bar — by missing one of the runtime-checkable methods — every
+    extraction has to relitigate the contract. Keep parity.
+    """
+    import importlib
+
+    from sim.driver import DriverProtocol
+    from sim.drivers import _BUILTIN_REGISTRY
+
+    failures: list[tuple[str, str]] = []
+    for name, spec in _BUILTIN_REGISTRY:
+        mod_path, cls_name = spec.split(":", 1)
+        try:
+            mod = importlib.import_module(mod_path)
+            cls = getattr(mod, cls_name)
+            instance = cls()
+        except Exception as e:  # noqa: BLE001 — surface as a single failure line
+            failures.append((name, f"{type(e).__name__}: {e}"))
+            continue
+        if not isinstance(instance, DriverProtocol):
+            missing = [
+                m for m in ("launch", "run", "disconnect")
+                if not callable(getattr(instance, m, None))
+            ]
+            failures.append((name, f"missing methods: {missing}"))
+
+    assert not failures, "drivers failing DriverProtocol structural check:\n" + "\n".join(
+        f"  - {n}: {msg}" for n, msg in failures
+    )

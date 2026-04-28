@@ -267,3 +267,14 @@ class LTspiceDriver:
             timestamp=datetime.now(timezone.utc).isoformat(),
             errors=errors,
         )
+
+    # Session lifecycle stubs — one-shot driver, but DriverProtocol is
+    # runtime_checkable so every method must exist. See `sim.driver`.
+    def launch(self, **kwargs) -> dict:
+        raise NotImplementedError(f"{self.name} driver does not support sessions")
+
+    def run(self, code: str, label: str = "") -> dict:
+        raise NotImplementedError(f"{self.name} driver does not support sessions")
+
+    def disconnect(self) -> dict:
+        return {"ok": True, "disconnected": True}
