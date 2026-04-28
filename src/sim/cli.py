@@ -19,15 +19,18 @@ from sim.runner import execute_script
 @click.version_option(version=__version__)
 @click.option("--json", "output_json", is_flag=True, help="JSON output for all commands.")
 @click.option("--host", default=None,
-              help="Remote sim-server host (e.g. 100.90.110.79). "
+              help="Remote sim-server host. "
                    "Default: SIM_HOST env > config [server].host > localhost.")
 @click.option("--port", default=None, type=int,
               help="sim-server port. Default: SIM_PORT env > config [server].port > 7600.")
 @click.option("--session", "session_id", default=None,
               help="Target session id (multi-session). "
                    "Default: SIM_SESSION env > server's sole session.")
+@click.option("--no-interactive", "no_interactive", is_flag=True,
+              help="Fail fast (NONINTERACTIVE_INPUT_REQUIRED) instead of prompting. "
+                   "Auto-on when stdout is not a TTY.")
 @click.pass_context
-def main(ctx, output_json, host, port, session_id):
+def main(ctx, output_json, host, port, session_id, no_interactive):
     """sim — unified CLI for LLM agents to control CAD/CAE simulation software."""
     ctx.ensure_object(dict)
     ctx.obj["json"] = output_json
@@ -39,6 +42,12 @@ def main(ctx, output_json, host, port, session_id):
     ctx.obj["host"] = host or os.environ.get("SIM_HOST") or "localhost"
     ctx.obj["port"] = port if port is not None else _cfg.resolve_server_port()
     ctx.obj["session"] = session_id or os.environ.get("SIM_SESSION") or None
+    # --no-interactive: explicit flag wins; otherwise auto-on when piped.
+    ctx.obj["no_interactive"] = (
+        no_interactive
+        or os.environ.get("SIM_NO_INTERACTIVE") in ("1", "true", "True")
+        or not sys.stdin.isatty()
+    )
 
 
 # ── serve ────────────────────────────────────────────────────────────────────
@@ -793,6 +802,119 @@ def config_init(ctx, scope):
         click.echo(json_mod.dumps({"ok": True, "path": str(path), "scope": scope}))
     else:
         click.echo(f"[sim] config: wrote {scope} stub at {path}")
+
+
+@config.command("validate")
+@click.argument("path", type=click.Path(exists=True, dir_okay=False, path_type=Path),
+                required=False)
+@click.pass_context
+def config_validate(ctx, path):
+    """Validate a sim.toml against the schema. Defaults to the current project's sim.toml."""
+    target = path or _cfg.project_sim_toml_path()
+    errors = _cfg.validate_sim_toml(target)
+    out = {"ok": not errors, "path": str(target), "errors": errors}
+    if ctx.obj["json"]:
+        click.echo(json_mod.dumps(out, indent=2))
+    else:
+        if not errors:
+            click.echo(f"[sim] config validate: {target} OK")
+        else:
+            click.echo(f"[sim] config validate: {target} FAIL", err=True)
+            for e in errors:
+                click.echo(f"  - {e}", err=True)
+    sys.exit(0 if not errors else 2)
+
+
+# ── init / setup (project bootstrap) ─────────────────────────────────────────
+
+
+@main.command()
+@click.option("--force", is_flag=True, help="Overwrite an existing sim.toml.")
+@click.pass_context
+def init(ctx, force):
+    """Create a starter sim.toml in the current directory.
+
+    Idempotent. Use --force to regenerate from the template.
+    """
+    path = _cfg.init_sim_toml(force=force)
+    out = {"ok": True, "path": str(path), "created": not (path.exists() and not force)}
+    if ctx.obj["json"]:
+        click.echo(json_mod.dumps(out, indent=2))
+    else:
+        click.echo(f"[sim] init: {path}")
+
+
+@main.command()
+@click.option("--config", "config_path", type=click.Path(exists=True, dir_okay=False, path_type=Path),
+              default=None, help="Override the sim.toml location.")
+@click.option("--offline", is_flag=True,
+              help="Resolve plugins from the cached index only (no network).")
+@click.option("--dry-run", is_flag=True,
+              help="Print what would happen without installing anything.")
+@click.pass_context
+def setup(ctx, config_path, offline, dry_run):
+    """Read sim.toml and install / verify everything it declares.
+
+    Idempotent: re-running after a successful setup is a no-op modulo plugin
+    upgrades. Designed to be the *one* command an agent runs to bring a
+    fresh checkout into a runnable state.
+    """
+    from sim._plugin_install import install_plugin
+
+    path = config_path or _cfg.project_sim_toml_path()
+    errors = _cfg.validate_sim_toml(path) if path.is_file() else ["sim.toml not found"]
+    if errors:
+        out = {"ok": False, "error_code": "PLUGIN_NOT_FOUND",
+               "message": "sim.toml is missing or invalid",
+               "errors": errors, "path": str(path)}
+        click.echo(json_mod.dumps(out, indent=2) if ctx.obj["json"]
+                   else f"[sim] setup: error — {out['message']}\n  " + "\n  ".join(errors),
+                   err=not ctx.obj["json"])
+        sys.exit(2)
+
+    import sys as _sys
+    if sys.version_info >= (3, 11):
+        import tomllib as _tomllib
+    else:
+        import tomli as _tomllib  # type: ignore[no-redef]
+    data = _tomllib.loads(path.read_text(encoding="utf-8"))
+
+    plugins = (data.get("sim") or {}).get("plugins") or []
+    actions: list[dict] = []
+    fail = False
+
+    for entry in plugins:
+        source = _cfg.derive_install_source(entry)
+        if dry_run:
+            actions.append({"name": entry.get("name"), "source": source, "action": "would-install"})
+            continue
+        report = install_plugin(source, offline=offline)
+        actions.append({
+            "name": entry.get("name"),
+            "source": source,
+            "ok": report.ok,
+            "message": report.message,
+        })
+        if not report.ok:
+            fail = True
+
+    summary = {
+        "ok": not fail,
+        "path": str(path),
+        "dry_run": dry_run,
+        "plugins": actions,
+    }
+    if ctx.obj["json"]:
+        click.echo(json_mod.dumps(summary, indent=2))
+    else:
+        verb = "would install" if dry_run else "installed"
+        click.echo(f"[sim] setup: {verb} {len(actions)} plugin(s) from {path}")
+        for a in actions:
+            mark = "OK" if a.get("ok", True) else "FAIL"
+            click.echo(f"  [{mark}] {a['name']} ← {a['source']}")
+            if a.get("message") and not a.get("ok", True):
+                click.echo(f"        {a['message']}")
+    sys.exit(0 if not fail else 4)
 
 
 # ── plugin (manage installed sim plugins) ────────────────────────────────────

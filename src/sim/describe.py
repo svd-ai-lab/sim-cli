@@ -89,9 +89,23 @@ _EXAMPLES: dict[str, list[dict[str, str]]] = {
         {"cmd": "sim config init project",
          "summary": "Create a starter .sim/config.toml in the current project."},
     ],
+    "config validate": [
+        {"cmd": "sim config validate",
+         "summary": "Check sim.toml against the schema. Fails with a list of errors."},
+    ],
     "config path": [
         {"cmd": "sim config path --json",
          "summary": "Print the location of the global and project config files."},
+    ],
+    "init": [
+        {"cmd": "sim init",
+         "summary": "Create a starter sim.toml in the current directory."},
+    ],
+    "setup": [
+        {"cmd": "sim setup --dry-run",
+         "summary": "Print what plugins sim would install from sim.toml."},
+        {"cmd": "sim setup",
+         "summary": "Install every plugin declared in sim.toml."},
     ],
     "describe": [
         {"cmd": "sim describe --json",
