@@ -127,6 +127,13 @@ sim plugin install <name>        # e.g. sim plugin install ltspice
 
 The index is served from [`sim-plugin-index`](https://github.com/svd-ai-lab/sim-plugin-index); reference plugins to read for shape: [`sim-plugin-coolprop`](https://github.com/svd-ai-lab/sim-plugin-coolprop) (one-shot, no SDK gate), [`sim-plugin-ltspice`](https://github.com/svd-ai-lab/sim-plugin-ltspice) (one-shot with vendor binary), [`sim-plugin-pybamm`](https://github.com/svd-ai-lab/sim-plugin-pybamm) (heavy SDK).
 
+**Private plugins** (vendor-IP-sensitive backends not in the public index) install directly by URL — same `sim plugin install` flow:
+
+```bash
+sim plugin install git+https://github.com/<org>/sim-plugin-<name>
+# (you need read-access to the repo; without it, git clone returns 401)
+```
+
 Per-solver protocols, snippets, and demo workflows live in [`sim-skills`](https://github.com/svd-ai-lab/sim-skills) and the per-plugin repos.
 
 ---
