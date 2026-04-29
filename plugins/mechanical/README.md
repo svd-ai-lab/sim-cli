@@ -48,6 +48,18 @@ uv run pytest
 
 End-to-end tests require a real Mechanical install; they're gated and skipped when those preconditions are missing.
 
+## Troubleshooting
+
+### `connect` fails with `does not support secure transport modes`
+
+Mechanical < 24.2 has no secure-gRPC support, and 25.2 RTM also lacks it without SP03+. The driver auto-forces insecure transport for < 24.2; for 25.2 RTM (and any future release where you need to opt out of TLS), set:
+
+```bash
+export SIM_MECHANICAL_INSECURE_TRANSPORT=1
+```
+
+before starting `sim serve` or running `sim connect`. Loopback gRPC traffic stays on the local host, so disabling TLS is benign in the standard sim-cli single-host topology.
+
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE) and [LICENSE-NOTICE.md](LICENSE-NOTICE.md).

@@ -441,7 +441,9 @@ class MechanicalDriver:
             cleanup_on_exit=False,
         )
         # Ansys < 24.2 does not support secure gRPC — must be insecure.
-        if version_int < 242:
+        # Ansys 25.2 RTM also lacks secure support without SP03; allow
+        # forcing insecure via env var until a robust SP probe lands.
+        if version_int < 242 or os.environ.get("SIM_MECHANICAL_INSECURE_TRANSPORT") == "1":
             launch_kwargs["transport_mode"] = "insecure"
         if port is not None:
             launch_kwargs["port"] = port
