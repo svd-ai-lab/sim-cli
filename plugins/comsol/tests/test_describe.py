@@ -2,7 +2,7 @@
 
 These tests build a hand-rolled stand-in for a COMSOL Java model — a
 plain Python object that responds to the read-side API observed during
-the win1 probe (see PR description). Acceptance against a real COMSOL
+an interactive Windows-host probe (see PR description). Acceptance against a real COMSOL
 session is covered by `tests/inspect/probe_describe_physics.py`.
 
 The fixture data mirrors the real `block_with_hole` solve verbatim
@@ -129,14 +129,14 @@ class _Model:
 
 
 # ----------------------------------------------------------------------
-# Block-with-hole physics tree — verbatim from the win1 probe.
+# Block-with-hole physics tree — captured from a live interactive probe.
 # ----------------------------------------------------------------------
 
 
 def _block_with_hole_model() -> _Model:
     """Heat Transfer in Solids with 3 user BCs and 8 default features.
 
-    Entity ids and T0 values match the win1 probe output exactly so the
+    Entity ids and T0 values match the captured probe output exactly so the
     formatter is exercised against real shapes.
     """
     ht = _Physics(

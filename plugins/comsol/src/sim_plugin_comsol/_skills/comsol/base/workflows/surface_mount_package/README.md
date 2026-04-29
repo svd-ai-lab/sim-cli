@@ -16,7 +16,7 @@ geometry (L-shaped blocks vs original bent hexahedrons).
 ## Running with sim
 
 ```bash
-# 1. Start sim serve on win1 via RDP (GUI mode needs interactive session)
+# 1. Start sim serve on a Windows host from an interactive desktop session
 # 2. Connect in standalone mode (simpler, no server subprocess)
 sim --host <host> connect --solver comsol --ui-mode standalone
 
