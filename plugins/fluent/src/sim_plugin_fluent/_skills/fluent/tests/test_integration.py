@@ -2,12 +2,12 @@
 
 Run against a live sim-server with Fluent available:
 
-    # On win1 (RDP):
+    # On the Windows solver host:
     sim serve --host 0.0.0.0
 
-    # On Mac:
+    # From the test client:
     pytest tests/test_integration.py \
-        --sim-host=100.90.110.79 --mesh-file='/path/to/mixing_elbow.msh.h5'
+        --sim-host=<host-or-ip> --mesh-file='/path/to/mixing_elbow.msh.h5'
 
 Skipped by default unless --sim-host is provided.
 """

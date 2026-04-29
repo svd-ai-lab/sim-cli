@@ -130,7 +130,7 @@ see `tmp/step{4,4b,5,6,6b,6c,7,7b,8,8b}_*.py` in the `sim-proj` repo.
 
 ## Skill migration path
 
-This workflow script validates the setup on win1. Once proven, the patterns
+This workflow script validates the setup on a licensed Windows solver host. Once proven, the patterns
 (conduction-only thermal, BC switching, theta extraction via report_definitions,
 natural-convection BC application) feed into a "thermal characterization" task
 template in `skills/fluent-sim/SKILL.md`.

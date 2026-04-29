@@ -10,4 +10,13 @@ from .driver import PyFluentDriver
 
 skills_dir = files(__name__) / "_skills"
 
-__all__ = ["PyFluentDriver", "skills_dir"]
+
+plugin_info = {
+    "name": "fluent",
+    "summary": "Driver plugin for sim-cli.",
+    "homepage": "https://github.com/svd-ai-lab/sim-plugin-fluent",
+    "license_class": "commercial",
+    "solver_name": "fluent",
+}
+
+__all__ = ["PyFluentDriver", "skills_dir", "plugin_info"]

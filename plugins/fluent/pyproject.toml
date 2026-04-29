@@ -21,13 +21,14 @@ classifiers = [
     "License :: OSI Approved :: Apache Software License",
 ]
 dependencies = [
-    "sim-runtime @ git+https://github.com/svd-ai-lab/sim-cli@main",
+    "sim-cli-core>=0.3",
     "ansys-fluent-core>=0.37,<0.39",
 ]
 
 [project.optional-dependencies]
 test = [
     "pytest>=7",
+    "build>=1.0",
 ]
 
 [project.entry-points."sim.drivers"]
@@ -36,15 +37,18 @@ fluent = "sim_plugin_fluent:PyFluentDriver"
 [project.entry-points."sim.skills"]
 fluent = "sim_plugin_fluent:skills_dir"
 
+[project.entry-points."sim.plugins"]
+fluent = "sim_plugin_fluent:plugin_info"
+
 [project.urls]
 Homepage = "https://github.com/svd-ai-lab/sim-plugin-fluent"
 Issues = "https://github.com/svd-ai-lab/sim-plugin-fluent/issues"
 
-[tool.hatch.metadata]
-# Required because `sim-runtime` is pinned to a git+https URL — sim-cli is
-# distributed via GitHub, not PyPI. See sim-proj memory: plugin distribution
-# is GitHub-only.
-allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/sim_plugin_fluent"]
+
+[tool.pytest.ini_options]
+markers = [
+  "integration: tests that build wheels or touch external tooling",
+]

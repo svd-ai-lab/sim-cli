@@ -4,7 +4,7 @@ import pytest
 
 
 def pytest_addoption(parser):
-    parser.addoption("--sim-host", default=None, help="sim-server host (e.g. 100.90.110.79)")
+    parser.addoption("--sim-host", default=None, help="sim-server host (e.g. solver-host.local)")
     parser.addoption("--sim-port", default=7600, type=int, help="sim-server port")
     # Default to $SIM_DATASETS/mixing_elbow.msh.h5; override with --mesh-file.
     _datasets = os.environ.get("SIM_DATASETS", "")
