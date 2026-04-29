@@ -13,6 +13,19 @@ from sim.drivers import get_driver
 from sim.runner import execute_script
 
 
+# Reconfigure stdout/stderr to UTF-8 so non-ASCII glyphs (arrows, check marks,
+# warning triangles, etc.) survive on Windows consoles that default to cp1252
+# or older codepages. errors="replace" prevents crashes on terminals that
+# can't render a given codepoint — affected glyphs become "?" instead of
+# raising UnicodeEncodeError.
+if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, OSError):
+        pass
+
+
 # ── Top-level group ──────────────────────────────────────────────────────────
 
 @click.group()

@@ -216,3 +216,116 @@ def test_gui_dialog_error_hints_minimal_and_english_only():
         "Plan A's _DIALOG_HINTS should be removed; probe now uses "
         "_ERROR_SIGNAL_HINTS + _WARNING_SIGNAL_HINTS"
     )
+
+
+# ── target_pid filter — mock-based, works cross-platform ────────────────────
+#
+# `_find_matching_windows` lazy-imports pywinauto + psutil, so we can stub
+# them via sys.modules without needing the real packages on the test host.
+# These tests verify the new `target_pid` parameter selects by PID and
+# ignores the substring fallback when set.
+
+
+def _install_fake_desktop_psutil(monkeypatch, windows: list[tuple[int, str, str]]):
+    """Stub pywinauto.Desktop and psutil so _find_matching_windows can run
+    without a real GUI. `windows` is a list of (pid, proc_name, title).
+    """
+    import sys
+    import types
+
+    class _Rect:
+        def __init__(self, l, t, r, b):
+            self.left, self.top, self.right, self.bottom = l, t, r, b
+
+    class _W:
+        def __init__(self, pid, title):
+            self._pid, self._title = pid, title
+
+        def process_id(self):
+            return self._pid
+
+        def window_text(self):
+            return self._title
+
+        def rectangle(self):
+            return _Rect(0, 0, 100, 100)
+
+    class _Desktop:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def windows(self):
+            return [_W(pid, title) for pid, _proc, title in windows]
+
+    pywin = types.ModuleType("pywinauto")
+    pywin.Desktop = _Desktop  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "pywinauto", pywin)
+
+    name_by_pid = {pid: proc for pid, proc, _title in windows}
+
+    class _Proc:
+        def __init__(self, pid):
+            self._pid = pid
+
+        def name(self):
+            return name_by_pid.get(self._pid, "")
+
+    psutil_mod = types.ModuleType("psutil")
+    psutil_mod.Process = _Proc  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "psutil", psutil_mod)
+
+
+def test_find_matching_windows_pid_filter_wins_over_substring(monkeypatch):
+    """When target_pid is supplied, only that PID's windows are returned —
+    other windows whose process name substring-matches the legacy list
+    must be ignored. Closes the foreground-race gap where a generic
+    name-substring match could capture the wrong window."""
+    from sim.inspect import _find_matching_windows
+
+    _install_fake_desktop_psutil(monkeypatch, [
+        (1111, "target.exe", "Target App"),
+        (2222, "ansys-helper.exe", "Helper that substring-matches 'ansys'"),
+    ])
+
+    matches, _, errors = _find_matching_windows(
+        ("ansys", "fluent"), target_pid=1111,
+    )
+    assert errors == []
+    assert len(matches) == 1
+    assert matches[0]["pid"] == 1111
+    assert matches[0]["title"] == "Target App"
+
+
+def test_find_matching_windows_falls_back_to_substring_when_no_pid(monkeypatch):
+    """target_pid=None preserves the legacy substring-match behavior."""
+    from sim.inspect import _find_matching_windows
+
+    _install_fake_desktop_psutil(monkeypatch, [
+        (1111, "unrelated.exe", "Some unrelated tool"),
+        (2222, "myapp.exe", "MyApp window"),
+    ])
+
+    matches, _, errors = _find_matching_windows(("myapp",))
+    assert errors == []
+    assert [m["pid"] for m in matches] == [2222]
+
+
+def test_screenshot_probe_accepts_target_pid_kwarg():
+    """API contract: ScreenshotProbe stores target_pid on the instance."""
+    from sim.inspect import ScreenshotProbe
+
+    p = ScreenshotProbe(target_pid=4242)
+    assert p.target_pid == 4242
+    # Default stays None for callers that don't supply it.
+    p2 = ScreenshotProbe()
+    assert p2.target_pid is None
+
+
+def test_gui_dialog_probe_accepts_target_pid_kwarg():
+    """API contract: GuiDialogProbe stores target_pid on the instance."""
+    from sim.inspect import GuiDialogProbe
+
+    p = GuiDialogProbe(target_pid=4242)
+    assert p.target_pid == 4242
+    p2 = GuiDialogProbe()
+    assert p2.target_pid is None

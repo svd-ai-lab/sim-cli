@@ -787,13 +787,24 @@ def generic_probes() -> list:
 
 def _find_matching_windows(
     process_name_substrings: tuple[str, ...],
+    target_pid: int | None = None,
 ) -> tuple[list[dict], int, list[str]]:
-    """Shared helper: enumerate top-level windows owned by any process whose
-    name contains one of the given substrings. Returns (matches, total_scanned,
-    errors). Each match dict: {window, pid, proc_name, title, rect}.
+    """Shared helper: enumerate top-level windows for a target process.
 
-    `rect` is (left, top, right, bottom) int tuple, or None if rect-fetch
-    failed. `window` is the raw pywinauto wrapper (use it for capture).
+    Two filtering modes:
+      * ``target_pid`` is provided → return only windows whose owning process
+        ID matches ``target_pid``. The substring list is ignored. Use this
+        when the caller knows the exact process (e.g. a driver that just
+        spawned the target solver) — it eliminates foreground races where
+        another window with a generically-matching name happens to be top.
+      * ``target_pid`` is ``None`` → fall back to substring matching against
+        the owning process's name. This is the legacy default for callers
+        that can only describe the target by class.
+
+    Returns (matches, total_scanned, errors). Each match dict:
+    ``{window, pid, proc_name, title, rect}``. ``rect`` is
+    ``(left, top, right, bottom)`` int tuple, or ``None`` if rect-fetch
+    failed. ``window`` is the raw pywinauto wrapper (use it for capture).
 
     Lazy-imports pywinauto + psutil so this module stays importable on Linux
     / in headless environments.
@@ -823,8 +834,12 @@ def _find_matching_windows(
                 proc_name = psutil.Process(pid).name().lower()
             except Exception:
                 proc_name = ""
-            if not any(sub in proc_name for sub in subs):
-                continue
+            if target_pid is not None:
+                if pid != target_pid:
+                    continue
+            else:
+                if not any(sub in proc_name for sub in subs):
+                    continue
             title = w.window_text() or ""
             try:
                 r = w.rectangle()
@@ -881,9 +896,11 @@ class GuiDialogProbe:
         self,
         process_name_substrings: tuple[str, ...] = ("fluent", "ansys", "cx", "cortex"),
         code_prefix: str = "fluent.gui",
+        target_pid: int | None = None,
     ):
         self.process_name_substrings = tuple(s.lower() for s in process_name_substrings)
         self.code_prefix = code_prefix
+        self.target_pid = target_pid
 
     def applies(self, ctx: InspectCtx) -> bool:
         try:
@@ -893,7 +910,9 @@ class GuiDialogProbe:
             return False
 
     def probe(self, ctx: InspectCtx) -> ProbeResult:
-        matches, total, errors = _find_matching_windows(self.process_name_substrings)
+        matches, total, errors = _find_matching_windows(
+            self.process_name_substrings, target_pid=self.target_pid,
+        )
         diags: list[Diagnostic] = []
         if errors:
             for msg in errors:
@@ -957,9 +976,18 @@ class ScreenshotProbe:
     """Channel #8b — per-window screenshot capture via PIL.ImageGrab bbox.
 
     IMPORTANT: this probe captures ONLY the bounding box of each matched
-    Fluent window, NOT the whole desktop. If no Fluent window is found,
+    target window, NOT the whole desktop. If no matching window is found,
     emits a single warning diag and nothing else — we never fall back to
     full-screen capture (that creates noisy / PII-risky artifacts).
+
+    Two ways to identify the target:
+      * ``target_pid`` (preferred when known): bind to the exact process
+        the caller spawned. Eliminates foreground races where another
+        window whose process name happens to substring-match the legacy
+        list wins z-order at probe time.
+      * ``process_name_substrings`` (default): match any process whose
+        name contains one of the given substrings. Used when the caller
+        can only describe the target by class.
 
     Every matched window produces:
       - one Artifact  (role="screenshot", path=<png>)
@@ -974,9 +1002,11 @@ class ScreenshotProbe:
         self,
         filename_prefix: str = "shot",
         process_name_substrings: tuple[str, ...] = ("fluent", "ansys", "cx", "cortex"),
+        target_pid: int | None = None,
     ):
         self.filename_prefix = filename_prefix
         self.process_name_substrings = tuple(s.lower() for s in process_name_substrings)
+        self.target_pid = target_pid
 
     def applies(self, ctx: InspectCtx) -> bool:
         try:
@@ -999,7 +1029,9 @@ class ScreenshotProbe:
                 message=f"PIL.ImageGrab unavailable: {exc}",
             )])
 
-        matches, _, errors = _find_matching_windows(self.process_name_substrings)
+        matches, _, errors = _find_matching_windows(
+            self.process_name_substrings, target_pid=self.target_pid,
+        )
         if errors:
             return ProbeResult(diagnostics=[Diagnostic(
                 severity="warning", source="gui:screenshot",
@@ -1008,10 +1040,14 @@ class ScreenshotProbe:
             )])
 
         if not matches:
+            target_desc = (
+                f"pid={self.target_pid}" if self.target_pid is not None
+                else f"{self.process_name_substrings}"
+            )
             return ProbeResult(diagnostics=[Diagnostic(
                 severity="info", source="gui:screenshot",
                 code="sim.screenshot.no_window",
-                message=(f"no window matched {self.process_name_substrings}; "
+                message=(f"no window matched {target_desc}; "
                          f"no screenshot taken (full-screen fallback disabled)"),
             )])
 
