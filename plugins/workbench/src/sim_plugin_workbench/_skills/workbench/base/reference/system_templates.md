@@ -9,13 +9,11 @@ Before assuming a template exists, ask the live Workbench session:
 templates = GetAllVisibleTemplates()
 ```
 
-On a 2025 R2 install without the Mechanical product layer, the visible
-template list included CFD and optimization entries such as `FLUENT`,
-`Fluid Flow`, `Geometry`, and `Results`, but did **not** include
-`Static Structural`. In that environment,
-`GetTemplate(TemplateName="Static Structural", Solver="ANSYS")` raises
-`Template Static Structural (ANSYS) not found in Project.` Treat this as
-a missing product/template condition, not a PyWorkbench launch failure.
+Template availability depends on installed products and license features.
+For example, a Workbench environment may expose CFD/project templates but
+not Mechanical templates. If `GetTemplate(...)` raises a
+`Template ... not found in Project` error, treat it as a missing
+product/template condition, not a PyWorkbench launch failure.
 
 ## Structural
 
