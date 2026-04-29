@@ -13,4 +13,13 @@ from .driver import WorkbenchDriver
 
 skills_dir = files(__name__) / "_skills"
 
-__all__ = ["WorkbenchDriver", "skills_dir"]
+
+plugin_info = {
+    "name": "workbench",
+    "summary": "Driver plugin for sim-cli.",
+    "homepage": "https://github.com/svd-ai-lab/sim-plugin-workbench",
+    "license_class": "commercial",
+    "solver_name": "workbench",
+}
+
+__all__ = ["WorkbenchDriver", "skills_dir", "plugin_info"]

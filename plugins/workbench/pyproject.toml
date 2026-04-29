@@ -33,6 +33,7 @@ dependencies = [
 [project.optional-dependencies]
 test = [
     "pytest>=7",
+    "build>=1.0",
 ]
 
 [project.entry-points."sim.drivers"]
@@ -40,6 +41,9 @@ workbench = "sim_plugin_workbench:WorkbenchDriver"
 
 [project.entry-points."sim.skills"]
 workbench = "sim_plugin_workbench:skills_dir"
+
+[project.entry-points."sim.plugins"]
+workbench = "sim_plugin_workbench:plugin_info"
 
 [project.urls]
 Homepage = "https://github.com/svd-ai-lab/sim-plugin-workbench"
@@ -51,5 +55,6 @@ packages = ["src/sim_plugin_workbench"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [
-    "integration: tests that require a real Workbench installation",
+  "integration: tests that build wheels or touch external tooling",
+  "integration: tests that require a real Workbench installation",
 ]
