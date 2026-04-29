@@ -66,6 +66,10 @@ When the launch fails without the env var set, the driver re-raises with an acti
 
 `sim connect mechanical --ui-mode no_gui` launches Mechanical without a visible window. This is faster (no GUI to render) but `sim screenshot` and other GUI-observation probes will not capture anything. Use `--ui-mode gui` (the default) for any agentic workflow that depends on visual confirmation. For backward compatibility the driver also accepts `ui_mode="batch"`.
 
+### Screenshot probe captures the wrong window
+
+The driver pins the screenshot and dialog probes to the launched `AnsysWBU.exe` PID after each successful `launch()`, so probes target the exact spawned process even when another window is foreground. Pinning is best-effort — if PID discovery fails (locked-down sandbox, unusual AnsysWBU launch path, etc.), probes fall back to substring matching against process names. Requires a sim-cli build that exposes `target_pid` on the GUI probes; older builds silently ignore the pin and use substring matching only.
+
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE) and [LICENSE-NOTICE.md](LICENSE-NOTICE.md).

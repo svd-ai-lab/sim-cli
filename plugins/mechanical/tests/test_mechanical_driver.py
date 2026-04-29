@@ -239,6 +239,93 @@ class TestLaunchKwargs:
         assert "secure transport" in msg.lower()
 
 
+def _sim_cli_supports_target_pid() -> bool:
+    """True iff this sim-cli build exposes target_pid on the GUI probes."""
+    try:
+        from sim.inspect import ScreenshotProbe
+        return hasattr(ScreenshotProbe(), "target_pid")
+    except Exception:
+        return False
+
+
+class TestProbePidPin:
+    """Tests for the post-launch PID pinning of GUI probes.
+
+    The pinning feature is only effective on sim-cli builds that expose
+    ``target_pid`` on the GUI probes. Older builds silently fall back to
+    substring matching — same behavior as v0.1.2.
+    """
+
+    @pytest.mark.skipif(
+        not _sim_cli_supports_target_pid(),
+        reason="installed sim-cli does not expose target_pid on GUI probes",
+    )
+    def test_launch_pins_target_pid_when_discovery_succeeds(self, monkeypatch):
+        import sim_plugin_mechanical.driver as drv
+
+        captured: list[dict] = []
+        d = MechanicalDriver()
+        monkeypatch.setattr(d, "detect_installed", lambda: [_fake_install("25.2")])
+        _install_fake_pm(monkeypatch, captured)
+        monkeypatch.setenv("SIM_MECHANICAL_INSECURE_TRANSPORT", "1")
+        monkeypatch.setattr(drv, "_find_ansys_pid", lambda port=None, timeout_s=2.0: 4242)
+
+        # Probes start unpinned.
+        for p in d.probes:
+            if hasattr(p, "target_pid"):
+                assert p.target_pid is None
+
+        d.launch(ui_mode="gui")
+
+        # All probes that support target_pid are now pinned.
+        pid_aware = [p for p in d.probes if hasattr(p, "target_pid")]
+        assert pid_aware, "no probe in default set supports target_pid"
+        for p in pid_aware:
+            assert p.target_pid == 4242
+
+    def test_launch_no_pid_falls_back_to_substring(self, monkeypatch):
+        """When PID discovery fails, probes keep target_pid=None (substring fallback)."""
+        import sim_plugin_mechanical.driver as drv
+
+        captured: list[dict] = []
+        d = MechanicalDriver()
+        monkeypatch.setattr(d, "detect_installed", lambda: [_fake_install("25.2")])
+        _install_fake_pm(monkeypatch, captured)
+        monkeypatch.setenv("SIM_MECHANICAL_INSECURE_TRANSPORT", "1")
+        monkeypatch.setattr(drv, "_find_ansys_pid", lambda port=None, timeout_s=2.0: None)
+
+        d.launch(ui_mode="gui")
+
+        for p in d.probes:
+            if hasattr(p, "target_pid"):
+                assert p.target_pid is None
+
+    @pytest.mark.skipif(
+        not _sim_cli_supports_target_pid(),
+        reason="installed sim-cli does not expose target_pid on GUI probes",
+    )
+    def test_disconnect_clears_target_pid(self, monkeypatch):
+        import sim_plugin_mechanical.driver as drv
+
+        captured: list[dict] = []
+        d = MechanicalDriver()
+        monkeypatch.setattr(d, "detect_installed", lambda: [_fake_install("25.2")])
+        _install_fake_pm(monkeypatch, captured)
+        monkeypatch.setenv("SIM_MECHANICAL_INSECURE_TRANSPORT", "1")
+        monkeypatch.setattr(drv, "_find_ansys_pid", lambda port=None, timeout_s=2.0: 4242)
+
+        d.launch(ui_mode="gui")
+        # Confirm pinned.
+        pinned = [p.target_pid for p in d.probes if hasattr(p, "target_pid")]
+        assert all(pid == 4242 for pid in pinned)
+
+        d.disconnect()
+        # Cleared after disconnect.
+        for p in d.probes:
+            if hasattr(p, "target_pid"):
+                assert p.target_pid is None
+
+
 class TestVersionCode:
     def test_version_code(self):
         from sim_plugin_mechanical.driver import _version_code

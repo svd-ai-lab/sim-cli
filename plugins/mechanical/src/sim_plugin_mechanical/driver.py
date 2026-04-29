@@ -157,6 +157,55 @@ def _launch_with_hint(pm, launch_kwargs: dict):
         raise
 
 
+def _find_ansys_pid(port: int | None = None, timeout_s: float = 2.0) -> int | None:
+    """Best-effort: locate the AnsysWBU.exe PID for the just-launched session.
+
+    Strategy:
+      1. If ``port`` is known, find the process listening on it (most specific).
+      2. Otherwise (or as fallback): the most recently started AnsysWBU.exe
+         owned by the current user.
+
+    Returns ``None`` if neither approach finds anything — the screenshot
+    probe will degrade gracefully to its substring fallback.
+    """
+    try:
+        import psutil  # noqa: PLC0415
+    except ImportError:
+        return None
+    import time as _time  # noqa: PLC0415
+    deadline = _time.time() + timeout_s
+    while _time.time() < deadline:
+        if port is not None:
+            try:
+                for c in psutil.net_connections(kind="tcp"):
+                    if (c.laddr and c.laddr.port == port
+                            and c.status == "LISTEN" and c.pid):
+                        return c.pid
+            except (psutil.AccessDenied, OSError):
+                pass
+        try:
+            try:
+                current_user = psutil.Process().username()
+            except Exception:
+                current_user = None
+            candidates = []
+            for p in psutil.process_iter(attrs=["pid", "name", "username", "create_time"]):
+                info = p.info or {}
+                name = (info.get("name") or "").lower()
+                if not name.startswith("ansyswbu"):
+                    continue
+                if current_user and info.get("username") != current_user:
+                    continue
+                candidates.append(info)
+            if candidates:
+                candidates.sort(key=lambda i: i.get("create_time") or 0, reverse=True)
+                return candidates[0]["pid"]
+        except (psutil.AccessDenied, OSError):
+            pass
+        _time.sleep(0.05)
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Driver
 # ---------------------------------------------------------------------------
@@ -484,6 +533,22 @@ class MechanicalDriver:
         self._client = _launch_with_hint(pm, launch_kwargs)
         self._client.wait_till_mechanical_is_ready(wait_time=120)
 
+        # Pin GUI probes to this exact AnsysWBU.exe PID so screenshots
+        # don't capture other "ansys"-named windows that happen to be
+        # foreground (terminals, helper tools, etc.). Best-effort; if PID
+        # discovery fails, probes fall back to substring matching.
+        client_port = getattr(self._client, "_port", None)
+        target_pid = _find_ansys_pid(port=client_port)
+        if target_pid is not None:
+            for p in self.probes:
+                if hasattr(p, "target_pid"):
+                    p.target_pid = target_pid
+            log.info("Pinned GUI probes to AnsysWBU pid=%s (port=%s)",
+                     target_pid, client_port)
+        else:
+            log.info("Could not discover AnsysWBU pid; "
+                     "probes will use substring matching")
+
         self._session_id = str(uuid.uuid4())
         self._mode = mode
         self._ui_mode = ui_mode
@@ -624,6 +689,11 @@ class MechanicalDriver:
         finally:
             if dismiss_thread is not None:
                 self._stop_dialog_dismisser(dismiss_thread)
+            # Clear PID pin so the next launch starts in substring-fallback mode
+            # until a fresh discovery succeeds.
+            for p in self.probes:
+                if hasattr(p, "target_pid"):
+                    p.target_pid = None
             self._client = None
             self._session_id = None
             self._mode = None
