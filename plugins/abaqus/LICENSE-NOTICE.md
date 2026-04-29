@@ -7,7 +7,7 @@ This plugin does **not** bundle, embed, or redistribute any vendor SDK,
 Abaqus binary, or licensed content from Dassault Systemes. It is a thin
 Python adapter that:
 
-- depends only on `sim-runtime` (the open-source sim-cli runtime), and
+- depends only on `sim-cli-core` (the open-source sim-cli runtime), and
 - launches an Abaqus process (`abaqus.bat` / `abqNNNN.bat`) that the user
   has installed and licensed separately on their own host.
 

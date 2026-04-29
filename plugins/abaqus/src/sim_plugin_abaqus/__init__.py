@@ -10,4 +10,13 @@ from .driver import AbaqusDriver
 
 skills_dir = files(__name__) / "_skills"
 
-__all__ = ["AbaqusDriver", "skills_dir"]
+
+plugin_info = {
+    "name": "abaqus",
+    "summary": "Driver plugin for sim-cli.",
+    "homepage": "https://github.com/svd-ai-lab/sim-plugin-abaqus",
+    "license_class": "commercial",
+    "solver_name": "abaqus",
+}
+
+__all__ = ["AbaqusDriver", "skills_dir", "plugin_info"]

@@ -357,3 +357,12 @@ class AbaqusDriver:
             solver=self.name,
             timestamp=datetime.now(timezone.utc).isoformat(),
         )
+
+    def launch(self, **kwargs) -> dict:
+        raise NotImplementedError("Abaqus driver does not support persistent sessions")
+
+    def run(self, code: str, label: str = "") -> dict:
+        raise NotImplementedError("Abaqus driver does not support persistent sessions")
+
+    def disconnect(self) -> dict:
+        return {"ok": True, "disconnected": True}
