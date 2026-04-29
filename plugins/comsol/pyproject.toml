@@ -21,7 +21,7 @@ classifiers = [
     "License :: OSI Approved :: Apache Software License",
 ]
 dependencies = [
-    "sim-runtime @ git+https://github.com/svd-ai-lab/sim-cli@main",
+    "sim-cli-core>=0.3",
     "mph>=1.2,<2.0",
 ]
 
@@ -39,12 +39,6 @@ comsol = "sim_plugin_comsol:skills_dir"
 [project.urls]
 Homepage = "https://github.com/svd-ai-lab/sim-plugin-comsol"
 Issues = "https://github.com/svd-ai-lab/sim-plugin-comsol/issues"
-
-[tool.hatch.metadata]
-# Required because `sim-runtime` is pinned to a git+https URL — sim-cli is
-# distributed via GitHub, not PyPI. See sim-proj memory: plugin distribution
-# is GitHub-only.
-allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/sim_plugin_comsol"]

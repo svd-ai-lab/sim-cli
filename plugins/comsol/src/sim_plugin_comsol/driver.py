@@ -385,8 +385,14 @@ class ComsolDriver:
 
     def lint(self, script: Path) -> LintResult:
         """Validate a COMSOL/MPh script (syntax + import + Client/start hint)."""
-        text = script.read_text(encoding="utf-8")
         diagnostics: list[Diagnostic] = []
+        try:
+            text = script.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as e:
+            return LintResult(
+                ok=False,
+                diagnostics=[Diagnostic(level="error", message=f"cannot read file: {e}")],
+            )
 
         has_import = bool(
             re.search(r"^\s*(import mph|from mph\b)", text, re.MULTILINE)
