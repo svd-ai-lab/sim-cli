@@ -117,6 +117,46 @@ def _try_import_pymechanical():
         return None
 
 
+def _build_launch_kwargs(top: SolverInstall, *, batch: bool, port: int | None = None) -> dict:
+    """Build kwargs for ``pm.launch_mechanical`` with the secure-transport gate.
+
+    Both the persistent-session ``launch()`` and one-shot ``run_file()`` paths
+    must go through this helper so the ``SIM_MECHANICAL_INSECURE_TRANSPORT``
+    escape hatch applies uniformly.
+    """
+    version_int = _version_code(top.version)
+    kwargs: dict[str, Any] = dict(version=version_int, batch=batch, cleanup_on_exit=False)
+    # Ansys < 24.2 has no secure-gRPC support. 25.2 RTM also lacks it without
+    # SP03+ — allow forcing insecure via env var until upstream exposes a
+    # reliable SP probe.
+    if version_int < 242 or os.environ.get("SIM_MECHANICAL_INSECURE_TRANSPORT") == "1":
+        kwargs["transport_mode"] = "insecure"
+    if port is not None:
+        kwargs["port"] = port
+    return kwargs
+
+
+def _launch_with_hint(pm, launch_kwargs: dict):
+    """Call ``pm.launch_mechanical`` and translate secure-transport errors.
+
+    When PyMechanical refuses to launch because the Ansys build lacks secure
+    gRPC, append an actionable hint pointing at the env-var escape hatch.
+    """
+    try:
+        return pm.launch_mechanical(**launch_kwargs)
+    except Exception as e:
+        if "secure transport" in str(e).lower():
+            raise RuntimeError(
+                f"{e}\n\n"
+                "Hint: this Ansys release lacks secure-gRPC support "
+                "(e.g. 25.2 RTM without SP03+). Set "
+                "SIM_MECHANICAL_INSECURE_TRANSPORT=1 before launching "
+                "`sim serve` or running `sim run mechanical`. "
+                "See README troubleshooting for details."
+            ) from e
+        raise
+
+
 # ---------------------------------------------------------------------------
 # Driver
 # ---------------------------------------------------------------------------
@@ -270,11 +310,8 @@ class MechanicalDriver:
 
         client_owned = False
         if self._client is None:
-            self._client = pm.launch_mechanical(
-                version=_version_code(top.version),
-                batch=False,
-                cleanup_on_exit=False,
-            )
+            launch_kwargs = _build_launch_kwargs(top, batch=False)
+            self._client = _launch_with_hint(pm, launch_kwargs)
             client_owned = True
 
         t0 = time.time()
@@ -411,12 +448,16 @@ class MechanicalDriver:
         processors: int = 2,
         **kwargs,
     ) -> dict:
-        """Start a Mechanical session with a **visible GUI window**.
+        """Start a Mechanical session.
 
-        Observation commands depend on the GUI: sim's ``screenshot``
-        endpoint grabs the desktop, so Mechanical must be batch=False.
-        Set ``ui_mode="batch"`` only for headless smoke tests where
-        screenshots are not needed.
+        ``ui_mode``:
+            * ``"gui"`` (default) — visible GUI window. Required for
+              ``sim screenshot`` and other observation probes.
+            * ``"no_gui"`` (alias ``"batch"``) — headless. Faster startup,
+              but no screenshot support. Use only for headless smoke tests.
+
+        ``"no_gui"`` is the canonical CLI value (matches sim-cli's
+        ``--ui-mode`` choice); ``"batch"`` is accepted for backward compat.
         """
         if self._client is not None:
             raise RuntimeError("Mechanical session already active — disconnect first")
@@ -433,26 +474,14 @@ class MechanicalDriver:
             raise RuntimeError("Ansys Mechanical not found")
         top = installs[0]
 
-        batch = (ui_mode == "batch")
-        version_int = _version_code(top.version)
-        launch_kwargs = dict(
-            version=version_int,
-            batch=batch,
-            cleanup_on_exit=False,
-        )
-        # Ansys < 24.2 does not support secure gRPC — must be insecure.
-        # Ansys 25.2 RTM also lacks secure support without SP03; allow
-        # forcing insecure via env var until a robust SP probe lands.
-        if version_int < 242 or os.environ.get("SIM_MECHANICAL_INSECURE_TRANSPORT") == "1":
-            launch_kwargs["transport_mode"] = "insecure"
-        if port is not None:
-            launch_kwargs["port"] = port
+        batch = ui_mode in ("batch", "no_gui")
+        launch_kwargs = _build_launch_kwargs(top, batch=batch, port=port)
 
         log.info(
             "Launching Mechanical %s (batch=%s) via PyMechanical %s",
             top.version, batch, pm.__version__,
         )
-        self._client = pm.launch_mechanical(**launch_kwargs)
+        self._client = _launch_with_hint(pm, launch_kwargs)
         self._client.wait_till_mechanical_is_ready(wait_time=120)
 
         self._session_id = str(uuid.uuid4())

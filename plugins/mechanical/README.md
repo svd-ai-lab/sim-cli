@@ -50,7 +50,7 @@ End-to-end tests require a real Mechanical install; they're gated and skipped wh
 
 ## Troubleshooting
 
-### `connect` fails with `does not support secure transport modes`
+### `connect` or `run` fails with `does not support secure transport modes`
 
 Mechanical < 24.2 has no secure-gRPC support, and 25.2 RTM also lacks it without SP03+. The driver auto-forces insecure transport for < 24.2; for 25.2 RTM (and any future release where you need to opt out of TLS), set:
 
@@ -58,7 +58,13 @@ Mechanical < 24.2 has no secure-gRPC support, and 25.2 RTM also lacks it without
 export SIM_MECHANICAL_INSECURE_TRANSPORT=1
 ```
 
-before starting `sim serve` or running `sim connect`. Loopback gRPC traffic stays on the local host, so disabling TLS is benign in the standard sim-cli single-host topology.
+before starting `sim serve` or running `sim connect` / `sim run mechanical`. The env var applies to **both** persistent sessions and one-shot script runs. Loopback gRPC traffic stays on the local host, so disabling TLS is benign in the standard sim-cli single-host topology.
+
+When the launch fails without the env var set, the driver re-raises with an actionable hint pointing at this section.
+
+### `--ui-mode no_gui` (headless launch)
+
+`sim connect mechanical --ui-mode no_gui` launches Mechanical without a visible window. This is faster (no GUI to render) but `sim screenshot` and other GUI-observation probes will not capture anything. Use `--ui-mode gui` (the default) for any agentic workflow that depends on visual confirmation. For backward compatibility the driver also accepts `ui_mode="batch"`.
 
 ## License
 
