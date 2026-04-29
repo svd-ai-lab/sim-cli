@@ -16,6 +16,7 @@ Detection chain: AWP_ROOTxxx env vars → PATH probe → default install dirs.
 from __future__ import annotations
 
 import ast
+import inspect
 import json
 import logging
 import os
@@ -120,6 +121,27 @@ def _try_import_pyworkbench():
         return pywb
     except ImportError:
         return None
+
+
+def _launch_workbench(pywb, release: str, *, show_gui: bool = True):
+    """Launch Workbench across PyWorkbench SDK signature changes.
+
+    SDK 0.4 used ``release=241``. Modern SDKs use ``version=241``.
+    """
+    try:
+        params = inspect.signature(pywb.launch_workbench).parameters
+    except (TypeError, ValueError):
+        params = {}
+
+    kwargs: dict[str, Any] = {}
+    if "show_gui" in params:
+        kwargs["show_gui"] = show_gui
+    if "release" in params:
+        kwargs["release"] = release
+    elif "version" in params:
+        kwargs["version"] = release
+
+    return pywb.launch_workbench(**kwargs)
 
 
 def _kill_process_tree(pid: int) -> None:
@@ -403,7 +425,7 @@ class WorkbenchDriver:
         pywb = _try_import_pyworkbench()
         if pywb is not None:
             try:
-                self._client = pywb.launch_workbench(release=release)
+                self._client = _launch_workbench(pywb, release, show_gui=ui_mode != "no_gui")
                 self._backend = "pyworkbench"
                 log.info("Workbench session launched via PyWorkbench SDK")
             except Exception as e:
@@ -527,7 +549,7 @@ class WorkbenchDriver:
         t0 = time.time()
         wb = None
         try:
-            wb = pywb.launch_workbench(release=release)
+            wb = _launch_workbench(pywb, release)
             text = script.read_text(encoding="utf-8")
             result_str = wb.run_script_string(text, log_level="warning")
             stdout = result_str if isinstance(result_str, str) else str(result_str or "")

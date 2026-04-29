@@ -3,6 +3,20 @@
 Available system templates for `GetTemplate(TemplateName=...)`.
 Verified on Ansys 24.1.
 
+Before assuming a template exists, ask the live Workbench session:
+
+```python
+templates = GetAllVisibleTemplates()
+```
+
+On a 2025 R2 install without the Mechanical product layer, the visible
+template list included CFD and optimization entries such as `FLUENT`,
+`Fluid Flow`, `Geometry`, and `Results`, but did **not** include
+`Static Structural`. In that environment,
+`GetTemplate(TemplateName="Static Structural", Solver="ANSYS")` raises
+`Template Static Structural (ANSYS) not found in Project.` Treat this as
+a missing product/template condition, not a PyWorkbench launch failure.
+
 ## Structural
 
 | Template Name | Solver | Components |
@@ -60,6 +74,8 @@ system2 = template2.CreateSystem()
 
 - The exact list of available templates depends on the installed Ansys
   products and licenses.
+- Use `GetAllVisibleTemplates()` during smoke setup and skip or choose a
+  template that is present instead of assuming Mechanical templates exist.
 - `Solver` parameter values: `"ANSYS"` (Mechanical), `"FLUENT"`,
   `"CFX"`, `"MAXWELL"`, etc.
 - Some templates may not be available if the corresponding product is

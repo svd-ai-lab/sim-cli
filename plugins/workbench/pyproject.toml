@@ -21,7 +21,7 @@ classifiers = [
     "License :: OSI Approved :: Apache Software License",
 ]
 dependencies = [
-    "sim-runtime @ git+https://github.com/svd-ai-lab/sim-cli@main",
+    "sim-cli-core>=0.3",
     # Unpinned: the SDK / Ansys-version compatibility matrix lives in
     # src/sim_plugin_workbench/compatibility.yaml — four profiles span
     # 0.4–0.13, gated by Ansys release (24.1 vs 24.2 vs 25.x). A single
@@ -45,11 +45,11 @@ workbench = "sim_plugin_workbench:skills_dir"
 Homepage = "https://github.com/svd-ai-lab/sim-plugin-workbench"
 Issues = "https://github.com/svd-ai-lab/sim-plugin-workbench/issues"
 
-[tool.hatch.metadata]
-# Required because `sim-runtime` is pinned to a git+https URL — sim-cli is
-# distributed via GitHub, not PyPI. See sim-proj memory: plugin distribution
-# is GitHub-only.
-allow-direct-references = true
-
 [tool.hatch.build.targets.wheel]
 packages = ["src/sim_plugin_workbench"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "integration: tests that require a real Workbench installation",
+]

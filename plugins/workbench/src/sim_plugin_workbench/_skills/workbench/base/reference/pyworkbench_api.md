@@ -25,6 +25,23 @@ wb = pywb.launch_workbench(release="241")
 wb = pywb.launch_workbench(version="242", show_gui=False)
 ```
 
+When writing driver code that supports multiple SDK layers, inspect the
+installed signature and pass the supported version keyword:
+
+```python
+import inspect
+
+params = inspect.signature(pywb.launch_workbench).parameters
+kwargs = {}
+if "release" in params:
+    kwargs["release"] = "241"
+elif "version" in params:
+    kwargs["version"] = "241"
+if "show_gui" in params:
+    kwargs["show_gui"] = False
+wb = pywb.launch_workbench(**kwargs)
+```
+
 ### Connect to existing server
 
 ```python
@@ -122,6 +139,6 @@ wb.reset_log_file()                  # Disable file logging
 ## Gotchas
 
 1. **SDK 0.10+ rejects Ansys 24.1**: Hardcoded `int(version) < 242` check. Use SDK 0.4-0.9 for 24.1.
-2. **Parameter name changed**: SDK 0.4 uses `release="241"`, SDK 0.10+ uses `version="242"`.
+2. **Parameter name changed**: SDK 0.4 uses `release="241"`, SDK 0.10+ uses `version="242"`. Driver code should use a signature-aware wrapper so one plugin can run against both SDK families.
 3. **IronPython stdout not piped**: `run_script_string()` returns IronPython's `ReturnValue()` output (SDK 0.10+) or `{}` (SDK 0.4). Use file-based result convention.
 4. **Working directories matter**: Uploaded files go to server workdir. Use `client_workdir` param to control local paths.

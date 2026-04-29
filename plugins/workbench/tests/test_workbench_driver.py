@@ -6,6 +6,7 @@ Tier 4 (real solver) tests are in test_workbench_integration.py.
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -13,6 +14,20 @@ import pytest
 from sim.driver import DriverProtocol, SolverInstall
 
 FIXTURES = Path(__file__).parent.parent / "fixtures"
+
+
+def _fake_install(tmp_path: Path, version: str = "24.1") -> SolverInstall:
+    version_dir = "v" + version.replace(".", "")
+    root = tmp_path / "ANSYS Inc" / version_dir
+    runwb2 = root / "Framework" / "bin" / "Win64" / "RunWB2.exe"
+    runwb2.parent.mkdir(parents=True)
+    runwb2.write_text("", encoding="utf-8")
+    return SolverInstall(
+        name="workbench",
+        version=version,
+        path=str(root),
+        source=f"test:{version_dir}",
+    )
 
 
 @pytest.fixture
@@ -141,12 +156,13 @@ class TestDetectInstalled:
     def test_returns_list(self, driver):
         assert isinstance(driver.detect_installed(), list)
 
-    def test_env_var_detection(self, driver, monkeypatch):
-        monkeypatch.setenv("AWP_ROOT241", "E:\\Program Files\\ANSYS Inc\\v241")
+    def test_env_var_detection(self, driver, monkeypatch, tmp_path):
+        fake = _fake_install(tmp_path)
+        monkeypatch.setenv("AWP_ROOT241", fake.path)
         result = driver.detect_installed()
         env_sources = [i for i in result if i.source.startswith("env:")]
         assert len(env_sources) >= 1
-        assert env_sources[0].version == "24.1"
+        assert any(i.version == "24.1" and i.path == fake.path for i in env_sources)
 
     def test_version_extraction(self, driver):
         assert driver._extract_version(Path("v241")) == "24.1"
@@ -183,18 +199,20 @@ class TestSessionLifecycle:
 class TestFallback:
     """SDK failure should fall back to RunWB2."""
 
-    def test_run_file_falls_back_when_sdk_import_fails(self, driver, monkeypatch):
+    def test_run_file_falls_back_when_sdk_import_fails(self, driver, monkeypatch, tmp_path):
         """If ansys.workbench.core can't be imported, fall back to RunWB2."""
         monkeypatch.setattr(
             "sim_plugin_workbench.driver._try_import_pyworkbench", lambda: None
         )
-        monkeypatch.setattr(driver, "detect_installed", lambda: [
-            SolverInstall(
-                name="workbench", version="24.1",
-                path="E:\\Program Files\\ANSYS Inc\\v241",
-                source="env:AWP_ROOT241",
+        monkeypatch.setattr(driver, "detect_installed", lambda: [_fake_install(tmp_path)])
+        monkeypatch.setattr(
+            "sim_plugin_workbench.driver.subprocess.run",
+            lambda *args, **kwargs: SimpleNamespace(
+                returncode=0,
+                stdout="Framework error caught\n",
+                stderr="",
             ),
-        ])
+        )
         # Fallback to RunWB2 should produce a RunResult with captured output.
         # workbench_good.wbjn has a known API error (GetModel not available),
         # so it should report as failed with errors captured.
@@ -203,7 +221,7 @@ class TestFallback:
         # The script has errors — verify the driver actually detected them
         assert not result.ok, f"Expected failure but got ok=True. stdout={result.stdout[:200]}, errors={result.errors}"
 
-    def test_launch_falls_back_when_sdk_raises(self, driver, monkeypatch):
+    def test_launch_falls_back_when_sdk_raises(self, driver, monkeypatch, tmp_path):
         """If SDK launch raises, fall back to RunWB2 session."""
         def _mock_pywb():
             class _FakeModule:
@@ -216,13 +234,7 @@ class TestFallback:
         monkeypatch.setattr(
             "sim_plugin_workbench.driver._try_import_pyworkbench", _mock_pywb
         )
-        monkeypatch.setattr(driver, "detect_installed", lambda: [
-            SolverInstall(
-                name="workbench", version="24.1",
-                path="E:\\Program Files\\ANSYS Inc\\v241",
-                source="env:AWP_ROOT241",
-            ),
-        ])
+        monkeypatch.setattr(driver, "detect_installed", lambda: [_fake_install(tmp_path)])
         info = driver.launch(mode="workbench")
         assert info["ok"] is True
         assert info["backend"] == "runwb2"

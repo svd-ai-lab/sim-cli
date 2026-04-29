@@ -36,6 +36,12 @@ skip_no_workbench = pytest.mark.skipif(
 )
 
 
+def _skip_if_static_structural_unavailable(parsed: dict) -> None:
+    error = str(parsed.get("error", ""))
+    if "Template Static Structural" in error and "not found" in error:
+        pytest.skip("Static Structural template is not available in this Workbench install")
+
+
 @pytest.mark.integration
 @skip_no_workbench
 class TestWorkbenchRealDetection:
@@ -72,6 +78,7 @@ class TestWorkbenchSDKExecution:
         assert result.exit_code == 0, f"SDK execution failed: {result.stderr}"
 
         parsed = driver.parse_output(result.stdout)
+        _skip_if_static_structural_unavailable(parsed)
         assert parsed.get("ok") is True, f"Journal reported failure: {parsed}"
         assert parsed.get("component_count") == 6
         assert set(parsed.get("components", [])) == {
