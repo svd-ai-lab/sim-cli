@@ -22,7 +22,7 @@ classifiers = [
 ]
 dependencies = [
     # Versioned pin against PyPI sim-cli-core. Replaces an earlier
-    # `sim-runtime @ git+...sim-cli@main` pin that (a) referenced the
+    # `sim-cli-core @ git+...sim-cli@main` pin that (a) referenced the
     # pre-rename dist name, and (b) clobbered editable installs of the
     # runtime on `sim plugin install --upgrade` — see sim-cli#80.
     "sim-cli-core>=0.3",
@@ -32,6 +32,7 @@ dependencies = [
 [project.optional-dependencies]
 test = [
     "pytest>=7",
+    "build>=1.0",
 ]
 
 [project.entry-points."sim.drivers"]
@@ -40,9 +41,17 @@ mechanical = "sim_plugin_mechanical:MechanicalDriver"
 [project.entry-points."sim.skills"]
 mechanical = "sim_plugin_mechanical:skills_dir"
 
+[project.entry-points."sim.plugins"]
+mechanical = "sim_plugin_mechanical:plugin_info"
+
 [project.urls]
 Homepage = "https://github.com/svd-ai-lab/sim-plugin-mechanical"
 Issues = "https://github.com/svd-ai-lab/sim-plugin-mechanical/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/sim_plugin_mechanical"]
+
+[tool.pytest.ini_options]
+markers = [
+  "integration: tests that build wheels or touch external tooling",
+]
