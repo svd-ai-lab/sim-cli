@@ -395,6 +395,28 @@ def skills_block_for_profile(driver: str, profile: "Profile | None") -> dict:
     driver_dir = (root / driver) if root is not None else None
 
     if driver_dir is None or not driver_dir.is_dir():
+        # Out-of-tree plugins can bundle skills through the ``sim.skills``
+        # entry-point. Prefer the external sim-skills tree when present so
+        # local development overlays win, then fall back to the installed
+        # plugin bundle.
+        try:
+            from sim.plugins import skills_dir_for
+            plugin_dir = skills_dir_for(driver)
+        except Exception:  # noqa: BLE001 - skills are advisory context
+            plugin_dir = None
+        if plugin_dir is not None:
+            try:
+                index = plugin_dir.joinpath("SKILL.md")
+                if index.is_file():
+                    return {
+                        "root": str(plugin_dir),
+                        "index": str(index),
+                        "active_sdk_layer": active_sdk,
+                        "active_solver_layer": active_solver,
+                    }
+            except Exception:  # noqa: BLE001 - fall through to hint
+                pass
+
         return {
             "root": None,
             "index": None,

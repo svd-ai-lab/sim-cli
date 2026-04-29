@@ -20,6 +20,7 @@ import tempfile
 import textwrap
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import yaml
 
@@ -239,6 +240,23 @@ class TestSkillsBlockForProfile(unittest.TestCase):
         # Driver subdir doesn't exist → root is None to signal "nothing usable"
         self.assertIsNone(block["root"])
         self.assertIn("hint", block)
+
+    def test_falls_back_to_plugin_bundled_skills(self):
+        from sim.compat import skills_block_for_profile
+
+        os.environ["SIM_SKILLS_ROOT"] = str(self.tmp / "does-not-exist")
+        plugin_skill = self.tmp / "plugin-driver"
+        plugin_skill.mkdir()
+        (plugin_skill / "SKILL.md").write_text("# plugin skill\n", encoding="utf-8")
+
+        with patch("sim.plugins.skills_dir_for", return_value=plugin_skill):
+            block = skills_block_for_profile("plugin-driver", _profile("p", None, "v1"))
+
+        self.assertEqual(Path(block["root"]), plugin_skill)
+        self.assertEqual(Path(block["index"]), plugin_skill / "SKILL.md")
+        self.assertIsNone(block["active_sdk_layer"])
+        self.assertEqual(block["active_solver_layer"], "v1")
+        self.assertNotIn("hint", block)
 
 
 class TestConnectIncludesSkillsBlock(unittest.TestCase):
