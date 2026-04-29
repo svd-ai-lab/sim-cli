@@ -51,16 +51,16 @@
     <text x="430" y="248" font-size="18" font-weight="400" fill="#94a3b8">One CLI. One HTTP protocol. An open driver registry.</text>
     <text x="430" y="276" font-size="18" font-weight="400" fill="#94a3b8">So AI agents can launch, drive, and observe CAD/CAE jobs.</text>
 
-    <!-- chiplets — sample of supported solvers, NOT an exhaustive list -->
+    <!-- chiplets — generic plugin capabilities, NOT an exhaustive list -->
     <g font-size="14" font-weight="600">
       <rect x="430" y="298" width="78"  height="26" rx="13" fill="#1e293b" stroke="#334155"/>
-      <text x="469" y="316" text-anchor="middle" fill="#93c5fd">Fluent</text>
+      <text x="469" y="316" text-anchor="middle" fill="#93c5fd">CLI</text>
       <rect x="516" y="298" width="78"  height="26" rx="13" fill="#1e293b" stroke="#334155"/>
-      <text x="555" y="316" text-anchor="middle" fill="#c4b5fd">COMSOL</text>
+      <text x="555" y="316" text-anchor="middle" fill="#c4b5fd">GUI</text>
       <rect x="602" y="298" width="84"  height="26" rx="13" fill="#1e293b" stroke="#334155"/>
-      <text x="644" y="316" text-anchor="middle" fill="#86efac">OpenFOAM</text>
+      <text x="644" y="316" text-anchor="middle" fill="#86efac">Batch</text>
       <rect x="694" y="298" width="78"  height="26" rx="13" fill="#1e293b" stroke="#334155"/>
-      <text x="733" y="316" text-anchor="middle" fill="#fda4af">MATLAB</text>
+      <text x="733" y="316" text-anchor="middle" fill="#fda4af">Remote</text>
       <rect x="780" y="298" width="60"  height="26" rx="13" fill="#0f172a" stroke="#334155" stroke-dasharray="3 3"/>
       <text x="810" y="316" text-anchor="middle" fill="#94a3b8">…</text>
       <rect x="848" y="298" width="120" height="26" rx="13" fill="#1e293b" stroke="#475569"/>

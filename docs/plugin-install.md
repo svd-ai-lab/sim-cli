@@ -13,7 +13,6 @@ covers every way to install one.
 | Offline (you have a wheel file) | `sim plugin install ./sim_plugin_coolprop-0.1.0-py3-none-any.whl` |
 | Air-gapped (you have a bundle dir) | `sim plugin install --offline --from-dir ./bundle/ --all` |
 | Editable (you author plugins) | `sim plugin install -e ./sim-plugin-coolprop` |
-| Commercial plugin (private) | `sim plugin install fluent --include-commercial` <!-- allow-vendor-name: user-facing install example for licensed users --> |
 
 ## How `sim plugin install <source>` resolves
 
@@ -111,33 +110,10 @@ Equivalent to `pip install -e ./sim-plugin-coolprop`, plus syncing skills.
 Code edits take effect on next process; you never need to reinstall during
 development.
 
-## Commercial plugins (private repos)
+## Commercial plugins
 
-Commercial plugins live in private repos because their existence in a
-public listing would reveal that maintainers have access to that paid
-tool. They are not in the public index.
-
-For licensed users:
-
-```sh
-gh auth login                                  # one-time
-sim plugin install fluent --include-commercial   # <!-- allow-vendor-name: example, plugin name is the user-facing identifier -->
-```
-
-`--include-commercial` consults a private commercial index. Without GitHub
-auth, the command fails clean (no leak).
-
-Direct install also works:
-
-```sh
-sim plugin install git+ssh://git@github.com/svd-ai-lab/sim-plugin-<x>.git
-```
-
-Or, if a teammate sent you the wheel out-of-band:
-
-```sh
-sim plugin install ./sim_plugin_<x>-1.0.0-py3-none-any.whl
-```
+Commercial plugin availability depends on third-party license conditions.
+Contact <contact@svd-ai-lab.com> to discuss commercial plugin access.
 
 ## Surviving `uv sync`
 
@@ -151,7 +127,7 @@ anything else. To keep installed plugins across `uv sync` invocations,
 [tool.sim.plugins]
 coolprop = { name = "coolprop", source = "index", version = ">=0.1.0" }
 gmsh     = { git = "https://github.com/svd-ai-lab/sim-plugin-gmsh", rev = "v0.1.0" }
-fluent   = { wheel = "./vendor/sim_plugin_fluent-1.2.0-py3-none-any.whl" }   # <!-- allow-vendor-name: example showing how a commercial plugin is recorded in pyproject -->
+local_plugin = { wheel = "./vendor/sim_plugin_local-1.2.0-py3-none-any.whl" }
 ```
 
 `sim setup` (or `uv sync && sim plugin install --reapply`) restores them

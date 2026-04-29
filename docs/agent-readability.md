@@ -102,8 +102,8 @@ git = "https://github.com/svd-ai-lab/sim-plugin-gmsh"
 rev = "v0.1.0"
 
 [[sim.plugins]]
-name = "fluent"   # <!-- allow-vendor-name: doc example of pinning a commercial plugin -->
-wheel = "./vendor/sim_plugin_fluent-1.2.0-py3-none-any.whl"   # local, air-gapped
+name = "local_plugin"
+wheel = "./vendor/sim_plugin_local-1.2.0-py3-none-any.whl"   # local, air-gapped
 ```
 
 `sim init` creates a starter `sim.toml`. `sim setup` reads it and ensures

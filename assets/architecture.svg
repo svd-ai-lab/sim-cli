@@ -60,10 +60,10 @@
       <rect x="730" y="110" width="210" height="270" rx="12" fill="#0f172a" stroke="#334155"/>
       <text x="835" y="135" text-anchor="middle" fill="#cbd5e1" font-size="13" font-weight="600">DriverProtocol</text>
       <g font-size="12" fill="#e2e8f0">
-        <text x="745" y="162">• fluent     (PyFluent · sessions)</text>
-        <text x="745" y="182">• comsol     (JPype)</text>
-        <text x="745" y="202">• openfoam   (Linux subprocess)</text>
-        <text x="745" y="222">• matlab     (matlabengine)</text>
+        <text x="745" y="162">• plugin_a   (persistent session)</text>
+        <text x="745" y="182">• plugin_b   (batch process)</text>
+        <text x="745" y="202">• plugin_c   (remote host)</text>
+        <text x="745" y="222">• plugin_d   (GUI-capable)</text>
         <text x="745" y="242">• …  more in the registry</text>
         <text x="745" y="270" fill="#cbd5e1">• + your driver here</text>
         <text x="745" y="288" font-size="11" fill="#94a3b8">  (~200 LOC, register in</text>
@@ -78,8 +78,8 @@
       <!-- live solver -->
       <rect x="490" y="240" width="220" height="140" rx="12" fill="#0f172a" stroke="#334155"/>
       <text x="600" y="265" text-anchor="middle" fill="#cbd5e1" font-size="13" font-weight="600">Live solver process</text>
-      <text x="600" y="290" text-anchor="middle" fill="#86efac" font-size="13">Fluent GUI · COMSOL · MATLAB</text>
-      <text x="600" y="310" text-anchor="middle" fill="#86efac" font-size="13">ANSA · Flotherm · OpenFOAM</text>
+      <text x="600" y="290" text-anchor="middle" fill="#86efac" font-size="13">CLI · GUI · batch</text>
+      <text x="600" y="310" text-anchor="middle" fill="#86efac" font-size="13">local or remote execution</text>
       <text x="600" y="332" text-anchor="middle" fill="#94a3b8" font-size="12">engineer can watch in real time</text>
       <text x="600" y="358" text-anchor="middle" fill="#94a3b8" font-size="11">launched once, snippets at will</text>
 

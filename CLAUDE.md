@@ -87,7 +87,7 @@ The server supports multiple concurrent sessions keyed by session_id. Each `Sess
 Drivers are resolved lazily through two channels:
 
 - **`_BUILTIN_REGISTRY`** — an ordered list of `(name, "module:Class")` tuples for the open-source drivers that ship with `sim-cli-core` itself (PyBaMM, OpenFOAM, CalculiX, gmsh, SU2, LAMMPS, Elmer, scikit-fem, MFEM, OpenSeesPy, SfePy, OpenMDAO, FiPy, pymoo, Pyomo, SimPy, Trimesh, Devito, CoolProp, scikit-rf, pandapower, ParaView, meshio, PyVista, Newton, Isaac Sim, LTspice). The canonical list lives in `src/sim/drivers/__init__.py`.
-- **`sim.drivers` entry-point group** — external/closed-source drivers register themselves via standard Python entry points and are discovered at import time, validated, and appended after the built-ins. Built-ins win on name collisions. This is the path used by every commercial-solver plugin (each lives in its own out-of-tree package with its own `compatibility.yaml`).
+- **`sim.drivers` entry-point group** — external drivers register themselves via standard Python entry points and are discovered at import time, validated, and appended after the built-ins. Built-ins win on name collisions. Each plugin lives in its own out-of-tree package with its own `compatibility.yaml`.
 
 A driver may set `supports_session = True` to implement the persistent-session lifecycle (`launch`/`run`/`query`/`disconnect`); the rest are one-shot only. `get_driver(name)` looks up by `.name` attribute and lazily imports the implementation module on first use, so a broken plugin does not crash the CLI.
 

@@ -5,68 +5,31 @@ This product is licensed under the Apache License, Version 2.0 (the "License");
 see the accompanying LICENSE file for the full text.
 
 ================================================================================
-Third-party solver SDKs (runtime, optional — not bundled)
+Plugin and runtime dependency notice
 ================================================================================
 
-sim-cli integrates with commercial and open-source solvers by dynamically
-importing their Python SDKs at runtime. No vendor SDK, solver binary, or vendor
-example/tutorial material is redistributed as part of this repository. Users
-install each SDK separately (via `sim env install`, optional extras in
-pyproject.toml, or their own package manager) and are responsible for
-complying with the license, copyright, and end-user agreement that ships
-with each SDK and each underlying solver.
+sim-cli is a solver-agnostic runtime. Solver and tool integrations are provided
+by separately installed plugins. Plugins may depend on third-party software,
+services, SDKs, or local executables that are not bundled with this repository.
+Users are responsible for complying with the license, copyright, and end-user
+terms that apply to any third-party software they install or use with a plugin.
 
-The drivers in `src/sim/drivers/` reference, but do not bundle, the following
-third-party Python SDKs. This list is informational and may lag the code —
-see `src/sim/drivers/<name>/compatibility.yaml` and `pyproject.toml` for the
-current version pins.
-
-  Ansys / PyAnsys family (© ANSYS, Inc.)
-    - ansys-fluent-core        https://github.com/ansys/pyfluent
-    - ansys-workbench-core     https://github.com/ansys/pyworkbench
-    - ansys-mechanical-core    https://github.com/ansys/pymechanical
-    - ansys-mapdl-core         https://github.com/ansys/pymapdl
-    - ansys-dyna-core          https://github.com/ansys/pydyna
-    - ansys-dpf-core           https://github.com/ansys/pydpf-core
-
-  COMSOL (© COMSOL AB)
-    - mph                       https://github.com/MPh-py/MPh
-      (third-party Python wrapper around COMSOL's Java API; requires a COMSOL
-      Multiphysics license)
-
-  MathWorks (© The MathWorks, Inc.)
-    - matlabengine              https://pypi.org/project/matlabengine/
-      (distributed by MathWorks; requires a MATLAB license)
-
-  Dassault Systèmes / Abaqus, Siemens STAR-CCM+ / Flotherm, BETA CAE ANSA,
-  Altair HyperMesh, Ansys ICEM CFD, Ansys CFX
-    - Driven via vendor CLIs / journal files / Python-in-solver interpreters.
-      No additional Python SDK is redistributed by sim-cli.
-
-  Open-source solvers and libraries
-    - PyBaMM, OpenFOAM, SU2, LAMMPS, CalculiX, Elmer FEM, Gmsh, meshio,
-      pyvista, PyMFEM, scikit-fem, SfePy, OpenSeesPy, Cantera, OpenMDAO,
-      FiPy, pymoo, Pyomo, SimPy, Trimesh, Devito, CoolProp, scikit-rf,
-      pandapower, ParaView (pvpython/pvbatch).
-      Each retains its own upstream license; consult the corresponding project
-      for terms.
+Commercial plugin availability depends on third-party license conditions.
+Contact <contact@svd-ai-lab.com> to discuss commercial plugin access.
 
 ================================================================================
 Direct runtime dependencies (see pyproject.toml)
 ================================================================================
 
   click, httpx, fastapi, uvicorn, pyyaml, Pillow, lxml
-    — each distributed under its own open-source license (BSD / MIT / Apache-2.0
-      family); consult the respective package for terms.
+    - each distributed under its own open-source license (BSD / MIT /
+      Apache-2.0 family); consult the respective package for terms.
 
 ================================================================================
 Trademarks
 ================================================================================
 
-Product, solver, and company names referenced in this repository (including
-Ansys®, Fluent®, Workbench®, Mechanical®, MAPDL, CFX®, LS-DYNA®, ICEM CFD™,
-Abaqus®, SIMULIA®, COMSOL Multiphysics®, MATLAB®, Simcenter™ STAR-CCM+,
-Simcenter Flotherm™, ANSA®, HyperMesh®, Altair®, ParaView®, OpenFOAM®) are
-trademarks or registered trademarks of their respective owners and are used
-solely for identification. sim-cli is an independent open-source project and
-is not affiliated with, endorsed by, or sponsored by any of these vendors.
+Product, solver, tool, and company names may be trademarks or registered
+trademarks of their respective owners. sim-cli is an independent open-source
+project and is not affiliated with, endorsed by, or sponsored by any third-party
+vendor unless explicitly stated.

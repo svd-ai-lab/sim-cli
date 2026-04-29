@@ -4,7 +4,7 @@
 > **Audience:** sim-cli maintainers, plugin authors.
 > **Last reviewed:** 2026-04-27.
 
-This document used to carry a long, driver-specific compatibility-matrix design. Most of that material now lives **inside individual plugin packages** — every commercial-solver driver ships as its own out-of-tree plugin, and each plugin owns the version-compat data for its own SDK and solver releases. The design intent is preserved here in summary form so the public `sim-cli-core` repo still describes the contract that plugins implement.
+This document used to carry a long, driver-specific compatibility-matrix design. Most of that material now lives **inside individual plugin packages**. Each plugin owns the version-compat data for its own runtime dependencies. The design intent is preserved here in summary form so the public `sim-cli-core` repo still describes the contract that plugins implement.
 
 If you are looking for the per-plugin compatibility data, read each plugin's own `compatibility.yaml` and its own architecture notes.
 
