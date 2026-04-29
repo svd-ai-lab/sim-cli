@@ -28,6 +28,7 @@ dependencies = [
 [project.optional-dependencies]
 test = [
     "pytest>=7",
+    "build>=1.0",
 ]
 
 [project.entry-points."sim.drivers"]
@@ -36,9 +37,17 @@ comsol = "sim_plugin_comsol:ComsolDriver"
 [project.entry-points."sim.skills"]
 comsol = "sim_plugin_comsol:skills_dir"
 
+[project.entry-points."sim.plugins"]
+comsol = "sim_plugin_comsol:plugin_info"
+
 [project.urls]
 Homepage = "https://github.com/svd-ai-lab/sim-plugin-comsol"
 Issues = "https://github.com/svd-ai-lab/sim-plugin-comsol/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/sim_plugin_comsol"]
+
+[tool.pytest.ini_options]
+markers = [
+  "integration: tests that build wheels or touch external tooling",
+]

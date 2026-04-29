@@ -10,4 +10,13 @@ from .driver import ComsolDriver
 
 skills_dir = files(__name__) / "_skills"
 
-__all__ = ["ComsolDriver", "skills_dir"]
+
+plugin_info = {
+    "name": "comsol",
+    "summary": "Driver plugin for sim-cli.",
+    "homepage": "https://github.com/svd-ai-lab/sim-plugin-comsol",
+    "license_class": "commercial",
+    "solver_name": "comsol",
+}
+
+__all__ = ["ComsolDriver", "skills_dir", "plugin_info"]
