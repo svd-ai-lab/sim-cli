@@ -1,0 +1,4 @@
+interface:
+  display_name: "Install sim on Windows"
+  short_description: "Windows sim install guide"
+  default_prompt: "Use this skill to install sim-cli on Windows with the commercial solver plugin preset."
