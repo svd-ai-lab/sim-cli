@@ -707,7 +707,7 @@ wheels = [
 
 [[package]]
 name = "sim-plugin-abaqus"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "." }
 dependencies = [
     { name = "sim-cli-core" },

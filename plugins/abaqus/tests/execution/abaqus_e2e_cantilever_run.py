@@ -72,10 +72,14 @@ U,
 
 def find_abaqus_cmd():
     """Find the abaqus command."""
-    for drive in ("E", "C", "D"):
-        bat = Path(f"{drive}:/Program Files (x86)/Dassault Systemes/SIMULIA/Commands/abaqus.bat")
-        if bat.is_file():
-            return str(bat)
+    try:
+        from sim_plugin_abaqus import AbaqusDriver
+
+        installs = AbaqusDriver().detect_installed()
+        if installs:
+            return installs[0].extra.get("bat", "abaqus")
+    except Exception:
+        pass
     # Fallback to PATH
     import shutil
     return shutil.which("abaqus") or "abaqus"

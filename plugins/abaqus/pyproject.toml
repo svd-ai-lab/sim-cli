@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "sim-plugin-abaqus"
-version = "0.1.0"
+version = "0.1.1"
 description = "Dassault Systemes SIMULIA Abaqus driver for sim-cli, distributed as an out-of-tree plugin"
 readme = "README.md"
 license = "Apache-2.0"
@@ -50,6 +50,7 @@ Issues = "https://github.com/svd-ai-lab/sim-plugin-abaqus/issues"
 packages = ["src/sim_plugin_abaqus"]
 
 [tool.pytest.ini_options]
+testpaths = ["tests"]
 markers = [
   "integration: tests that build wheels or touch external tooling",
 ]
