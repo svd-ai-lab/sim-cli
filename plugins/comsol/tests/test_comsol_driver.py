@@ -1,9 +1,29 @@
 """Tests for the COMSOL driver — all pass without COMSOL installed."""
 from pathlib import Path
 
+import pytest
+
 from sim_plugin_comsol import ComsolDriver
+from sim_plugin_comsol.driver import ComsolLifecycleError
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "comsol"
+
+
+class FakeProcess:
+    def __init__(self, pid=1234, returncode=None):
+        self.pid = pid
+        self.returncode = returncode
+        self.killed = False
+
+    def poll(self):
+        return self.returncode
+
+    def kill(self):
+        self.killed = True
+        self.returncode = -9
+
+    def wait(self, timeout=None):
+        return self.returncode
 
 
 class TestDetect:
@@ -130,6 +150,52 @@ class TestRunFile:
         result = runner.execute_script(script, solver="comsol", driver=driver)
         assert result.exit_code == 0
         assert result.solver == "comsol"
+
+
+class TestLifecycleDiagnostics:
+    def test_wait_for_port_reports_early_server_exit_with_log_tail(self, tmp_path):
+        driver = ComsolDriver()
+        driver._sim_dir = tmp_path / ".sim"
+        driver._server_log_path, driver._server_log_handle = driver._open_log(
+            "comsol-mphserver"
+        )
+        driver._server_log_handle.write(b"startup\nlicense checkout failed\n")
+        driver._server_log_handle.flush()
+        driver._server_proc = FakeProcess(pid=2468, returncode=12)
+
+        with pytest.raises(ComsolLifecycleError) as excinfo:
+            driver._wait_for_port(65000, timeout=0.01)
+
+        diagnostics = excinfo.value.diagnostics
+        assert diagnostics["code"] == "comsol.server.process_exited"
+        assert diagnostics["server_pid"] == 2468
+        assert diagnostics["server_returncode"] == 12
+        assert diagnostics["server_log_path"].endswith(".log")
+        assert "license checkout failed" in diagnostics["server_log_tail"]
+        driver._close_log_handles()
+
+    def test_health_reports_dead_server_process(self):
+        driver = ComsolDriver()
+        driver._session_id = "s-test"
+        driver._model = object()
+        driver._server_proc = FakeProcess(pid=2468, returncode=9)
+        driver._port = 65000
+
+        health = driver.health()
+
+        assert health["connected"] is False
+        assert health["code"] == "comsol.server.process_exited"
+        assert health["server_pid"] == 2468
+        assert health["server_returncode"] == 9
+
+    def test_query_session_health(self):
+        driver = ComsolDriver()
+
+        health = driver.query("session.health")
+
+        assert health["ok"] is False
+        assert health["connected"] is False
+        assert health["code"] == "comsol.session.disconnected"
 
 
 def _make_import_blocker(blocked: str):

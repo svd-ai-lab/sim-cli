@@ -4,6 +4,8 @@ __pycache__/
 build/
 dist/
 .venv/
+.pytest_basetemp/
 .pytest_cache/
 .ruff_cache/
 .uv/
+runs/

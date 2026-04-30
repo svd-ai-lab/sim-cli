@@ -25,7 +25,7 @@ import traceback
 import uuid
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
-from typing import Callable
+from typing import Callable, TextIO
 
 from sim.driver import ConnectionInfo, Diagnostic, LintResult, SolverInstall
 from sim.inspect import (
@@ -37,6 +37,31 @@ from sim.inspect import (
     generic_probes,
 )
 from sim.runner import run_subprocess
+
+
+class ComsolLifecycleError(RuntimeError):
+    """COMSOL launch/session failure with machine-readable diagnostics."""
+
+    def __init__(self, message: str, diagnostics: dict):
+        super().__init__(message)
+        self.diagnostics = diagnostics
+
+    def __str__(self) -> str:
+        bits = [super().__str__()]
+        if code := self.diagnostics.get("code"):
+            bits.append(f"code={code}")
+        if port := self.diagnostics.get("port"):
+            bits.append(f"port={port}")
+        if pid := self.diagnostics.get("server_pid"):
+            bits.append(f"server_pid={pid}")
+        rc = self.diagnostics.get("server_returncode")
+        if rc is not None:
+            bits.append(f"server_returncode={rc}")
+        if log_path := self.diagnostics.get("server_log_path"):
+            bits.append(f"server_log_path={log_path}")
+        if log_tail := self.diagnostics.get("server_log_tail"):
+            bits.append(f"server_log_tail={log_tail!r}")
+        return " | ".join(bits)
 
 
 # ── Channel #4 — default SDK attribute readers (COMSOL / MPh Model Java API) ──
@@ -362,6 +387,13 @@ class ComsolDriver:
         self._last_run: dict | None = None
         self._server_proc = None
         self._client_proc = None
+        self._server_log_handle: TextIO | None = None
+        self._client_log_handle: TextIO | None = None
+        self._server_log_path: Path | None = None
+        self._client_log_path: Path | None = None
+        self._last_health: dict | None = None
+        self._last_disconnect_reason: dict | None = None
+        self._launch_options: dict = {}
         self._port: int = 2036
         # Sim dir for probe workdir (screenshots, workdir-diff baseline)
         self._sim_dir: Path = Path(os.environ.get("SIM_DIR") or (Path.cwd() / ".sim"))
@@ -550,15 +582,183 @@ class ComsolDriver:
         )
         self._jvm_started = True
 
-    def _wait_for_port(self, port: int, timeout: float = 90) -> bool:
+    def _configure_workdir(self, workspace: str | None = None, cwd: str | None = None) -> None:
+        """Choose the directory where driver diagnostics and probe artifacts live."""
+        base = workspace or cwd
+        if base:
+            self._sim_dir = Path(base) / ".sim"
+        self._sim_dir.mkdir(parents=True, exist_ok=True)
+
+    def _open_log(self, stem: str) -> tuple[Path, TextIO]:
+        self._sim_dir.mkdir(parents=True, exist_ok=True)
+        suffix = self._session_id or time.strftime("%Y%m%d-%H%M%S")
+        path = self._sim_dir / f"{stem}-{suffix}.log"
+        return path, path.open("ab")
+
+    def _close_log_handles(self) -> None:
+        for attr in ("_server_log_handle", "_client_log_handle"):
+            handle = getattr(self, attr, None)
+            if handle is not None:
+                try:
+                    handle.close()
+                except Exception:
+                    pass
+                setattr(self, attr, None)
+
+    def _terminate_processes(self) -> None:
+        for attr in ("_client_proc", "_server_proc"):
+            proc = getattr(self, attr, None)
+            if proc is None:
+                continue
+            try:
+                proc.kill()
+                proc.wait(timeout=5)
+            except Exception:
+                pass
+            setattr(self, attr, None)
+
+    def _tail_file(self, path: Path | None, max_lines: int = 40) -> str | None:
+        if path is None or not path.is_file():
+            return None
+        try:
+            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            return None
+        return "\n".join(lines[-max_lines:])
+
+    def _diagnostic_context(self, code: str, message: str) -> dict:
+        for handle in (self._server_log_handle, self._client_log_handle):
+            if handle is not None:
+                try:
+                    handle.flush()
+                except Exception:
+                    pass
+        server_returncode = None
+        client_returncode = None
+        if self._server_proc is not None:
+            server_returncode = self._server_proc.poll()
+        if self._client_proc is not None:
+            client_returncode = self._client_proc.poll()
+        return {
+            "ok": False,
+            "code": code,
+            "message": message,
+            "port": self._port,
+            "server_pid": getattr(self._server_proc, "pid", None),
+            "server_returncode": server_returncode,
+            "server_log_path": str(self._server_log_path) if self._server_log_path else None,
+            "server_log_tail": self._tail_file(self._server_log_path),
+            "client_pid": getattr(self._client_proc, "pid", None),
+            "client_returncode": client_returncode,
+            "client_log_path": str(self._client_log_path) if self._client_log_path else None,
+            "client_log_tail": self._tail_file(self._client_log_path),
+        }
+
+    def _lifecycle_error(self, code: str, message: str) -> ComsolLifecycleError:
+        diagnostics = self._diagnostic_context(code, message)
+        self._last_health = diagnostics
+        return ComsolLifecycleError(message, diagnostics)
+
+    def _classify_comsol_error(self, text: str) -> str:
+        lowered = text.lower()
+        if "license" in lowered or "checkout" in lowered:
+            return "comsol.license_or_login"
+        if "login" in lowered or "password" in lowered or "authentication" in lowered:
+            return "comsol.license_or_login"
+        if "connection refused" in lowered or "connection reset" in lowered:
+            return "comsol.modelutil.stale"
+        if "port" in lowered and ("use" in lowered or "bind" in lowered):
+            return "comsol.server.port_conflict"
+        if "server is busy" in lowered or "serverbusy" in lowered:
+            return "comsol.server.busy_timeout"
+        return "comsol.modelutil.failure"
+
+    def health(self) -> dict:
+        """Best-effort live-session health for `session.summary` / diagnostics."""
+        server_returncode = self._server_proc.poll() if self._server_proc is not None else None
+        client_returncode = self._client_proc.poll() if self._client_proc is not None else None
+        server_running = (
+            self._server_proc is not None and server_returncode is None
+        )
+        port_open = self._check_port(self._port, timeout=0.5)
+        modelutil_connected: bool | None = None
+        model_tags: list[str] | None = None
+        code = "comsol.session.connected"
+        message = "COMSOL session is connected"
+
+        if self._model_util is not None:
+            try:
+                model_tags = [str(tag) for tag in list(self._model_util.tags())]
+                modelutil_connected = True
+            except Exception as exc:  # noqa: BLE001 - Java exceptions vary by version
+                modelutil_connected = False
+                code = self._classify_comsol_error(str(exc))
+                message = f"ModelUtil health check failed: {exc}"
+
+        if self._model is None:
+            code = "comsol.session.disconnected"
+            message = "No active COMSOL model is attached"
+        elif self._server_proc is not None and server_returncode is not None:
+            code = "comsol.server.process_exited"
+            message = f"comsolmphserver exited with return code {server_returncode}"
+        elif self._server_proc is not None and not port_open:
+            code = "comsol.server.port_closed"
+            message = f"COMSOL server port {self._port} is not reachable"
+
+        connected = (
+            self._model is not None
+            and (self._server_proc is None or server_returncode is None)
+            and (self._server_proc is None or port_open)
+            and modelutil_connected is not False
+        )
+        health = {
+            "ok": connected,
+            "connected": connected,
+            "code": code,
+            "message": message,
+            "session_id": self._session_id,
+            "ui_mode": self._ui_mode,
+            "port": self._port,
+            "server_pid": getattr(self._server_proc, "pid", None),
+            "server_running": server_running,
+            "server_returncode": server_returncode,
+            "server_log_path": str(self._server_log_path) if self._server_log_path else None,
+            "server_log_tail": self._tail_file(self._server_log_path) if not connected else None,
+            "client_pid": getattr(self._client_proc, "pid", None),
+            "client_returncode": client_returncode,
+            "client_log_path": str(self._client_log_path) if self._client_log_path else None,
+            "modelutil_connected": modelutil_connected,
+            "model_tags": model_tags,
+            "last_disconnect_reason": self._last_disconnect_reason,
+            "launch_options": self._launch_options,
+        }
+        self._last_health = health
+        return health
+
+    def query(self, name: str) -> dict:
+        if name in {"health", "session.health"}:
+            return self.health()
+        return {"ok": False, "error": f"unknown inspect target: {name}"}
+
+    def _check_port(self, port: int, timeout: float = 2) -> bool:
         import socket
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=timeout):
+                return True
+        except OSError:
+            return False
+
+    def _wait_for_port(self, port: int, timeout: float = 90) -> bool:
         deadline = time.time() + timeout
         while time.time() < deadline:
-            try:
-                with socket.create_connection(("127.0.0.1", port), timeout=2):
-                    return True
-            except OSError:
-                time.sleep(2)
+            if self._server_proc is not None and self._server_proc.poll() is not None:
+                raise self._lifecycle_error(
+                    "comsol.server.process_exited",
+                    "comsolmphserver exited before its port became ready",
+                )
+            if self._check_port(port, timeout=2):
+                return True
+            time.sleep(2)
         return False
 
     def launch(
@@ -580,6 +780,16 @@ class ComsolDriver:
         """
         import subprocess
 
+        workspace = kwargs.pop("workspace", None)
+        cwd = kwargs.pop("cwd", None)
+        port = kwargs.pop("port", None)
+        if port is not None:
+            self._port = int(port)
+        self._session_id = str(uuid.uuid4())
+        self._configure_workdir(workspace=workspace, cwd=cwd)
+        self._last_health = None
+        self._last_disconnect_reason = None
+
         root = self._resolve_comsol_root(comsol_root)
         user = user or os.environ.get("COMSOL_USER", "")
         password = password or os.environ.get("COMSOL_PASSWORD", "")
@@ -590,34 +800,81 @@ class ComsolDriver:
         if not os.path.isfile(server_exe):
             raise RuntimeError(f"comsolmphserver not found at {server_exe}")
 
+        self._launch_options = {
+            "mode": mode,
+            "ui_mode": ui_mode,
+            "processors": processors,
+            "comsol_root": root,
+            "workspace": workspace,
+            "cwd": cwd,
+            "port": self._port,
+            **kwargs,
+        }
+        self._server_log_path, self._server_log_handle = self._open_log("comsol-mphserver")
+
+        if self._check_port(self._port, timeout=0.5):
+            err = self._lifecycle_error(
+                "comsol.server.port_conflict",
+                f"port {self._port} is already accepting connections before launch",
+            )
+            self._close_log_handles()
+            raise err
+
         # -login auto: use cached credentials set via `comsolmphserver -login force`
         self._server_proc = subprocess.Popen(
             [server_exe, "-port", str(self._port), "-multi", "on",
              "-login", "auto", "-silent", "-graphics", "-3drend", "sw"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stdout=self._server_log_handle,
+            stderr=subprocess.STDOUT,
         )
 
-        if not self._wait_for_port(self._port, timeout=90):
-            self._server_proc.kill()
-            self._server_proc = None
-            raise RuntimeError(
-                f"comsolmphserver did not start listening on port {self._port} "
-                "within 90s — check COMSOL license"
+        try:
+            port_ready = self._wait_for_port(self._port, timeout=90)
+        except ComsolLifecycleError:
+            self._terminate_processes()
+            self._close_log_handles()
+            raise
+
+        if not port_ready:
+            err = self._lifecycle_error(
+                "comsol.server.port_timeout",
+                f"comsolmphserver did not start listening on port {self._port} within 90s",
             )
+            self._terminate_processes()
+            self._close_log_handles()
+            raise err
 
         # Connect JPype first (lightweight, doesn't grab an exclusive lock)
         # so the GUI client launching next won't race us on "Server is in
         # use by another client". Then start the GUI, and poll ModelUtil
         # until the GUI's auto-created Untitled model appears — adopt it
         # so driver + GUI share the same Java object.
-        self._start_jvm(root)
-        from com.comsol.model.util import ModelUtil  # type: ignore
+        try:
+            self._start_jvm(root)
+            from com.comsol.model.util import ModelUtil  # type: ignore
+        except Exception as exc:  # noqa: BLE001 - JPype/JVM failures vary by install
+            err = self._lifecycle_error(
+                "comsol.jvm.start_failed",
+                f"failed to start COMSOL JVM: {exc}",
+            )
+            self._terminate_processes()
+            self._close_log_handles()
+            raise err from exc
 
-        if user and password:
-            ModelUtil.connect("localhost", self._port, user, password)
-        else:
-            ModelUtil.connect("localhost", self._port)
+        try:
+            if user and password:
+                ModelUtil.connect("localhost", self._port, user, password)
+            else:
+                ModelUtil.connect("localhost", self._port)
+        except Exception as exc:  # noqa: BLE001 - Java exceptions vary by version
+            code = self._classify_comsol_error(str(exc))
+            err = self._lifecycle_error(
+                code,
+                f"ModelUtil.connect failed: {exc}",
+            )
+            self._terminate_processes()
+            self._close_log_handles()
+            raise err from exc
 
         from com.comsol.model.util import ServerBusyHandler  # type: ignore
         ModelUtil.setServerBusyHandler(ServerBusyHandler(30000))
@@ -629,10 +886,11 @@ class ComsolDriver:
             cs_pass = os.environ.get("COMSOL_PASSWORD")
             if cs_user and cs_pass:
                 client_args += ["-username", cs_user, "-password", cs_pass]
+            self._client_log_path, self._client_log_handle = self._open_log("comsol-mphclient")
             self._client_proc = subprocess.Popen(
                 client_args,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                stdout=self._client_log_handle,
+                stderr=subprocess.STDOUT,
             )
             # The GUI client shows a "Connect to COMSOL Server" login dialog on
             # startup before it creates an Untitled model. This dialog blocks
@@ -662,24 +920,34 @@ class ComsolDriver:
         # so we never conflict.
         _model_tag = "Model1"
         try:
-            self._model = ModelUtil.create(_model_tag)
-        except Exception:
-            for _stale in list(ModelUtil.tags()):
-                try:
-                    ModelUtil.remove(_stale)
-                except Exception:
-                    pass
             try:
                 self._model = ModelUtil.create(_model_tag)
             except Exception:
-                _model_tag = f"Model_{uuid.uuid4().hex[:6]}"
-                self._model = ModelUtil.create(_model_tag)
+                for _stale in list(ModelUtil.tags()):
+                    try:
+                        ModelUtil.remove(_stale)
+                    except Exception:
+                        pass
+                try:
+                    self._model = ModelUtil.create(_model_tag)
+                except Exception:
+                    _model_tag = f"Model_{uuid.uuid4().hex[:6]}"
+                    self._model = ModelUtil.create(_model_tag)
+        except Exception as exc:  # noqa: BLE001 - Java exceptions vary by version
+            code = self._classify_comsol_error(str(exc))
+            err = self._lifecycle_error(
+                code,
+                f"ModelUtil.create failed: {exc}",
+            )
+            self._terminate_processes()
+            self._close_log_handles()
+            raise err from exc
 
-        self._session_id = str(uuid.uuid4())
         self._ui_mode = ui_mode
         self._connected_at = time.time()
         self._run_count = 0
         self._last_run = None
+        self._last_health = self.health()
 
         # Flip probes to GUI-aware variant + construct gui actuation facade
         # when the client window is actually up. Headless launches skip both.
@@ -700,6 +968,10 @@ class ComsolDriver:
             "ui_mode": ui_mode,
             "port": self._port,
             "model_tag": str(self._model.tag()),
+            "server_log_path": str(self._server_log_path) if self._server_log_path else None,
+            "client_log_path": str(self._client_log_path) if self._client_log_path else None,
+            "launch_options": self._launch_options,
+            "health": self._last_health,
         }
 
     def run(
@@ -716,7 +988,36 @@ class ComsolDriver:
             driver's probe list (9-channel coverage).
         """
         if self._model is None:
-            raise RuntimeError("No active COMSOL session — call launch() first")
+            health = self.health()
+            return {
+                "run_id": str(uuid.uuid4()),
+                "ok": False,
+                "label": label,
+                "stdout": "",
+                "stderr": "",
+                "error": health["message"],
+                "result": None,
+                "elapsed_s": 0,
+                "diagnostics": [],
+                "artifacts": [],
+                "health": health,
+            }
+
+        preflight_health = self.health()
+        if not preflight_health.get("connected", False):
+            return {
+                "run_id": str(uuid.uuid4()),
+                "ok": False,
+                "label": label,
+                "stdout": "",
+                "stderr": "",
+                "error": preflight_health["message"],
+                "result": None,
+                "elapsed_s": 0,
+                "diagnostics": [],
+                "artifacts": [],
+                "health": preflight_health,
+            }
 
         from sim._timeout import call_with_timeout, DEFAULT_TIMEOUT_S  # noqa: PLC0415
 
@@ -761,12 +1062,26 @@ class ComsolDriver:
                 f"(hung in COMSOL call; session is likely unusable — "
                 f"disconnect and re-launch)"
             )
+            self._last_health = {
+                **self._diagnostic_context(
+                    "comsol.runtime.timeout_session_unhealthy",
+                    error,
+                ),
+                "connected": False,
+            }
         elif t_result.exception is not None:
             ok = False
             exc = t_result.exception
             error = "".join(
                 traceback.format_exception(type(exc), exc, exc.__traceback__)
             )
+            self._last_health = {
+                **self._diagnostic_context(
+                    self._classify_comsol_error(error),
+                    "COMSOL snippet failed",
+                ),
+                "connected": False,
+            }
 
         elapsed = round(time.time() - started_at, 4)
         self._run_count += 1
@@ -814,31 +1129,31 @@ class ComsolDriver:
         diags, arts = collect_diagnostics(self.probes, ctx)
         record["diagnostics"] = [d.to_dict() for d in diags]
         record["artifacts"] = [a.to_dict() for a in arts]
+        record["health"] = self._last_health if not ok else preflight_health
 
         self._last_run = record
         return record
 
     def disconnect(self) -> None:
+        reason = self.health()
         if self._model_util is not None:
             try:
                 self._model_util.disconnect()
             except Exception:
                 pass
-        if self._client_proc is not None:
-            try:
-                self._client_proc.kill()
-            except Exception:
-                pass
-            self._client_proc = None
-        if self._server_proc is not None:
-            try:
-                self._server_proc.kill()
-            except Exception:
-                pass
-            self._server_proc = None
+        self._terminate_processes()
+        self._close_log_handles()
         self._model = None
         self._gui = None
         self._model_util = None
+        reason.update({
+            "ok": False,
+            "connected": False,
+            "code": "comsol.session.disconnected",
+            "message": "disconnect() was called",
+        })
+        self._last_disconnect_reason = reason
+        self._last_health = reason
         self._session_id = None
         self._connected_at = None
         self._run_count = 0
