@@ -218,6 +218,7 @@ class MechanicalDriver:
         self._session_id: str | None = None
         self._mode: str | None = None
         self._ui_mode: str | None = None
+        self._batch: bool | None = None
         self._run_count: int = 0
         self._version: str | None = None
         self._launched_at: float | None = None
@@ -552,6 +553,7 @@ class MechanicalDriver:
         self._session_id = str(uuid.uuid4())
         self._mode = mode
         self._ui_mode = ui_mode
+        self._batch = batch
         self._run_count = 0
         self._version = top.version
         self._launched_at = time.time()
@@ -639,6 +641,7 @@ class MechanicalDriver:
                 "session_id": self._session_id,
                 "mode": self._mode,
                 "ui_mode": self._ui_mode,
+                "batch": self._batch,
                 "connected": self.is_connected,
                 "run_count": self._run_count,
                 "version": self._version,
@@ -698,6 +701,7 @@ class MechanicalDriver:
             self._session_id = None
             self._mode = None
             self._ui_mode = None
+            self._batch = None
             self._run_count = 0
             self._version = None
             self._launched_at = None

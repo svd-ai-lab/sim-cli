@@ -224,6 +224,20 @@ class TestLaunchKwargs:
 
         assert captured[0]["batch"] is False
 
+    def test_session_summary_exposes_batch_policy(self, monkeypatch):
+        captured: list[dict] = []
+        d = MechanicalDriver()
+        monkeypatch.setattr(d, "detect_installed", lambda: [_fake_install("25.2")])
+        _install_fake_pm(monkeypatch, captured)
+        monkeypatch.setenv("SIM_MECHANICAL_INSECURE_TRANSPORT", "1")
+
+        d.launch(ui_mode="gui")
+        summary = d.query("session.summary")
+
+        assert summary["ui_mode"] == "gui"
+        assert summary["batch"] is False
+        assert summary["connected"] is True
+
     def test_launch_translates_secure_transport_error(self, monkeypatch):
         captured: list[dict] = []
         d = MechanicalDriver()

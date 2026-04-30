@@ -10,6 +10,9 @@ pip install git+https://github.com/svd-ai-lab/sim-plugin-mechanical@main
 
 You also need a working Ansys Mechanical installation on the same host (the `ansys-mechanical-core` SDK launches the local `AnsysWBU.exe`). See [LICENSE-NOTICE.md](LICENSE-NOTICE.md).
 
+This plugin is for **Ansys Mechanical**, not Dassault SIMULIA Abaqus.
+Use `sim-plugin-abaqus` for Abaqus `.inp` decks and Abaqus/CAE scripts.
+
 After install, sim-cli auto-discovers the driver:
 
 ```bash
@@ -32,6 +35,10 @@ mechanical = "sim_plugin_mechanical:skills_dir"
 `sim.drivers` exposes the driver class; `sim.skills` exposes a directory of skill files bundled inside the wheel.
 
 The driver launches Mechanical with a **visible GUI window** (`batch=False`) so sim's observation commands (`sim screenshot`, `sim inspect`) can capture the live window. Snippets execute inside Mechanical's IronPython interpreter via `run_python_script`, where `ExtAPI`, `DataModel`, `Model` are all available globals.
+
+`inspect session.summary` includes `ui_mode` and `batch`; for GUI-coupled
+workflows agents should confirm `ui_mode == "gui"` and `batch == false`
+before trusting screenshots to reflect SDK mutations.
 
 ## Supported versions
 

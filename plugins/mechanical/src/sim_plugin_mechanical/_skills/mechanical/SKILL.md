@@ -9,6 +9,10 @@ You are connected to **Ansys Mechanical** via sim-cli. This file is the
 **index**. It tells you where to look — it does not contain the content
 itself.
 
+This is **not** the Abaqus plugin. Do not run Abaqus `.inp` decks or
+Abaqus/CAE scripts here. Use `solver=abaqus` for Dassault SIMULIA Abaqus;
+use `solver=mechanical` only for Ansys Mechanical / PyMechanical sessions.
+
 The `/connect` response tells you which active layers apply:
 
 ```json
@@ -37,8 +41,9 @@ files.
    in-memory model. Mechanical's window on the desktop redraws after each
    call. Therefore `sim screenshot` (which grabs the desktop) always
    reflects the current SDK state. This coupling **only works with
-   `batch=False`** — so the driver defaults to GUI mode and refuses to
-   set `batch=True` unless the caller explicitly asks for `ui_mode=batch`.
+   `batch=False`** — so the driver defaults to GUI mode. Confirm both
+   `ui_mode == "gui"` and `batch == false` from `inspect session.summary`
+   before relying on screenshots for GUI sync.
 
 3. **Scripts run inside Mechanical's IronPython interpreter.** Globals
    `ExtAPI`, `DataModel`, `Model`, `Quantity`, `Tree` are already
