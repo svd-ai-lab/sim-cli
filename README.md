@@ -74,7 +74,7 @@ For the full driver protocol, server endpoints, and execution pipeline see [CLAU
 
 > **Names at a glance:** repo `svd-ai-lab/sim-cli` · PyPI distribution `sim-cli-core` · console command `sim` · import `import sim`. Yes, three different strings — the repo name predates the PyPI publish; the rest follow Python packaging convention.
 >
-> **Agent-assisted Windows install:** Hand [`agent-skills/install-sim-windows/SKILL.md`](agent-skills/install-sim-windows/SKILL.md) to your coding agent. It is a one-page setup guide for `uv`, `sim-cli-core`, China/restricted-network fallbacks, and optional commercial plugin wheelhouse install.
+> **Agent-assisted Windows install:** Hand [`agent-skills/install-sim-windows/SKILL.md`](agent-skills/install-sim-windows/SKILL.md) to your coding agent, or use [`agent-skills/install-sim-windows-cn/SKILL.md`](agent-skills/install-sim-windows-cn/SKILL.md) for China/restricted networks. Each is a one-page setup guide for `uv`, `sim-cli-core`, and optional commercial plugin wheelhouse install.
 
 ```bash
 # 1. On the host that has the solver installed, install sim core only

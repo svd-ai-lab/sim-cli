@@ -1,6 +1,6 @@
 ---
 name: install-sim-windows
-description: Install sim-cli on Windows for an agent, including China/restricted-network fallbacks, uv setup, sim-cli-core, and optional commercial plugin wheelhouse installation.
+description: Install sim-cli on Windows for an agent, including uv setup, sim-cli-core, and optional commercial plugin wheelhouse installation.
 ---
 
 # Install sim-cli on Windows
@@ -12,15 +12,13 @@ Set up `sim-cli` for this Windows user. Keep everything user-local. Do not insta
 Run in PowerShell.
 
 ```powershell
-# 1. Prefer existing uv; otherwise install uv through Python + China-friendly PyPI mirror.
+# 1. Prefer existing uv; otherwise install official uv.
 where.exe uv
 if ($LASTEXITCODE -eq 0) {
   $uv = "uv"
 } else {
-  $env:UV_DEFAULT_INDEX = "https://pypi.tuna.tsinghua.edu.cn/simple"
-  py -3 -m pip install --user -U uv -i $env:UV_DEFAULT_INDEX
-  $userBase = py -3 -m site --user-base
-  $uv = Join-Path $userBase "Scripts\uv.exe"
+  powershell -ExecutionPolicy Bypass -Command "irm https://astral.sh/uv/install.ps1 | iex"
+  $uv = Join-Path $env:USERPROFILE ".local\bin\uv.exe"
 }
 
 # 2. Create a private runtime.
@@ -31,9 +29,8 @@ New-Item -ItemType Directory -Force $root | Out-Null
 $py = Join-Path $venv "Scripts\python.exe"
 $sim = Join-Path $venv "Scripts\sim.exe"
 
-# 3. Install sim-cli core. Use mirror first; default PyPI is fine if mirror fails.
-$env:UV_DEFAULT_INDEX = "https://pypi.tuna.tsinghua.edu.cn/simple"
-& $uv pip install --python $py -U sim-cli-core -i $env:UV_DEFAULT_INDEX
+# 3. Install sim-cli core.
+& $uv pip install --python $py -U sim-cli-core
 
 # 4. If the user has a private/commercial wheelhouse zip from sim / Cloudflare R2 / support, install it.
 if (Test-Path ".\sim-commercial-plugins-win64.zip") {
@@ -62,6 +59,6 @@ if (-not (Test-Path ".\sim-commercial-plugins-win64.zip")) {
 
 - Commercial preset: COMSOL, LTspice, Fluent, MATLAB, Ansys Mechanical, Abaqus.
 - Do not install OpenFOAM, Cantera, CoolProp, PyBaMM, or demo/OSS plugins unless the user asks.
-- If `uv` install is blocked, ask the user for a proxy, local `uv.exe`, local Python installer, or a local wheelhouse.
+- If `uv` install is blocked, ask the user for a proxy, local `uv.exe`, local Python installer, or use the China/restricted-network install page.
 - If a commercial `sim check <solver>` fails, it usually means the vendor solver, license, SDK, or environment path is missing; do not call that a failed sim install.
 - Report back: `sim.exe` path, installed plugins, whether wheelhouse was used, and any blocked URL/domain.
