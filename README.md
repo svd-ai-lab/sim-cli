@@ -180,7 +180,7 @@ The manifest is anonymous-GET (no auth required) and updated whenever a new whee
 
 ## 🧪 Solver registry
 
-`sim-cli` core is **fully solver-agnostic** — it ships with **zero built-in drivers**. Every solver, including OpenFOAM, is reached through an **out-of-tree plugin package** registered via the `sim.drivers` entry-point group. Adding a new backend is a ~200-LOC `DriverProtocol` implementation in its own `sim-plugin-<name>` repo.
+`sim-cli` core is **fully solver-agnostic** — it ships with **zero built-in drivers**. Every solver, including OpenFOAM, is reached through a **plugin package** registered via the `sim.drivers` entry-point group. Adding a new backend is a ~200-LOC `DriverProtocol` implementation in its own `sim-plugin-<name>` repo.
 
 Plugin coverage spans CFD, multiphysics, electronics thermal, implicit and explicit structural FEA, pre/post-processing, mesh generation, embodied-AI / GPU physics, molecular dynamics, optimization / MDAO, battery modeling, thermo properties, power-systems and RF simulation, and discrete-event modeling. Browse the curated index:
 
@@ -227,7 +227,7 @@ Per-solver protocols, snippets, and demo workflows live in [`sim-skills`](https:
 
 | Command | What it does | Analogy |
 |---|---|---|
-| `sim plugin list / install / uninstall` | Manage out-of-tree solver plugins from the curated index | `npm install` |
+| `sim plugin list / install / uninstall` | Manage solver plugins from the curated index | `npm install` |
 | `sim check <solver>` | Detect installations + resolve a profile | `docker info` |
 | `sim env install <profile>` | Bootstrap a profile env (venv + pinned SDK) | `pyenv install` |
 | `sim env list [--catalogue]` | Show bootstrapped envs (and the full catalogue) | `pyenv versions` |
@@ -303,7 +303,7 @@ That is the entire setup — same `sim-cli-core` package on both sides, same wir
 
 ## 🔗 Related projects
 
-- **[`sim-plugin-index`](https://github.com/svd-ai-lab/sim-plugin-index)** — curated registry of out-of-tree solver plugins; what `sim plugin list / install` reads
+- **[`sim-plugin-index`](https://github.com/svd-ai-lab/sim-plugin-index)** — curated registry of solver plugins; what `sim plugin list / install` reads
 - **[`sim-skills`](https://github.com/svd-ai-lab/sim-skills)** — agent skills, snippets, and demo workflows for each supported solver
 - **[`sim-ltspice`](https://github.com/svd-ai-lab/sim-ltspice)** — standalone Python API for LTspice file formats (used by `sim-plugin-ltspice`)
 
