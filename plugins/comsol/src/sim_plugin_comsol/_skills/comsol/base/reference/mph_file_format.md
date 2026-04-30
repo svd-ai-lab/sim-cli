@@ -6,6 +6,16 @@
 
 When an agent needs to answer "what's in this `.mph`?" — physics tags, parameters, mesh size, whether it's solved — the historical answer was "spin up a 2 GB JVM." For inspection-only queries that's overkill. The stdlib reader (`sim_plugin_comsol.lib.mph_inspect`) collapses these into sub-second calls and is auto-invoked by the driver's diagnostic probes.
 
+Use this path for saved artifacts and offline diffs. For the current
+JPype session, prefer live runtime introspection first:
+
+```bash
+sim inspect comsol.model.describe_text
+sim inspect comsol.node.properties:<tag-or-dot-path>
+```
+
+See `runtime_introspection.md` for the live-session workflow.
+
 ## Archive layout
 
 | Entry | Purpose |

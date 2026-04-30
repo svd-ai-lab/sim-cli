@@ -1,8 +1,22 @@
 # COMSOL 6.4 notes
 
-Latest tested as of 2026 Q1. Drives cleanly via mph 1.2.x. The block-
-with-hole and surface-mount-package workflows in `base/workflows/` run
+Latest tested as of 2026 Q1. Drives cleanly via mph 1.2.x. The
+plugin-owned block-with-hole smoke workflow in `base/workflows/` runs
 unchanged on 6.4.
 
-This file exists so the layer is non-empty and `verify_skills_layout`
-passes. Per-release physics or solver default deltas land here.
+Record only differences confirmed by live introspection, official docs,
+or a reproduced workflow failure. Do not turn this file into a static API
+table.
+
+## Confirmed differences
+
+- None recorded yet.
+
+## Workarounds
+
+- None recorded yet.
+
+## Verification snippets
+
+- Use `base/reference/java_api_patterns.md` to confirm tags and
+  properties before applying any version-specific workaround.

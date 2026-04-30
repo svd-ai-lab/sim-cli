@@ -1,6 +1,6 @@
 ---
 name: comsol-sim
-description: Use when driving COMSOL Multiphysics through the sim runtime — building geometry, materials, physics, mesh, and solving via the JPype Java API, optionally with a human watching the COMSOL GUI client. Includes verification utilities to compensate for broken Windows image export.
+description: Use when driving COMSOL Multiphysics through the sim runtime — building, inspecting, debugging, and solving stateful COMSOL models through the JPype Java API, optionally with a human watching the COMSOL GUI client. Includes runtime introspection and verification utilities to compensate for broken Windows image export.
 ---
 
 # comsol-sim
@@ -38,14 +38,29 @@ single `mph` line (1.2.x). Always read `base/`, then your active
 
 | Path | What's there |
 |---|---|
-| `base/workflows/block_with_hole/` | Steady-state thermal of a heated block with a cylindrical hole. 6 numbered Python steps (`00_create_geometry.py` … `05_plot_temperature.py`). The canonical "smallest end-to-end" reference for this driver. |
-| `base/workflows/surface_mount_package/` | More realistic SMD package thermal model. 6 numbered steps + a `README.md` describing the geometry and acceptance criteria. |
+| `base/workflows/block_with_hole/` | Steady-state thermal of a heated block with a cylindrical hole. 6 numbered Python steps (`00_create_geometry.py` … `05_plot_temperature.py`). The smallest plugin-owned smoke/reference workflow for this driver. |
+| `base/workflows/model_review_loop.md` | Required checkpoint loop for geometry, materials, physics, mesh, study, and results. Use this before continuing after each meaningful edit. |
+| `base/workflows/debug_failed_exec.md` | Failure triage loop for a failed `sim exec`: inspect `last.result`, inspect live model state, inspect suspicious node properties, then retry with the smallest patch. |
+| `base/reference/runtime_introspection.md` | Live-session inspection contract: preferred `sim inspect` targets, compatibility rules, partial results, and raw Java fallbacks. |
+| `base/reference/java_api_patterns.md` | Stable Java API probing patterns: tags first, properties before `set`, selection checks, and version-safe try/except snippets. |
 | `base/reference/mph_file_format.md` | `.mph` is a ZIP archive — internal layout, the three `nodeType` variants (compact/solved/preview), the Global Parameter `T="33"` contract, and the stdlib `mph_inspect` reader. Read this when you need to introspect a `.mph` *without* spinning up `comsolmphserver`. |
+
+Larger engineering examples do not live in this plugin skill. Keep this
+plugin-owned content focused on the driver protocol, live introspection,
+debug loops, and the smallest smoke/reference workflow.
 
 Each numbered step is a self-contained snippet you submit via
 `sim exec` after `sim connect --solver comsol`. The snippets use the
 injected `model` object — they do NOT call `mph.start()` or open a
 client of their own.
+
+Before running a new or complex workflow, read
+[`base/reference/runtime_introspection.md`](base/reference/runtime_introspection.md)
+and
+[`base/workflows/model_review_loop.md`](base/workflows/model_review_loop.md).
+For failed snippets, switch immediately to
+[`base/workflows/debug_failed_exec.md`](base/workflows/debug_failed_exec.md)
+instead of guessing another full script.
 
 ### `solver/<active_solver_layer>/` — release specifics
 
@@ -59,8 +74,21 @@ Empty stubs by default; per-release deltas land here as discovered.
 ### `doc-search/` — local documentation lookup
 
 When a physics feature name, API method, or module capability is unknown,
-do **not** guess. Query the local COMSOL documentation that ships with
-every install:
+do **not** guess. Inspect the live model first:
+
+```bash
+sim inspect session.health
+sim inspect last.result
+sim inspect comsol.model.describe_text
+sim inspect comsol.node.properties:<tag-or-dot-path>
+```
+
+The COMSOL driver may not expose every inspect target on older plugin
+builds. If an inspect target is unavailable, use the raw Java fallback
+patterns in
+[`base/reference/java_api_patterns.md`](base/reference/java_api_patterns.md).
+Only after live introspection is insufficient, query the local COMSOL
+documentation that ships with every install:
 
 ```bash
 uv run --project <sim-skills>/comsol/doc-search sim-comsol-doc search "<term>" [--module <substring>]
@@ -133,6 +161,10 @@ See [`base/reference/mph_file_format.md`](base/reference/mph_file_format.md)
 for the archive layout, the `nodeType` variants, and the Global
 Parameter `T="33"` extraction contract.
 
+Use `.mph` archive inspection for saved artifacts and offline comparison.
+Use live runtime introspection for the current JPype session, especially
+before changing selections, physics features, studies, and result nodes.
+
 ---
 
 ## Headless `comsolbatch` (not yet implemented)
@@ -160,19 +192,35 @@ These add to — do not replace — the shared skill's hard constraints.
    numeric acceptance) instead of `model.result().export()` PNGs. The
    shared skill's `acceptance.md` explains why numeric acceptance
    beats visual acceptance anyway.
+3. **Never hardcode COMSOL property names before inspecting the live
+   node.** Prefer `sim inspect comsol.node.properties:<target>` or the
+   raw Java `properties()` pattern before calling `set(...)`.
+4. **Do not run long monolithic model builders.** Build one bounded
+   model layer, inspect the live state, then continue.
 
 ---
 
-## Required protocol (one paragraph)
+## Required protocol
 
-Follow the shared skill's required protocol for the **persistent
-session** model. COMSOL-specific steps: after `sim connect --solver
-comsol` and the Step-0 probe, pick a workflow under `base/workflows/`
-whose geometry and physics match the user's task, then execute its
-numbered snippets in order via `sim exec`, checking `sim inspect
-last.result` after each step for `ok=true`. After the final step,
-evaluate against the workflow's acceptance criteria (typically a probe
-value with a tolerance) per the shared skill's `acceptance.md`.
+COMSOL through sim is a persistent, inspectable modeling session. Treat
+it as a live engineering state, not as a one-shot code generator.
+
+1. Connect with `sim connect --solver comsol`.
+2. Run the shared Step-0 version probe and read `session.versions`.
+3. Inspect `sim inspect session.health`.
+4. Inspect the baseline model with `sim inspect comsol.model.describe_text`
+   when available.
+5. Execute one bounded modeling step with `sim exec`.
+6. Inspect `sim inspect last.result`.
+7. Inspect the changed model state with
+   `sim inspect comsol.model.describe_text` and, when needed,
+   `sim inspect comsol.node.properties:<tag-or-dot-path>`.
+8. Continue only after the live model matches the intended geometry,
+   materials, physics, mesh, study, and result state.
+
+For simple known-good smoke coverage, use the numbered snippets under
+`base/workflows/`. For realistic engineering examples, use project-local
+or user-provided recipes and apply the same checkpoint loop.
 
 ---
 
