@@ -26,7 +26,7 @@
 
 **English** · [Deutsch](docs/README.de.md) · [日本語](docs/README.ja.md) · [中文](docs/README.zh.md)
 
-[Why sim](#-why-sim) · [Quick Start](#-quick-start) · [Solvers](#-solver-registry) · [Commands](#-commands) · [Demo](#-demo) · [Skills](https://github.com/svd-ai-lab/sim-skills)
+[Why sim](#-why-sim) · [Quick Start](#-quick-start) · [Solvers](#-solver-registry) · [Commands](#-commands) · [Skills](https://github.com/svd-ai-lab/sim-skills)
 
 </div>
 
@@ -85,7 +85,7 @@ uv pip install sim-cli-core
 
 # 2. Install the plugin for the solver you actually want (browse the
 #    index with `sim plugin list`):
-sim plugin install <solver>     # e.g. ltspice, coolprop, pybamm
+sim plugin install <solver>     # e.g. ltspice
 
 # 3. Tell sim to look at this machine and pick the right SDK profile:
 sim check <solver>
@@ -115,7 +115,7 @@ uv pip install sim-cli-core
 
 # 2. Install the plugin for the solver you actually want (browse the
 #    index with `sim plugin list`):
-sim plugin install <solver>     # e.g. ltspice, coolprop, pybamm
+sim plugin install <solver>     # e.g. ltspice
 
 # 3. Tell sim to look at this machine and pick the right SDK profile:
 sim check <solver>
@@ -189,7 +189,7 @@ sim plugin list                  # what the curated index advertises
 sim plugin install <name>        # e.g. sim plugin install ltspice
 ```
 
-The index is served from [`sim-plugin-index`](https://github.com/svd-ai-lab/sim-plugin-index); reference plugins to read for shape: [`sim-plugin-coolprop`](https://github.com/svd-ai-lab/sim-plugin-coolprop) (one-shot, no SDK gate), [`sim-plugin-ltspice`](https://github.com/svd-ai-lab/sim-plugin-ltspice) (one-shot with vendor binary), [`sim-plugin-pybamm`](https://github.com/svd-ai-lab/sim-plugin-pybamm) (heavy SDK).
+The index is served from [`sim-plugin-index`](https://github.com/svd-ai-lab/sim-plugin-index). Reference implementation to read for shape: [`sim-plugin-ltspice`](https://github.com/svd-ai-lab/sim-plugin-ltspice).
 
 **Private plugins** (vendor-IP-sensitive backends not in the public index) install directly by URL — same `sim plugin install` flow:
 
@@ -199,16 +199,6 @@ sim plugin install git+https://github.com/<org>/sim-plugin-<name>
 ```
 
 Per-solver protocols, snippets, and demo workflows live in [`sim-skills`](https://github.com/svd-ai-lab/sim-skills) and the per-plugin repos.
-
----
-
-## 🎬 Demo
-
-> 📺 **Early preview:** [first walkthrough on YouTube](https://www.youtube.com/watch?v=3Fg6Oph44Ik) — rough cut, a polished recording is still wanted (see below).
-
-> **Recording in progress.** A short terminal capture of `sim connect → exec → inspect → screenshot` against a live solver session will land here.
->
-> Want to contribute the recording? Use [`vhs`](https://github.com/charmbracelet/vhs) or [`asciinema`](https://asciinema.org/) and open a PR against `assets/demo.gif`.
 
 ---
 
