@@ -226,6 +226,41 @@ def test_resolve_bare_name_falls_back_to_github(tmp_path: Path, monkeypatch):
     assert rs.pip_target == "https://gh.example/pybamm.whl"
 
 
+def test_resolve_name_at_version_uses_r2_filename_convention(tmp_path: Path, monkeypatch):
+    """name@<old-version>: when entry is from R2 manifest, build URL by
+    filename convention so old wheels (kept on R2 but not in manifest) resolve."""
+    _seed_caches(
+        tmp_path, monkeypatch,
+        r2_plugins={"comsol": {"version": "0.1.1",
+                                  "wheel": "https://cdn.svdailab.com/wheels/sim_plugin_comsol-0.1.1-py3-none-any.whl"}},
+    )
+    rs = resolve_source("comsol@0.1.0", offline=True)
+    assert rs.kind == "name-version"
+    assert rs.version == "0.1.0"
+    assert rs.pip_target == (
+        "https://cdn.svdailab.com/wheels/sim_plugin_comsol-0.1.0-py3-none-any.whl"
+    )
+
+
+def test_resolve_name_at_version_github_entry_falls_back_to_git(tmp_path: Path, monkeypatch):
+    """name@<version> with a community-catalogue entry that has a git field
+    still uses git+@v<version> (R2 convention only fires for cdn.svdailab.com URLs)."""
+    _seed_caches(
+        tmp_path, monkeypatch,
+        r2_plugins={},
+        github_plugins=[{
+            "name": "ltspice",
+            "license_class": "oss",
+            "git": "https://github.com/svd-ai-lab/sim-plugin-ltspice",
+            "latest_version": "0.2.1",
+            "latest_wheel_url": "https://github.com/svd-ai-lab/sim-plugin-ltspice/releases/download/v0.2.1/sim_plugin_ltspice-0.2.1-py3-none-any.whl",
+        }],
+    )
+    rs = resolve_source("ltspice@0.1.0", offline=True)
+    assert rs.kind == "name-version"
+    assert rs.pip_target == "git+https://github.com/svd-ai-lab/sim-plugin-ltspice@v0.1.0"
+
+
 def test_resolve_explicit_index_url_skips_chain(tmp_path: Path, monkeypatch):
     """Explicit index_url uses just that source — no R2 fallback."""
     _seed_caches(

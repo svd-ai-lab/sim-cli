@@ -1085,8 +1085,11 @@ def plugin_info_cmd(ctx, name):
 @click.argument("source")
 @click.option("-e", "--editable", is_flag=True,
               help="Editable install (pip install -e). For plugin authors.")
-@click.option("--upgrade", is_flag=True,
-              help="Pass --upgrade to pip.")
+@click.option("--upgrade/--no-upgrade", default=True,
+              help="Pass --upgrade to pip so the install replaces any "
+                   "existing version with whatever the source resolves to. "
+                   "Default: enabled. Use --no-upgrade to keep an existing "
+                   "install if one is already present.")
 @click.option("--offline", is_flag=True,
               help="Use only the local cached index; no network calls.")
 @click.option("--no-sync", "no_sync", is_flag=True,

@@ -234,6 +234,20 @@ def resolve_source(source: str, *, offline: bool = False,
         if entry.get("latest_version") == version and entry.get("latest_wheel_url"):
             return ResolvedSource(kind="name-version", raw=s, name=name, version=version,
                                    pip_target=str(entry["latest_wheel_url"]))
+        # If the entry came from the R2 manifest, all versioned wheels live at a
+        # predictable path — construct the pinned URL by filename convention so
+        # ``name@<old-version>`` resolves without needing every version listed
+        # in the manifest. (R2 keeps every published wheel; manifest only tracks
+        # latest.)
+        latest_url = str(entry.get("latest_wheel_url") or "")
+        if latest_url.startswith("https://cdn.svdailab.com/wheels/"):
+            return ResolvedSource(
+                kind="name-version", raw=s, name=name, version=version,
+                pip_target=(
+                    f"https://cdn.svdailab.com/wheels/"
+                    f"sim_plugin_{name}-{version}-py3-none-any.whl"
+                ),
+            )
         git = entry.get("git")
         if git:
             return ResolvedSource(kind="name-version", raw=s, name=name, version=version,
