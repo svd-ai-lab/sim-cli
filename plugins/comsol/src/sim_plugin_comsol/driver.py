@@ -64,6 +64,41 @@ class ComsolLifecycleError(RuntimeError):
         return " | ".join(bits)
 
 
+_COMSOL_UI_MODE_ALIASES = {
+    "": "server-graphics",
+    "gui": "server-graphics",
+    "visible": "server-graphics",
+    "graphics": "server-graphics",
+    "server_graphics": "server-graphics",
+    "server-graphics": "server-graphics",
+    "headless": "headless",
+    "none": "headless",
+    "desktop": "server-graphics",
+    "desktop-inspection": "server-graphics",
+}
+
+_COMSOL_UI_MODE_NOTES = {
+    "gui": (
+        "ui_mode='gui' is a legacy alias for server-graphics: COMSOL "
+        "server-side plot windows may appear, but full Model Builder is "
+        "not attached to the live session."
+    ),
+    "visible": "ui_mode='visible' is treated as server-graphics.",
+    "graphics": "ui_mode='graphics' is treated as server-graphics.",
+    "server_graphics": "ui_mode='server_graphics' is treated as server-graphics.",
+    "desktop": (
+        "ui_mode='desktop' is not a live shared Desktop mode yet. The "
+        "current launch uses server-graphics; save the .mph artifact and "
+        "open it in COMSOL Desktop for inspection."
+    ),
+    "desktop-inspection": (
+        "desktop-inspection is an artifact workflow, not a live session "
+        "mode. The current launch uses server-graphics; open the saved .mph "
+        "artifact in COMSOL Desktop for Model Builder inspection."
+    ),
+}
+
+
 # ── Channel #4 — default SDK attribute readers (COMSOL / MPh Model Java API) ──
 def _default_comsol_readers() -> list[tuple[str, object]]:
     """Each reader is (label, callable(session) -> value). The session is
@@ -673,6 +708,76 @@ class ComsolDriver:
             return "comsol.server.busy_timeout"
         return "comsol.modelutil.failure"
 
+    def _normalize_ui_mode(self, ui_mode: str | None) -> tuple[str, str | None]:
+        requested = (ui_mode or "").strip().lower()
+        effective = _COMSOL_UI_MODE_ALIASES.get(requested)
+        if effective is None:
+            valid = ", ".join(sorted(set(_COMSOL_UI_MODE_ALIASES.values())))
+            raise ValueError(
+                f"unknown COMSOL ui_mode={ui_mode!r}; expected one of: {valid}"
+            )
+        return effective, _COMSOL_UI_MODE_NOTES.get(requested)
+
+    def _ui_capabilities(self, effective_ui_mode: str | None = None) -> dict:
+        mode = effective_ui_mode or self._ui_mode or "headless"
+        server_graphics = mode == "server-graphics"
+        return {
+            "server_graphics": server_graphics,
+            "plot_windows": server_graphics,
+            "model_builder_live": False,
+            "desktop_inspection": "artifact",
+            "shared_desktop": False,
+            "screenshot_source": "codex-desktop-or-sim-remote",
+        }
+
+    def _visible_windows(self) -> list[dict]:
+        """Best-effort visible COMSOL windows for tracked server/client PIDs."""
+        if os.name != "nt":
+            return []
+
+        tracked = {
+            getattr(self._server_proc, "pid", None): "server",
+            getattr(self._client_proc, "pid", None): "client",
+        }
+        tracked.pop(None, None)
+        if not tracked:
+            return []
+
+        try:
+            import ctypes
+            import ctypes.wintypes
+
+            user32 = ctypes.windll.user32
+            windows: list[dict] = []
+
+            @ctypes.WINFUNCTYPE(
+                ctypes.wintypes.BOOL,
+                ctypes.wintypes.HWND,
+                ctypes.wintypes.LPARAM,
+            )
+            def enum_window(hwnd, _lparam):
+                if not user32.IsWindowVisible(hwnd):
+                    return True
+                pid = ctypes.wintypes.DWORD()
+                user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+                role = tracked.get(int(pid.value))
+                if role is None:
+                    return True
+                title = ctypes.create_unicode_buffer(512)
+                user32.GetWindowTextW(hwnd, title, 512)
+                if title.value:
+                    windows.append({
+                        "pid": int(pid.value),
+                        "role": role,
+                        "title": title.value,
+                    })
+                return True
+
+            user32.EnumWindows(enum_window, 0)
+            return windows
+        except Exception:
+            return []
+
     def health(self) -> dict:
         """Best-effort live-session health for `session.summary` / diagnostics."""
         server_returncode = self._server_proc.poll() if self._server_proc is not None else None
@@ -718,6 +823,10 @@ class ComsolDriver:
             "message": message,
             "session_id": self._session_id,
             "ui_mode": self._ui_mode,
+            "requested_ui_mode": self._launch_options.get("requested_ui_mode"),
+            "effective_ui_mode": self._ui_mode,
+            "ui_note": self._launch_options.get("ui_note"),
+            "ui_capabilities": self._ui_capabilities(),
             "port": self._port,
             "server_pid": getattr(self._server_proc, "pid", None),
             "server_running": server_running,
@@ -729,6 +838,7 @@ class ComsolDriver:
             "client_log_path": str(self._client_log_path) if self._client_log_path else None,
             "modelutil_connected": modelutil_connected,
             "model_tags": model_tags,
+            "windows": self._visible_windows(),
             "last_disconnect_reason": self._last_disconnect_reason,
             "launch_options": self._launch_options,
         }
@@ -738,6 +848,28 @@ class ComsolDriver:
     def query(self, name: str) -> dict:
         if name in {"health", "session.health"}:
             return self.health()
+        if name in {"ui.modes", "session.ui_modes"}:
+            return {
+                "ok": True,
+                "modes": {
+                    "headless": "COMSOL server API session without intentional visible UI.",
+                    "server-graphics": (
+                        "COMSOL server API session with server-side graphics; "
+                        "plot windows may be visible, but Model Builder is not "
+                        "attached live."
+                    ),
+                    "desktop-inspection": (
+                        "Save the .mph artifact, then open it in full COMSOL "
+                        "Desktop for Model Builder inspection. This is not "
+                        "live-synchronized with the server session."
+                    ),
+                    "shared-desktop": (
+                        "Future mode: full COMSOL Desktop attached to the same "
+                        "live server-side model."
+                    ),
+                },
+                "aliases": dict(_COMSOL_UI_MODE_ALIASES),
+            }
         return {"ok": False, "error": f"unknown inspect target: {name}"}
 
     def _check_port(self, port: int, timeout: float = 2) -> bool:
@@ -771,18 +903,22 @@ class ComsolDriver:
         password: str | None = None,
         **kwargs,
     ) -> dict:
-        """Launch comsolmphserver + optional GUI client, connect via JPype.
+        """Launch comsolmphserver and connect via JPype.
 
         1. Start `comsolmphserver.exe` as compute backend
         2. Wait for it to listen on the port
         3. Connect via `ModelUtil.connect()` from JPype
-        4. If ui_mode == 'gui', launch `comsolmphclient.exe` (visual GUI attached)
+        4. If ui_mode resolves to 'server-graphics', keep COMSOL server-side
+           graphics enabled so plot windows can appear. This is not a live
+           Model Builder desktop attachment.
         """
         import subprocess
 
         workspace = kwargs.pop("workspace", None)
         cwd = kwargs.pop("cwd", None)
         port = kwargs.pop("port", None)
+        requested_ui_mode = ui_mode
+        effective_ui_mode, ui_note = self._normalize_ui_mode(ui_mode)
         if port is not None:
             self._port = int(port)
         self._session_id = str(uuid.uuid4())
@@ -795,14 +931,15 @@ class ComsolDriver:
         password = password or os.environ.get("COMSOL_PASSWORD", "")
         bin_dir = os.path.join(root, "bin", "win64")
         server_exe = os.path.join(bin_dir, "comsolmphserver.exe")
-        client_exe = os.path.join(bin_dir, "comsolmphclient.exe")
 
         if not os.path.isfile(server_exe):
             raise RuntimeError(f"comsolmphserver not found at {server_exe}")
 
         self._launch_options = {
             "mode": mode,
-            "ui_mode": ui_mode,
+            "requested_ui_mode": requested_ui_mode,
+            "ui_mode": effective_ui_mode,
+            "ui_note": ui_note,
             "processors": processors,
             "comsol_root": root,
             "workspace": workspace,
@@ -821,9 +958,17 @@ class ComsolDriver:
             raise err
 
         # -login auto: use cached credentials set via `comsolmphserver -login force`
+        server_args = [
+            server_exe,
+            "-port", str(self._port),
+            "-multi", "on",
+            "-login", "auto",
+            "-silent",
+        ]
+        if effective_ui_mode == "server-graphics":
+            server_args += ["-graphics", "-3drend", "sw"]
         self._server_proc = subprocess.Popen(
-            [server_exe, "-port", str(self._port), "-multi", "on",
-             "-login", "auto", "-silent", "-graphics", "-3drend", "sw"],
+            server_args,
             stdout=self._server_log_handle,
             stderr=subprocess.STDOUT,
         )
@@ -880,39 +1025,6 @@ class ComsolDriver:
         ModelUtil.setServerBusyHandler(ServerBusyHandler(30000))
         self._model_util = ModelUtil
 
-        if ui_mode in ("gui", "desktop") and os.path.isfile(client_exe):
-            client_args = [client_exe, "-port", str(self._port), "-login", "auto"]
-            cs_user = os.environ.get("COMSOL_USER")
-            cs_pass = os.environ.get("COMSOL_PASSWORD")
-            if cs_user and cs_pass:
-                client_args += ["-username", cs_user, "-password", cs_pass]
-            self._client_log_path, self._client_log_handle = self._open_log("comsol-mphclient")
-            self._client_proc = subprocess.Popen(
-                client_args,
-                stdout=self._client_log_handle,
-                stderr=subprocess.STDOUT,
-            )
-            # The GUI client shows a "Connect to COMSOL Server" login dialog on
-            # startup before it creates an Untitled model. This dialog blocks
-            # ModelUtil.tags() from returning anything — causing a deadlock:
-            # launch() polls for tags while the dialog waits for a click that
-            # only comes after launch() returns. Fix: dismiss the dialog here,
-            # before we start polling tags.
-            from sim.gui import GuiController  # noqa: PLC0415
-            _preflight_gui = GuiController(
-                process_name_substrings=self.GUI_PROCESS_FILTER,
-                workdir=str(self._sim_dir),
-            )
-            _dlg = _preflight_gui.find(title_contains="连接到", timeout_s=10)
-            if _dlg is None:
-                _dlg = _preflight_gui.find(title_contains="Connect to COMSOL", timeout_s=3)
-            if _dlg is not None:
-                for _btn in ("确定", "OK"):
-                    _r = _dlg.click(_btn)
-                    if _r.get("ok"):
-                        break
-                _preflight_gui.wait_until_window_gone("连接到", timeout_s=10)
-
         # Create model. Guard against the server surviving a previous
         # disconnect(): if "Model1" already exists on the server, that tag
         # belongs to a stale session — remove it first, then create fresh.
@@ -943,15 +1055,15 @@ class ComsolDriver:
             self._close_log_handles()
             raise err from exc
 
-        self._ui_mode = ui_mode
+        self._ui_mode = effective_ui_mode
         self._connected_at = time.time()
         self._run_count = 0
         self._last_run = None
         self._last_health = self.health()
 
         # Flip probes to GUI-aware variant + construct gui actuation facade
-        # when the client window is actually up. Headless launches skip both.
-        gui_mode = ui_mode in ("gui", "desktop")
+        # when server-side graphics may show windows. Headless launches skip both.
+        gui_mode = effective_ui_mode == "server-graphics"
         if gui_mode:
             self.probes = _default_comsol_probes(enable_gui=True)
             from sim.gui import GuiController  # noqa: PLC0415
@@ -965,7 +1077,11 @@ class ComsolDriver:
             "session_id": self._session_id,
             "mode": "client-server",
             "source": "launch",
-            "ui_mode": ui_mode,
+            "requested_ui_mode": requested_ui_mode,
+            "ui_mode": effective_ui_mode,
+            "effective_ui_mode": effective_ui_mode,
+            "ui_note": ui_note,
+            "ui_capabilities": self._ui_capabilities(effective_ui_mode),
             "port": self._port,
             "model_tag": str(self._model.tag()),
             "server_log_path": str(self._server_log_path) if self._server_log_path else None,

@@ -153,6 +153,22 @@ class TestRunFile:
 
 
 class TestLifecycleDiagnostics:
+    def test_legacy_gui_mode_is_server_graphics_alias(self):
+        driver = ComsolDriver()
+
+        effective, note = driver._normalize_ui_mode("gui")
+
+        assert effective == "server-graphics"
+        assert "legacy alias" in note
+
+    def test_desktop_mode_is_not_reported_as_live_desktop(self):
+        driver = ComsolDriver()
+
+        effective, note = driver._normalize_ui_mode("desktop")
+
+        assert effective == "server-graphics"
+        assert "not a live shared Desktop mode yet" in note
+
     def test_wait_for_port_reports_early_server_exit_with_log_tail(self, tmp_path):
         driver = ComsolDriver()
         driver._sim_dir = tmp_path / ".sim"
@@ -187,6 +203,38 @@ class TestLifecycleDiagnostics:
         assert health["code"] == "comsol.server.process_exited"
         assert health["server_pid"] == 2468
         assert health["server_returncode"] == 9
+        assert health["effective_ui_mode"] is None
+        assert health["ui_capabilities"]["model_builder_live"] is False
+
+    def test_health_reports_ui_metadata_and_windows(self, monkeypatch):
+        driver = ComsolDriver()
+        driver._session_id = "s-test"
+        driver._model = object()
+        driver._server_proc = FakeProcess(pid=2468, returncode=None)
+        driver._port = 65000
+        driver._ui_mode = "server-graphics"
+        driver._launch_options = {
+            "requested_ui_mode": "gui",
+            "ui_mode": "server-graphics",
+            "ui_note": "legacy alias",
+        }
+        monkeypatch.setattr(driver, "_check_port", lambda *_args, **_kwargs: True)
+        monkeypatch.setattr(
+            driver,
+            "_visible_windows",
+            lambda: [{"pid": 2468, "role": "server", "title": "Plot 1"}],
+        )
+
+        health = driver.health()
+
+        assert health["connected"] is True
+        assert health["requested_ui_mode"] == "gui"
+        assert health["effective_ui_mode"] == "server-graphics"
+        assert health["ui_capabilities"]["plot_windows"] is True
+        assert health["ui_capabilities"]["model_builder_live"] is False
+        assert health["windows"] == [
+            {"pid": 2468, "role": "server", "title": "Plot 1"}
+        ]
 
     def test_query_session_health(self):
         driver = ComsolDriver()
@@ -196,6 +244,16 @@ class TestLifecycleDiagnostics:
         assert health["ok"] is False
         assert health["connected"] is False
         assert health["code"] == "comsol.session.disconnected"
+
+    def test_query_ui_modes(self):
+        driver = ComsolDriver()
+
+        modes = driver.query("ui.modes")
+
+        assert modes["ok"] is True
+        assert "server-graphics" in modes["modes"]
+        assert "shared-desktop" in modes["modes"]
+        assert modes["aliases"]["gui"] == "server-graphics"
 
 
 def _make_import_blocker(blocked: str):

@@ -176,30 +176,53 @@ value with a tolerance) per the shared skill's `acceptance.md`.
 
 ---
 
-## GUI actuation
+## GUI and visual inspection modes
 
-When launched with `ui_mode=gui` (the default), a `gui` object is
-injected into the `sim exec` namespace. `/connect` advertises it under
-`data.tools = ["gui"]`. See
-[`sim-skills/sim-cli/gui/SKILL.md`](../sim-cli/gui/SKILL.md) for the full
-API.
+COMSOL has several visual surfaces. Do not collapse them into one
+"GUI mode" in your reasoning or status reports:
 
-COMSOL-specific dialogs you will run into:
+| Mode | What it means | Live with agent edits? |
+|---|---|---|
+| `headless` | `comsolmphserver` API session with no intentional visible windows. | Yes, API session only. |
+| `server-graphics` | `comsolmphserver -graphics`; plot windows may appear when a result plot is run. This is the current default effective mode. Legacy `ui_mode=gui` is an alias for this. | Yes for the server-side model, but there is no Model Builder tree. |
+| `desktop-inspection` | Save a `.mph` artifact, then open it in full COMSOL Desktop / Model Builder. | No. It is an inspection copy unless explicitly reloaded. |
+| `shared-desktop` | Future target: full COMSOL Desktop attached to the same live server-side model. | Not implemented yet. |
 
-- **"连接到 COMSOL Multiphysics Server"** — pops every launch. Cortex
-  waits at the login page until dismissed even though the JPype
-  backend is already connected. **Dismiss in the first `sim exec`
-  after `sim connect`**:
-  `gui.find("连接到").click("确定")`. English-locale installs show
-  *"Connect to COMSOL"* — see
-  `../sim-cli/gui/snippets/dismiss_login_dialog.py` for a locale-robust
-  variant.
-- **"是否保存更改?"** / **"Save changes?"** — appears on disconnect
-  if the model has unsaved edits. Click **保存 / Save** or
-  **不保存 / Don't save** depending on intent before
-  `sim disconnect`.
+Use `sim inspect session.health` or `sim exec` target `session.health`
+to check `requested_ui_mode`, `effective_ui_mode`, `ui_capabilities`,
+PIDs, logs, and visible COMSOL window titles. Treat `model_builder_live:
+false` as authoritative: agent-side JPype edits will not automatically
+refresh a separately opened COMSOL Desktop window.
 
-Prefer the JPype path (`model.*`, `ModelUtil.*`) for anything
-programmable — `gui` is only for the desktop client's UI surface
-that has no Java equivalent (file pickers, license dialogs, the
-login prompt).
+### Screenshot responsibility
+
+On a Codex Desktop host such as Win1, prefer Codex's own desktop
+screenshot/view tools for visual verification. They see the same
+interactive desktop the user sees and avoid adding solver-specific
+screenshot commands to sim-cli. Use `sim screenshot` only when the
+solver GUI is on a remote host that Codex cannot directly capture.
+
+When you perform GUI-visible work, verify after every significant action:
+
+1. Launch or connect.
+2. Geometry build or import.
+3. Material assignment.
+4. Physics setup.
+5. Mesh build.
+6. Solve and result plot.
+7. Save/open `.mph` for Desktop inspection when Model Builder review is needed.
+
+### COMSOL-specific dialogs
+
+- **"连接到 COMSOL Multiphysics Server"** / **"Connect to COMSOL
+  Multiphysics Server"** may be a stale or separate Desktop/client
+  login dialog. It does not prove the JPype server session failed.
+  Verify by checking `session.health`, the port, PIDs, and visible
+  window titles.
+- **"是否保存更改?"** / **"Save changes?"** appears on Desktop close if
+  a separately opened `.mph` has unsaved edits. Choose Save or Don't Save
+  according to the user's intent.
+
+Prefer the JPype path (`model.*`, `ModelUtil.*`) for programmable model
+construction and solving. Use Desktop inspection only when a human needs
+to see the Model Builder tree or interact with file/dialog surfaces.
