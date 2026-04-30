@@ -186,13 +186,61 @@ COMSOL has several visual surfaces. Do not collapse them into one
 | `headless` | `comsolmphserver` API session with no intentional visible windows. | Yes, API session only. |
 | `server-graphics` | `comsolmphserver -graphics`; plot windows may appear when a result plot is run. This is the current default effective mode. Legacy `ui_mode=gui` is an alias for this. | Yes for the server-side model, but there is no Model Builder tree. |
 | `desktop-inspection` | Save a `.mph` artifact, then open it in full COMSOL Desktop / Model Builder. | No. It is an inspection copy unless explicitly reloaded. |
-| `shared-desktop` | Future target: full COMSOL Desktop attached to the same live server-side model. | Not implemented yet. |
+| `shared-desktop` | Full COMSOL Desktop attached to the same server, with the agent binding to the Desktop's active model tag. Request from sim-cli with `--driver-option visual_mode=shared-desktop`. | Yes, when `model_builder_live: true`. |
 
 Use `sim inspect session.health` or `sim exec` target `session.health`
 to check `requested_ui_mode`, `effective_ui_mode`, `ui_capabilities`,
 PIDs, logs, and visible COMSOL window titles. Treat `model_builder_live:
 false` as authoritative: agent-side JPype edits will not automatically
 refresh a separately opened COMSOL Desktop window.
+
+Shared-desktop gotcha verified on Win1 with COMSOL 6.4: launching
+`comsol.exe mphclient -host localhost -port <port>` does attach a full
+Desktop to `comsolmphserver`. However, if JPype creates a separate
+server model tag with `ModelUtil.create("SharedProbe")`, the Desktop
+does not automatically switch from its active `Model1` tree to that
+new tag. When JPype instead mutates `ModelUtil.model("Model1")`, the
+Desktop refreshes: the title, Model Builder tree, and Graphics view
+show the API-created component/geometry. The implemented
+`shared-desktop` mode therefore discovers or negotiates the active
+Desktop model tag and routes agent edits to that tag.
+
+Use:
+
+```powershell
+sim connect --solver comsol --ui-mode gui --driver-option visual_mode=shared-desktop
+```
+
+Then verify `session.health`: `effective_ui_mode` should be
+`shared-desktop`, `ui_capabilities.model_builder_live` should be `true`,
+and `active_model_tag` should name the model that agent snippets will
+mutate.
+
+### Attach-only external server
+
+If repeated API client disconnects occur, or a user wants one COMSOL
+server to survive multiple sim sessions, use an externally managed server
+instead of mixing sim and ad hoc JPype scripts. The user or agent starts
+`comsolmphserver` first in an interactive Windows shell:
+
+```powershell
+& "C:\Program Files\COMSOL\COMSOL64\Multiphysics\bin\win64\comsolmphserver.exe" -port 2036 -multi on -login auto -silent
+```
+
+Then connect through sim with explicit attach-only ownership:
+
+```powershell
+sim connect --solver comsol --ui-mode gui `
+  --driver-option attach_only=true `
+  --driver-option port=2036 `
+  --driver-option visual_mode=shared-desktop
+```
+
+In attach-only mode, `session.health` should show
+`server_owner: "external"` and `attach_only: true`. `sim disconnect`
+disconnects the JPype client and any plugin-launched Desktop client, but
+does not kill the external `comsolmphserver`. Keep all agent operations
+inside the sim session; use ad hoc JPype only as a diagnostic escape hatch.
 
 ### Screenshot responsibility
 

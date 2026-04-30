@@ -169,6 +169,22 @@ class TestLifecycleDiagnostics:
         assert effective == "server-graphics"
         assert "not a live shared Desktop mode yet" in note
 
+    def test_visual_mode_can_request_shared_desktop(self):
+        driver = ComsolDriver()
+
+        effective, note, visual = driver._resolve_visual_mode(
+            ui_mode="gui",
+            visual_mode="shared-desktop",
+        )
+
+        assert effective == "shared-desktop"
+        assert visual == "shared-desktop"
+        assert "active model tag" in note
+        caps = driver._ui_capabilities(effective)
+        assert caps["shared_desktop"] is True
+        assert caps["model_builder_live"] is True
+        assert caps["server_graphics"] is False
+
     def test_wait_for_port_reports_early_server_exit_with_log_tail(self, tmp_path):
         driver = ComsolDriver()
         driver._sim_dir = tmp_path / ".sim"
@@ -235,6 +251,85 @@ class TestLifecycleDiagnostics:
         assert health["windows"] == [
             {"pid": 2468, "role": "server", "title": "Plot 1"}
         ]
+
+    def test_health_reports_shared_desktop_metadata(self, monkeypatch):
+        driver = ComsolDriver()
+        driver._session_id = "s-test"
+        driver._model = object()
+        driver._server_proc = FakeProcess(pid=2468, returncode=None)
+        driver._client_proc = FakeProcess(pid=1357, returncode=0)
+        driver._desktop_pid = 9753
+        driver._active_model_tag = "Model1"
+        driver._port = 65000
+        driver._ui_mode = "shared-desktop"
+        driver._launch_options = {
+            "requested_ui_mode": "gui",
+            "ui_mode": "shared-desktop",
+            "visual_mode": "shared-desktop",
+        }
+        monkeypatch.setattr(driver, "_check_port", lambda *_args, **_kwargs: True)
+        monkeypatch.setattr(
+            driver,
+            "_visible_windows",
+            lambda: [{
+                "pid": 9753,
+                "role": "desktop",
+                "title": "Untitled.mph - COMSOL Multiphysics",
+            }],
+        )
+
+        health = driver.health()
+
+        assert health["connected"] is True
+        assert health["effective_ui_mode"] == "shared-desktop"
+        assert health["ui_capabilities"]["model_builder_live"] is True
+        assert health["desktop_pid"] == 9753
+        assert health["active_model_tag"] == "Model1"
+        assert health["windows"][0]["role"] == "desktop"
+
+    def test_health_reports_attach_only_external_server(self, monkeypatch):
+        driver = ComsolDriver()
+        driver._session_id = "s-test"
+        driver._model = object()
+        driver._server_proc = None
+        driver._server_owner = "external"
+        driver._attach_only = True
+        driver._active_model_tag = "Model1"
+        driver._port = 65000
+        driver._ui_mode = "headless"
+        driver._launch_options = {
+            "requested_ui_mode": "no_gui",
+            "ui_mode": "headless",
+            "attach_only": True,
+            "server_owner": "external",
+            "server_host": "localhost",
+        }
+        monkeypatch.setattr(driver, "_check_port", lambda *_args, **_kwargs: True)
+
+        health = driver.health()
+
+        assert health["connected"] is True
+        assert health["server_pid"] is None
+        assert health["server_owner"] == "external"
+        assert health["attach_only"] is True
+        assert health["active_model_tag"] == "Model1"
+
+    def test_attach_only_terminate_does_not_kill_external_server(self, monkeypatch):
+        driver = ComsolDriver()
+        server = FakeProcess(pid=2468, returncode=None)
+        client = FakeProcess(pid=1357, returncode=None)
+        killed_pids = []
+        driver._server_proc = server
+        driver._client_proc = client
+        driver._desktop_pid = 9753
+        driver._server_owner = "external"
+        monkeypatch.setattr(driver, "_kill_pid", lambda pid: killed_pids.append(pid))
+
+        driver._terminate_processes()
+
+        assert server.killed is False
+        assert client.killed is True
+        assert killed_pids == [9753]
 
     def test_query_session_health(self):
         driver = ComsolDriver()
