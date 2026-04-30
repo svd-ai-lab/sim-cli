@@ -1,4 +1,0 @@
-interface:
-  display_name: "Install sim in China"
-  short_description: "China Windows install guide"
-  default_prompt: "Use this skill to install sim-cli on Windows in China or a restricted network."

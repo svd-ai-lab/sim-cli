@@ -1,100 +1,67 @@
 ---
 name: install-sim-windows
-description: Install sim-cli on Windows for agent-driven commercial solver workflows. Use when asked to set up uv, sim-cli-core, and selected sim plugins such as COMSOL, LTspice, Fluent, MATLAB, Ansys Mechanical, or Abaqus on a normal network.
+description: Install sim-cli on Windows for an agent, including China/restricted-network fallbacks, uv setup, sim-cli-core, and optional commercial plugin wheelhouse installation.
 ---
 
-# Install sim on Windows
+# Install sim-cli on Windows
 
-## Overview
+Set up `sim-cli` for this Windows user. Keep everything user-local. Do not install vendor solvers or licenses; only install the sim runtime and wrapper plugins.
 
-Set up `sim-cli` on a Windows host for an agent. Prefer user-local installs, avoid changing global PATH or global pip configuration unless the user asks, and install only sim wrapper plugins, not vendor solver binaries or licenses.
+## Commands
 
-## Plugin Preset
-
-Use these plugin names unless the user asks for a different set:
-
-| Solver label | sim plugin | Python package |
-| --- | --- | --- |
-| COMSOL Multiphysics | `comsol` | `sim-plugin-comsol` |
-| LTspice | `ltspice` | `sim-plugin-ltspice` |
-| Ansys Fluent | `fluent` | `sim-plugin-fluent` |
-| MATLAB | `matlab` | `sim-plugin-matlab` |
-| Ansys Mechanical | `mechanical` | `sim-plugin-mechanical` |
-| Abaqus/CAE | `abaqus` | `sim-plugin-abaqus` |
-
-Do not install OpenFOAM, Cantera, CoolProp, PyBaMM, or other OSS/demo plugins unless the user explicitly asks. Explain that commercial solver plugins require the user's existing licensed COMSOL, Ansys, MATLAB, Abaqus, or LTspice installation where applicable.
-
-## Workflow
-
-Run commands in PowerShell.
-
-1. Check for existing tools:
+Run in PowerShell.
 
 ```powershell
+# 1. Prefer existing uv; otherwise install uv through Python + China-friendly PyPI mirror.
 where.exe uv
-uv --version
-py -0p
-python --version
-```
+if ($LASTEXITCODE -eq 0) {
+  $uv = "uv"
+} else {
+  $env:UV_DEFAULT_INDEX = "https://pypi.tuna.tsinghua.edu.cn/simple"
+  py -3 -m pip install --user -U uv -i $env:UV_DEFAULT_INDEX
+  $userBase = py -3 -m site --user-base
+  $uv = Join-Path $userBase "Scripts\uv.exe"
+}
 
-2. Install `uv` if it is missing:
-
-```powershell
-powershell -ExecutionPolicy Bypass -Command "irm https://astral.sh/uv/install.ps1 | iex"
-```
-
-If official `uv` install is blocked, ask the user for a proxy, local `uv.exe`, local Python installer, or use the China-specific skill.
-
-3. Create a user-local runtime:
-
-```powershell
+# 2. Create a private runtime.
 $root = Join-Path $env:LOCALAPPDATA "sim-cli"
 $venv = Join-Path $root "venv"
 New-Item -ItemType Directory -Force $root | Out-Null
-uv venv $venv --python 3.12
+& $uv venv $venv --python 3.12
 $py = Join-Path $venv "Scripts\python.exe"
 $sim = Join-Path $venv "Scripts\sim.exe"
-```
 
-If Python 3.12 cannot be resolved, use an installed Python 3.10, 3.11, or 3.12.
+# 3. Install sim-cli core. Use mirror first; default PyPI is fine if mirror fails.
+$env:UV_DEFAULT_INDEX = "https://pypi.tuna.tsinghua.edu.cn/simple"
+& $uv pip install --python $py -U sim-cli-core -i $env:UV_DEFAULT_INDEX
 
-4. Install `sim-cli-core`:
+# 4. If the user has a private/commercial wheelhouse zip from sim / Cloudflare R2 / support, install it.
+if (Test-Path ".\sim-commercial-plugins-win64.zip") {
+  $wheelhouse = Join-Path $root "wheelhouse"
+  Expand-Archive .\sim-commercial-plugins-win64.zip -DestinationPath $wheelhouse -Force
+  & $uv pip install --python $py "$wheelhouse\*.whl"
+}
 
-```powershell
-uv pip install --python $py -U sim-cli-core
-```
+# 5. Otherwise install the commercial preset by plugin name when network access allows it.
+if (-not (Test-Path ".\sim-commercial-plugins-win64.zip")) {
+  & $sim plugin install comsol
+  & $sim plugin install ltspice
+  & $sim plugin install fluent
+  & $sim plugin install matlab
+  & $sim plugin install mechanical
+  & $sim plugin install abaqus
+}
 
-5. Install private/commercial plugins from a wheelhouse zip when the user has one:
-
-```powershell
-$wheelhouse = Join-Path $root "wheelhouse"
-Expand-Archive .\sim-commercial-plugins-win64.zip -DestinationPath $wheelhouse -Force
-uv pip install --python $py "$wheelhouse\*.whl"
-```
-
-Use this path for licensed/private plugins distributed through Cloudflare R2, CDN, customer portal, or support. It avoids GitHub auth and pip private-index complexity.
-
-6. If the user does not have a wheelhouse, try the named plugin flow:
-
-```powershell
-& $sim plugin install comsol
-& $sim plugin install ltspice
-& $sim plugin install fluent
-& $sim plugin install matlab
-& $sim plugin install mechanical
-& $sim plugin install abaqus
-```
-
-7. Validate:
-
-```powershell
+# 6. Validate.
 & $sim --help
 & $sim plugin list
 & $sim check ltspice
 ```
 
-Run `sim check <solver>` only for solvers the user has installed. For commercial solvers, a failed check usually means the vendor software, license, environment variable, or SDK path is missing; do not treat that as a failed sim install.
+## Notes
 
-## Report Back
-
-Return the installed `sim.exe` path, selected plugins, wheelhouse path if used, and any blocked domains. If setup could not complete, give the exact command that failed and the shortest next action.
+- Commercial preset: COMSOL, LTspice, Fluent, MATLAB, Ansys Mechanical, Abaqus.
+- Do not install OpenFOAM, Cantera, CoolProp, PyBaMM, or demo/OSS plugins unless the user asks.
+- If `uv` install is blocked, ask the user for a proxy, local `uv.exe`, local Python installer, or a local wheelhouse.
+- If a commercial `sim check <solver>` fails, it usually means the vendor solver, license, SDK, or environment path is missing; do not call that a failed sim install.
+- Report back: `sim.exe` path, installed plugins, whether wheelhouse was used, and any blocked URL/domain.
