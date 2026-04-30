@@ -6,7 +6,7 @@ import sys
 
 from click.testing import CliRunner
 
-from sim.cli import main
+from sim.cli import _parse_driver_options, main
 
 
 def test_version():
@@ -23,6 +23,29 @@ def test_help():
     result = runner.invoke(main, ["--help"])
     assert result.exit_code == 0
     assert "sim" in result.output
+
+
+def test_connect_help_exposes_driver_options():
+    runner = CliRunner()
+    result = runner.invoke(main, ["connect", "--help"])
+    assert result.exit_code == 0
+    assert "--driver-option" in result.output
+
+
+def test_parse_driver_options():
+    assert _parse_driver_options((
+        "worker_count=2",
+        "mode_hint=fast",
+        "enable_cache=false",
+        "relaxation=0.25",
+        "cwd=C:/tmp/solver-case",
+    )) == {
+        "worker_count": 2,
+        "mode_hint": "fast",
+        "enable_cache": False,
+        "relaxation": 0.25,
+        "cwd": "C:/tmp/solver-case",
+    }
 
 
 def test_python_m_sim_invocation():

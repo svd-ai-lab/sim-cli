@@ -16,7 +16,7 @@ per-session endpoints return 400. See
 `docs/architecture/multi-session-and-config.md` for the full contract.
 
 Endpoints:
-    POST /connect     {solver, mode, ui_mode, processors}     → header-less
+    POST /connect     {solver, mode, ui_mode, processors, ...} → header-less
     POST /exec        {code, label}                           → header-routed
     POST /run         {script, solver}                        → header-less (one-shot)
     GET  /inspect/<name>                                      → header-routed
@@ -38,7 +38,7 @@ from typing import Any
 
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 def _sanitize_for_json(obj):
@@ -76,7 +76,16 @@ class ConnectRequest(BaseModel):
     mode: str = "meshing"
     ui_mode: str = "gui"
     processors: int = 2
-    workspace: str | None = None  # passed through to driver.launch(workspace=...)
+    workspace: str | None = None
+    driver_options: dict[str, Any] = Field(default_factory=dict)
+
+
+def _connect_reserved_driver_option_keys() -> set[str]:
+    """Return connect request fields that cannot be overridden by driver options."""
+    fields = getattr(ConnectRequest, "model_fields", None)
+    if fields is None:
+        fields = getattr(ConnectRequest, "__fields__", {})
+    return set(fields) - {"driver_options"}
 
 
 class ExecRequest(BaseModel):
@@ -98,6 +107,9 @@ class SessionState:
     mode: str | None = None
     ui_mode: str | None = None
     processors: int = 1
+    workspace: str | None = None
+    driver_options: dict = field(default_factory=dict)
+    launch_options: dict = field(default_factory=dict)
     connected_at: float | None = None
     run_count: int = 0
     driver: Any = None
@@ -273,13 +285,23 @@ def connect(req: ConnectRequest):
                     "two concurrent sessions on the same driver aren't supported yet",
                 )
 
+    reserved_seen = _connect_reserved_driver_option_keys() & set(req.driver_options)
+    if reserved_seen:
+        names = ", ".join(sorted(reserved_seen))
+        raise HTTPException(
+            400,
+            f"driver_options may not override reserved connect keys: {names}",
+        )
+
     launch_kwargs: dict = {
         "mode": req.mode,
         "ui_mode": req.ui_mode,
         "processors": req.processors,
+        **req.driver_options,
     }
     if req.workspace is not None:
         launch_kwargs["workspace"] = req.workspace
+        launch_kwargs.setdefault("cwd", req.workspace)
     try:
         info = driver.launch(**launch_kwargs)
     except HTTPException:
@@ -297,6 +319,9 @@ def connect(req: ConnectRequest):
         mode=req.mode,
         ui_mode=req.ui_mode,
         processors=req.processors,
+        workspace=req.workspace,
+        driver_options=req.driver_options,
+        launch_options=info.get("launch_options") or {},
         connected_at=time.time(),
         run_count=0,
         driver=driver,
@@ -323,6 +348,9 @@ def connect(req: ConnectRequest):
             "solver": req.solver,
             "mode": state.mode,
             "ui_mode": state.ui_mode,
+            "workspace": state.workspace,
+            "driver_options": state.driver_options,
+            "launch_options": state.launch_options,
             "connected_at": state.connected_at,
             "run_count": 0,
             "profile": state.profile,
@@ -395,6 +423,9 @@ def inspect(
                 "solver": state.solver,
                 "mode": state.mode,
                 "ui_mode": state.ui_mode,
+                "workspace": state.workspace,
+                "driver_options": state.driver_options,
+                "launch_options": state.launch_options,
                 "connected_at": state.connected_at,
                 "run_count": state.run_count,
                 "profile": state.profile,
@@ -442,6 +473,9 @@ def ps():
             "mode": s.mode,
             "ui_mode": s.ui_mode,
             "processors": s.processors,
+            "workspace": s.workspace,
+            "driver_options": s.driver_options,
+            "launch_options": s.launch_options,
             "connected_at": s.connected_at,
             "run_count": s.run_count,
             "profile": s.profile,

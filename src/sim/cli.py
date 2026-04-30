@@ -496,6 +496,47 @@ def _print_followup_hints(run_id, stdout_path, stderr_path, delta):
         click.echo(f"        cat {delta[0]['path']}     # likely solver log (largest write)")
 
 
+def _parse_driver_option_value(value: str):
+    lowered = value.lower()
+    if lowered == "true":
+        return True
+    if lowered == "false":
+        return False
+    try:
+        return int(value)
+    except ValueError:
+        pass
+    try:
+        return float(value)
+    except ValueError:
+        return value
+
+
+def _parse_driver_options(items: tuple[str, ...]) -> dict:
+    """Parse generic driver launch passthrough options from KEY=VALUE pairs."""
+    parsed: dict = {}
+    for item in items:
+        if "=" not in item:
+            raise click.BadParameter(
+                f"{item!r} is not KEY=VALUE",
+                param_hint="--driver-option",
+            )
+        key, value = item.split("=", 1)
+        key = key.strip()
+        if not key:
+            raise click.BadParameter(
+                f"{item!r} has an empty key",
+                param_hint="--driver-option",
+            )
+        if key in parsed:
+            raise click.BadParameter(
+                f"{key!r} was provided more than once",
+                param_hint="--driver-option",
+            )
+        parsed[key] = _parse_driver_option_value(value)
+    return parsed
+
+
 # ── connect (persistent session) ────────────────────────────────────────────
 
 @main.command()
@@ -505,10 +546,18 @@ def _print_followup_hints(run_id, stdout_path, stderr_path, delta):
 @click.option("--processors", default=1, type=int)
 @click.option("--workspace", default=None,
               help="Solver-specific working dir (e.g. flotherm FLOUSERDIR).")
+@click.option("--driver-option", "driver_options", multiple=True,
+              metavar="KEY=VALUE",
+              help="Generic driver launch option passthrough. Repeat as needed.")
 @click.pass_context
-def connect(ctx, solver, mode, ui_mode, processors, workspace):
+def connect(ctx, solver, mode, ui_mode, processors, workspace, driver_options):
     """Launch a solver and hold a persistent session."""
     from sim.session import SessionClient
+
+    try:
+        parsed_driver_options = _parse_driver_options(driver_options)
+    except click.BadParameter as exc:
+        raise click.ClickException(str(exc)) from exc
 
     client = SessionClient(host=ctx.obj["host"], port=ctx.obj["port"],
                            session_id=ctx.obj.get("session"))
@@ -518,6 +567,7 @@ def connect(ctx, solver, mode, ui_mode, processors, workspace):
         ui_mode=ui_mode,
         processors=processors,
         workspace=workspace,
+        driver_options=parsed_driver_options,
     )
 
     if ctx.obj["json"]:
