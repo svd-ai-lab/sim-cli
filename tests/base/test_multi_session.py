@@ -26,10 +26,12 @@ class FakeDriver:
         self.name = name
         self._launched = False
         self._disconnected = False
+        self.launch_kwargs = None
 
     def launch(self, **kwargs):
         self._launched = True
-        return {"ok": True}
+        self.launch_kwargs = kwargs
+        return {"ok": True, "launch_options": kwargs}
 
     def run(self, code: str, label: str = "snippet"):
         return {
@@ -99,6 +101,44 @@ class TestMultiSession:
         assert body["default_session"] is None
         solvers = {s["solver"] for s in body["sessions"]}
         assert solvers == {"alpha", "beta"}
+
+    def test_connect_forwards_launch_options(self, client, fake_drivers):
+        r = client.post("/connect", json={
+            "solver": "alpha",
+            "mode": "solver",
+            "ui_mode": "no_gui",
+            "processors": 2,
+            "workspace": "C:/tmp/solver-case",
+            "driver_options": {
+                "worker_count": 2,
+                "mode_hint": "fast",
+            },
+        })
+        assert r.status_code == 200, r.text
+        assert fake_drivers["alpha"].launch_kwargs == {
+            "mode": "solver",
+            "ui_mode": "no_gui",
+            "processors": 2,
+            "worker_count": 2,
+            "mode_hint": "fast",
+            "workspace": "C:/tmp/solver-case",
+            "cwd": "C:/tmp/solver-case",
+        }
+        data = r.json()["data"]
+        assert data["driver_options"] == {
+            "worker_count": 2,
+            "mode_hint": "fast",
+        }
+        assert data["workspace"] == "C:/tmp/solver-case"
+        assert data["launch_options"]["cwd"] == "C:/tmp/solver-case"
+
+    def test_connect_rejects_reserved_driver_options(self, client, fake_drivers):
+        r = client.post("/connect", json={
+            "solver": "alpha",
+            "driver_options": {"mode": "solver"},
+        })
+        assert r.status_code == 400
+        assert "reserved connect keys" in r.json()["detail"]
 
     def test_exec_routes_by_header(self, client, fake_drivers):
         sid_a = _connect(client, "alpha")
