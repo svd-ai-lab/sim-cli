@@ -135,6 +135,38 @@ sim --host <server-ip> disconnect
 
 ---
 
+## 📦 Curated 插件
+
+精选插件 wheel 发布在公共 CDN：
+
+```
+https://cdn.svdailab.com/manifest.json
+```
+
+Manifest schema：
+
+```json
+{
+  "updated": "<ISO date>",
+  "plugins": {
+    "<name>": {
+      "version": "<X.Y.Z>",
+      "wheel": "https://cdn.svdailab.com/wheels/<file>.whl"
+    }
+  }
+}
+```
+
+用任意 HTTP 客户端拉取 manifest，挑出需要的 wheel，然后：
+
+```bash
+sim plugin install <wheel-url>
+```
+
+Manifest 匿名 GET 即可（无需认证），每次有新 wheel 发布时更新。
+
+---
+
 ## 🎬 演示
 
 > 📺 **早期预览：** 一段 agent 驱动真实求解器会话的粗剪版本正在整理中，仍欢迎贡献更精致的录制（见下文）。

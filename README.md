@@ -146,6 +146,38 @@ That's the full loop: **detect → bootstrap → launch → drive → observe �
 
 ---
 
+## 📦 Curated plugins
+
+Curated plugin wheels are published to a public CDN at:
+
+```
+https://cdn.svdailab.com/manifest.json
+```
+
+Manifest schema:
+
+```json
+{
+  "updated": "<ISO date>",
+  "plugins": {
+    "<name>": {
+      "version": "<X.Y.Z>",
+      "wheel": "https://cdn.svdailab.com/wheels/<file>.whl"
+    }
+  }
+}
+```
+
+Fetch the manifest with any HTTP client, pick the wheel you want, then:
+
+```bash
+sim plugin install <wheel-url>
+```
+
+The manifest is anonymous-GET (no auth required) and updated whenever a new wheel ships.
+
+---
+
 ## 🧪 Solver registry
 
 `sim-cli` core is **fully solver-agnostic** — it ships with **zero built-in drivers**. Every solver, including OpenFOAM, is reached through an **out-of-tree plugin package** registered via the `sim.drivers` entry-point group. Adding a new backend is a ~200-LOC `DriverProtocol` implementation in its own `sim-plugin-<name>` repo.
