@@ -153,6 +153,24 @@ These add to — do not replace — the shared skill's hard constraints.
    `base/reference/runtime_patterns.md` for the full Fluent dependency
    rules.
 
+## Flamelet/PDF table workflows
+
+For partially premixed steady-diffusion flamelet workflows, do not rely on
+this top-level file alone. Load:
+
+- `base/reference/task_templates.md` — Template 5, required inputs and step order.
+- `base/reference/runtime_patterns.md` — staged flamelet/PDF dependency chain.
+- `base/reference/acceptance_checklists.md` — Checklist 5, including table
+  persistence and readback.
+- `base/snippets/setup_partially_premixed_flamelet.py`
+- `base/snippets/write_pdf_table.py`
+- `base/snippets/read_case_pdf_data.py`
+- `base/snippets/inspect_reacting_bc_scalars.py`
+
+Important short version: import CHEMKIN as `"flamelet-mixture"`, generate
+flamelets and the PDF table, persist the table with `write_pdf_cmd(...)`,
+and restart/postprocess with `read_case -> read_pdf -> read_data`.
+
 ---
 
 ## Required protocol (one paragraph)
@@ -200,4 +218,6 @@ Fluent-specific dialogs you may want to dismiss or answer:
 
 Always try the programmatic path first (`session.tui.*`,
 `solver.settings.*`, `meshing.workflow.*`) — `gui` is for the UI-only
-surface the SDK doesn't cover.
+surface the SDK doesn't cover. For complex physics setup, GUI is an
+oracle: use it to discover hidden activation order, capture the journal,
+then translate the successful sequence back into Settings/TUI snippets.

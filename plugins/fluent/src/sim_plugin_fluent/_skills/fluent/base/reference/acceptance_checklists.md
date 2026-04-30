@@ -140,6 +140,38 @@ Items marked **[OPTIONAL]** are only applicable if the user requested that outpu
 
 ---
 
+## Checklist 5 — Partially Premixed Flamelet/PDF Table Completion
+
+### Session and Launch State
+- **[REQUIRED]** `session.summary.connected = true`
+- **[REQUIRED]** `session.summary.mode` or `solver_kind = "solver"`
+- **[REQUIRED]** `launch_options` or session metadata reports the intended Fluent `dimension`, `precision`, processor count, and `cwd` when sim-cli launched the session
+
+### Flamelet and Table Generation
+- **[REQUIRED]** CHEMKIN import used material name `flamelet-mixture`
+- **[REQUIRED]** `setup-partially-premixed-flamelet` completed with `flamelets_generated = true`
+- **[REQUIRED]** `setup-partially-premixed-flamelet` completed with `pdf_table_generated = true`
+- **[REQUIRED]** No undocumented internal Scheme procedure was used to generate flamelets
+
+### Persistence and Readback
+- **[REQUIRED]** `.pdf` table file exists and `write-pdf-table` reports `pdf_written = true`
+- **[REQUIRED]** Case and data files exist after the solve step
+- **[REQUIRED]** Fresh-session readback succeeds in this order: `read_case -> read_pdf -> read_data`
+- **[REQUIRED]** Readback does not report `PDF data has not been loaded`
+
+### Physical Output
+- **[REQUIRED]** At least one physical output is extracted and reported with values or artifact paths
+- **[RECOMMENDED]** Scalar ranges, profile CSV, or figure artifacts are produced for reacting scalars
+- **[RECOMMENDED]** Any table clipping warnings, such as enthalpy bounds exceeded, are quoted in the report
+
+### What "task complete" does NOT mean here:
+- `calc_pdf()` returned without saving the PDF table
+- Case/data files were written but not reopened in a fresh session
+- Fluent residuals decreased without any physical output extraction
+- A GUI workflow worked once but was not converted to a reproducible Settings/TUI/PyFluent snippet
+
+---
+
 ## General Rules for Completion Claims
 
 1. **Never claim complete based on exit code alone.** Exit code 0 means the CLI sent the snippet; it does not mean the simulation step produced correct results.

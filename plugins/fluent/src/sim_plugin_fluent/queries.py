@@ -33,6 +33,8 @@ def _session_summary(runtime: "PyFluentRuntime") -> dict:
     return {
         "session_id": info.session_id,
         "solver_kind": info.mode,
+        "source": info.source,
+        "launch_options": info.launch_options or {},
         "has_last_run": runtime.last_record is not None,
     }
 

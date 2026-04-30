@@ -88,6 +88,44 @@ major_minor = ".".join(version.split(".")[:2])  # "0.38"
 
 Use this to log which version is active, not to branch code paths. If an API call fails, introspect the object rather than checking the version string.
 
+## Pattern 8: Discover the physics workflow before automating it
+
+For complex physics models, API discovery alone is not enough. First
+identify the solver workflow in the Fluent User's Guide and Theory Guide,
+then map each documented step to Settings API, TUI, journal, or GUI
+automation.
+
+Use this pattern for models whose setup depends on generated/imported
+auxiliary data, staged dialogs, or hidden state, including combustion,
+radiation, multiphase, acoustics, and reacting-flow chemistry.
+
+Recommended sequence:
+
+1. Search the local Fluent docs for the model name and 2-3 workflow terms,
+   such as `non-premixed pdf`, `flamelet table`, `radiation do`, or
+   `species mechanism`.
+2. Read the User's Guide workflow before writing code. Identify whether
+   required data is generated in Fluent, imported from a file, or produced
+   by a separate utility.
+3. Read the Theory Guide for model assumptions and required transported
+   scalars. Do not infer these from PyFluent object names alone.
+4. Only then map the workflow to `solver.settings.*` or `solver.tui.*`.
+   Treat inactive Settings objects as evidence that a prior documented
+   workflow step is missing, not as an invitation to call internal Scheme.
+5. If the Settings API exposes an object but not the full workflow, capture
+   a short journal or TUI transcript once, then convert it into a stable
+   scripted sequence.
+
+Lookup-table models deserve extra caution. Commands named like `read_*`,
+`write_*`, and `calc_*` may operate on an already-created table rather than
+creating all prerequisites. Confirm from the docs whether the table must be
+generated, imported, or read during model activation before using the
+command in automation.
+
+Do not call undocumented internal Scheme procedures with guessed arguments.
+If a public Settings/TUI path is not available, isolate probes in a fresh
+small session and record the missing public workflow step.
+
 ## When to use TUI instead
 
 If introspection reveals the settings API path is complex or unreliable for a specific operation, use TUI directly. Common cases where TUI is simpler:

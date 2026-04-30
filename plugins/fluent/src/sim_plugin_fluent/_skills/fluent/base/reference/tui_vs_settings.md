@@ -18,6 +18,35 @@ Use whichever gets the job done. Neither is always better.
 - **Quick report extraction** — when you just need a number printed to stdout
 - **Undocumented operations** — some Fluent features don't have settings API equivalents yet
 
+## When neither Settings nor TUI is enough by itself
+
+Some Fluent features are workflows rather than single settings: they create
+lookup tables, import mechanism files, initialize hidden model state, or
+depend on staged dialogs. For these, first read the Fluent User's Guide /
+Theory Guide workflow and identify the required artifacts. Then choose the
+least brittle automation surface for each documented step.
+
+Practical rules:
+
+- If a Settings object is present but inactive, check which documented
+  prerequisite has not been completed before trying a lower-level call.
+- For flamelet/PDF workflows, import CHEMKIN as the material name
+  `"flamelet-mixture"` after enabling the partially premixed model. A
+  generic material import can succeed while leaving flamelet table controls
+  unusable.
+- Fluent's CHEMKIN TUI import order is material name, mechanism file, then
+  thermo file. Quote every argument and avoid paths with spaces.
+- If a TUI command prompts for several values, capture a complete journal or
+  prompt transcript once; do not guess a positional argument list from the
+  generated Python wrapper.
+- If a command says `read_*` or `write_*`, verify whether it creates data or
+  only imports/exports data created elsewhere.
+- For generated PDF tables, `case/data` is not the whole persistent state:
+  write the table with `write_pdf_cmd(...)` and read it back between
+  `read_case(...)` and `read_data(...)`.
+- Avoid undocumented internal Scheme procedures as production automation.
+  Use them only for read-only introspection or not at all.
+
 ## Anti-patterns to avoid
 
 - **Don't use TUI for everything** — settings API is better for structured setup (BCs, materials, models) because it's introspectable and type-safe

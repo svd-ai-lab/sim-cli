@@ -29,6 +29,7 @@ class PyFluentRuntime:
         mode: str,
         source: str,
         session: object,
+        launch_options: dict | None = None,
     ) -> SessionInfo:
         """Register a live session and mark it as active."""
         info = SessionInfo(
@@ -36,6 +37,7 @@ class PyFluentRuntime:
             mode=mode,
             source=source,
             session=session,
+            launch_options=launch_options or {},
         )
         self._sessions[session_id] = info
         self._active_id = session_id

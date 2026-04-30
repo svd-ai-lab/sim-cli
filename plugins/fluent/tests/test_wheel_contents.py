@@ -36,6 +36,24 @@ def test_wheel_contains_skills(tmp_path: Path) -> None:
         "sim_plugin_fluent/__init__.py",
         "sim_plugin_fluent/driver.py",
         "sim_plugin_fluent/_skills/fluent/SKILL.md",
+        "sim_plugin_fluent/_skills/fluent/base/snippets/setup_partially_premixed_flamelet.py",
+        "sim_plugin_fluent/_skills/fluent/base/snippets/write_pdf_table.py",
+        "sim_plugin_fluent/_skills/fluent/base/snippets/read_case_pdf_data.py",
+        "sim_plugin_fluent/_skills/fluent/base/snippets/inspect_reacting_bc_scalars.py",
     }
     missing = required - names
     assert not missing, f"missing from wheel: {missing}"
+
+
+def test_flamelet_skill_regression_text() -> None:
+    skill_root = REPO_ROOT / "src" / "sim_plugin_fluent" / "_skills" / "fluent"
+    task_templates = (skill_root / "base" / "reference" / "task_templates.md").read_text(
+        encoding="utf-8"
+    )
+    acceptance = (skill_root / "base" / "reference" / "acceptance_checklists.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "Partially Premixed Flamelet/PDF Table Run" in task_templates
+    assert "write_pdf_cmd" in task_templates
+    assert "read_case -> read_pdf -> read_data" in acceptance

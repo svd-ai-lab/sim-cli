@@ -31,6 +31,12 @@ _DEFAULT_FLUENT_SDK_ATTRS: list[str] = [
     "setup.models.energy.enabled",
 ]
 
+_FLUENT_ARTIFACT_ROLES = {
+    ".pdf": "pdf-table",
+    ".fla": "flamelet",
+    ".json": "result-json",
+}
+
 
 def _default_fluent_probes(enable_gui: bool = False) -> list:
     """Fluent probe list — generic_probes() + SDK readers + optional GUI.
@@ -73,6 +79,47 @@ def _ansys_code_to_short(code: str) -> str:
     if len(code) == 3 and code.isdigit():
         return f"{code[:2]}.{code[2]}"
     return code
+
+
+def _normalize_launch_options(
+    *,
+    mode: str,
+    ui_mode: str,
+    dimension: int | None,
+    precision: str,
+    processors: int | None,
+    processor_count: int | None,
+    cwd: str | os.PathLike[str] | None,
+) -> dict:
+    """Validate and normalize launch options before passing them to PyFluent."""
+    if mode not in {"meshing", "solver"}:
+        raise ValueError("mode must be 'meshing' or 'solver'")
+    if dimension is not None and dimension not in {2, 3}:
+        raise ValueError("dimension must be 2, 3, or None")
+    if precision not in {"single", "double"}:
+        raise ValueError("precision must be 'single' or 'double'")
+    if processors is not None and processor_count is not None and processors != processor_count:
+        raise ValueError("processors and processor_count disagree")
+    normalized_processor_count = processor_count if processor_count is not None else processors
+    if normalized_processor_count is not None and normalized_processor_count < 1:
+        raise ValueError("processor_count must be >= 1")
+    normalized_cwd = str(Path(cwd).resolve()) if cwd is not None else None
+    return {
+        "mode": mode,
+        "ui_mode": ui_mode,
+        "dimension": dimension,
+        "precision": precision,
+        "processor_count": normalized_processor_count,
+        "cwd": normalized_cwd,
+    }
+
+
+def _fluent_artifact_role(path: str, current_role: str) -> str:
+    low = path.lower()
+    for suffix, role in _FLUENT_ARTIFACT_ROLES.items():
+        if low.endswith(suffix):
+            return role
+    return current_role
 
 
 def _path_to_fluent_install(path: Path, source: str) -> "SolverInstall | None":
@@ -335,6 +382,11 @@ class PyFluentDriver:
         password: str | None = None,
         ui_mode: str = "gui",
         processors: int | None = None,
+        processor_count: int | None = None,
+        dimension: int | None = None,
+        precision: str = "double",
+        cwd: str | os.PathLike[str] | None = None,
+        workspace: str | os.PathLike[str] | None = None,
         **kwargs,
     ) -> dict:
         """
@@ -346,10 +398,18 @@ class PyFluentDriver:
                               v0 detects mode as "solver" for remote connections.
             ui_mode: "gui" (default) opens the Fluent GUI for visual confirmation;
                      "no_gui" for headless runs.
+            processors/processor_count: Number of Fluent compute processes.
+            dimension: 2 or 3 for local solver launches.
+            precision: "single" or "double".
+            cwd/workspace: Working directory for Fluent and run artifact discovery.
 
         Returns:
             {"ok": True, "session_id": "...", "mode": "...", "source": "..."}
         """
+        if kwargs:
+            names = ", ".join(sorted(kwargs))
+            raise ValueError(f"unknown Fluent launch option(s): {names}")
+
         try:
             import ansys.fluent.core as pyfluent  # noqa: PLC0415
         except ImportError as exc:
@@ -373,12 +433,29 @@ class PyFluentDriver:
                     Path(awp241) / "fluent"
                 )
 
+        launch_options = _normalize_launch_options(
+            mode=mode,
+            ui_mode=ui_mode,
+            dimension=dimension,
+            precision=precision,
+            processors=processors,
+            processor_count=processor_count,
+            cwd=cwd if cwd is not None else workspace,
+        )
+
         if ip is not None and port is not None:
             session = pyfluent.connect_to_fluent(
                 ip=ip, port=port, password=password or ""
             )
             source = "connection"
             mode = "solver"
+            launch_options = {
+                **launch_options,
+                "mode": mode,
+                "ip": ip,
+                "port": port,
+                "cwd": launch_options.get("cwd"),
+            }
         else:
             # Ensure Fluent binds to 127.0.0.1 (via REMOTING_SERVER_ADDRESS)
             # so pyfluent's localhost check passes when reading back the
@@ -387,16 +464,31 @@ class PyFluentDriver:
             if not pyfluent.config.launch_fluent_ip:
                 pyfluent.config.launch_fluent_ip = "127.0.0.1"
 
-            launch_kwargs = {"ui_mode": ui_mode}
+            launch_kwargs = {
+                "ui_mode": ui_mode,
+                "precision": precision,
+            }
             if mode == "meshing":
                 launch_kwargs["mode"] = "meshing"
-            if processors is not None:
-                launch_kwargs["processor_count"] = processors
+            else:
+                launch_kwargs["mode"] = "solver"
+            if dimension is not None:
+                launch_kwargs["dimension"] = dimension
+            if launch_options["processor_count"] is not None:
+                launch_kwargs["processor_count"] = launch_options["processor_count"]
+            if launch_options["cwd"] is not None:
+                launch_kwargs["cwd"] = launch_options["cwd"]
             session = pyfluent.launch_fluent(**launch_kwargs)
             source = "launch"
 
         session_id = str(uuid.uuid4())
-        info = self._runtime.register_session(session_id, mode, source, session)
+        info = self._runtime.register_session(
+            session_id,
+            mode,
+            source,
+            session,
+            launch_options=launch_options,
+        )
         # Auto-enable GUI probes when the session is actually running with a
         # visible GUI. Headless (no_gui/hidden_gui) sessions don't benefit —
         # the screenshot would be blank and the dialog enum would find nothing
@@ -437,7 +529,9 @@ class PyFluentDriver:
         # Snapshot workdir BEFORE the snippet runs so WorkdirDiffProbe can
         # later emit only newly-introduced files as Artifacts. The snapshot
         # is a list of relative paths.
-        workdir_path = Path(self._runtime._sim_dir)
+        session_info = self._runtime.get_active_session()
+        launch_options = session_info.launch_options if session_info is not None else {}
+        workdir_path = Path(launch_options.get("cwd") or self._runtime._sim_dir)
         try:
             workdir_path.mkdir(parents=True, exist_ok=True)
             before = sorted(
@@ -458,7 +552,6 @@ class PyFluentDriver:
 
         # Build the inspect context from what the runtime captured. ok=False
         # gets mapped to exit_code=1 so ProcessMetaProbe treats it as failure.
-        session_info = self._runtime.get_active_session()
         session_ns: dict = {}
         if session_info is not None:
             session_ns["session"] = session_info.session
@@ -492,6 +585,8 @@ class PyFluentDriver:
             extras=extras,
         )
         diags, arts = collect_diagnostics(self.probes, ctx)
+        for art in arts:
+            art.role = _fluent_artifact_role(art.path, art.role)
         out["diagnostics"] = [d.to_dict() for d in diags]
         out["artifacts"] = [a.to_dict() for a in arts]
         return out

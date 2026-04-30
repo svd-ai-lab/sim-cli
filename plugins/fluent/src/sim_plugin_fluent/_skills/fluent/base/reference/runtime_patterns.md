@@ -43,6 +43,17 @@ InitializeWorkflow → ImportCAD → CreateRegions → LocalSizing
 ReadCase → ReadData → MeshCheck → Iterate → ExtractResults
 ```
 
+### Partially premixed flamelet/PDF
+
+```
+ReadMeshOrCase → SetDimension/Axisymmetric → Energy/Turbulence
+→ PartiallyPremixedModel → CHEMKINImportAsFlameletMixture
+→ SetFuelOxidizerStreams → CalcFlamelets → CalcPDFTable
+→ WritePDFTable → InspectBoundaryScalars → SetCFDBoundaries
+→ InitializeOrRestart → Iterate → WriteCaseData
+→ FreshSessionReadCase → ReadPDFTable → ReadData → ExtractResults
+```
+
 If a step is skippable (e.g. `LocalSizing` defaults are acceptable),
 explicitly note in the report that it was skipped and why. Do not
 silently drop steps.
@@ -71,3 +82,46 @@ See `tui_vs_settings.md`. Short version: prefer the Settings API for
 new workflows; fall back to TUI commands only for features the Settings
 API has not yet surfaced (named expression tagging in 0.37, some
 solution-controls knobs). The Settings API is the durable interface.
+
+---
+
+## Pattern 10 — Reacting PDF/flamelet runs need staged physical state
+
+Lookup-table and transported-PDF combustion models are not just model
+toggles. They often require imported/generated chemistry data, boundary
+composition setup, and a physically developed initial solution before
+the production solve.
+
+For partially premixed steady-diffusion flamelet/PDF table workflows:
+
+1. Set `species.model.option = "partially-premixed-combustion"` first.
+2. Set the chemistry state relation and energy treatment before importing
+   CHEMKIN.
+3. Import CHEMKIN with the material name `"flamelet-mixture"`, followed by
+   the mechanism and thermo file paths.
+4. Set fuel/oxidizer stream composition in
+   `partially_premixed_model_options.boundary`.
+5. Generate flamelets with `root.flamelet.parameters.calc_fla()`.
+6. Generate the PDF table with `root.table.calc_pdf()`.
+7. Persist the table separately with `root.table.write_pdf_cmd(...)`.
+8. On restart or postprocessing, read in the order
+   `read_case -> read_pdf -> read_data`.
+
+For Composition PDF Transport in particular:
+
+1. Import the CHEMKIN mechanism and thermodynamic data first.
+2. Enable the PDF transport model and verify the selected mixture
+   material and number of volumetric species.
+3. Set only the explicitly listed inlet species mass fractions; the
+   final species may be a balance species that cannot be created as a
+   boundary entry.
+4. Prefer restarting from a developed finite-rate, EDC, non-premixed, or
+   partially-premixed solution instead of cold-starting from a mesh.
+5. Treat particle tracking and residual decrease as necessary but not
+   sufficient. Monitor temperature/species profiles, outlet composition,
+   and heat balance until the composition statistics stop moving.
+
+If a short cold-start run produces ambient downstream profiles, do not
+spend more iterations blindly. Confirm that the model has a valid
+reacting initial field and that boundary compositions survived the model
+switch.

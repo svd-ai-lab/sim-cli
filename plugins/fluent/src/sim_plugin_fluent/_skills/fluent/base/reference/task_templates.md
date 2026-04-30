@@ -156,9 +156,59 @@ Verify that the sim runtime is correctly configured and can start a Fluent sessi
 
 ---
 
+## Template 5 — Partially Premixed Flamelet/PDF Table Run
+
+### Goal
+Create or load a Fluent reacting-flow case that uses the partially premixed steady-diffusion flamelet/PDF table path, then prove the table can be persisted, reloaded, and used for at least one physical output.
+
+### Required Inputs
+
+| Input | Type | Must ask if missing |
+|---|---|---|
+| Mesh or case file path | `.msh`, `.msh.h5`, `.cas`, or `.cas.h5` | YES |
+| Dimension | `2` or `3`; for axisymmetric use `2` plus axisymmetric solver setting | YES |
+| CHEMKIN mechanism file | `.inp` or compatible CHEMKIN mechanism | YES |
+| CHEMKIN thermo file | `.dat` thermodynamic database | YES |
+| Fuel stream composition | Species mass-fraction dict | YES |
+| Oxidizer stream composition | Species mass-fraction dict | YES |
+| Inlet scalar boundary values | Mean mixture fraction, variance, progress variable per inlet | YES |
+| Number of iterations or convergence criterion | Integer or monitor criterion | YES |
+| Output to extract | Scalar range, report value, profile CSV, or figure | YES |
+
+### Common Missing Items
+- CHEMKIN files under a path with spaces. Fluent's CHEMKIN TUI import can split those paths incorrectly; copy files into the run directory first.
+- Confusing global CHEMKIN import with flamelet-table activation. For this workflow, import the mechanism as `flamelet-mixture`.
+- Forgetting to write and later read the separate PDF table file. Case/data alone may not reopen.
+- Pilot or secondary inlet scalar values. These are model inputs, not automatically inferred from species mass fractions.
+
+### Runtime Step Order
+
+| Step | Label | Notes |
+|---|---|---|
+| 1 | `connect` | mode=solver; keep sim-cli generic by passing Fluent launch values through driver options, e.g. `--driver-option dimension=2 --driver-option precision=double`; use `--workspace` for the run directory or `--driver-option cwd=...` when needed |
+| 2 | `read-mesh-or-case` | Read mesh/case; set `two_dim_space = "axisymmetric"` if needed |
+| 3 | `setup-flow-models` | Enable energy and turbulence before combustion setup |
+| 4 | `setup-partially-premixed-flamelet` | Use `setup_partially_premixed_flamelet.py`; imports CHEMKIN as `flamelet-mixture`, sets stream table, runs `calc_fla()` and `calc_pdf()` |
+| 5 | `write-pdf-table` | Use `write_pdf_table.py`; writes `.pdf` via `write_pdf_cmd()` |
+| 6 | `inspect-reacting-bc-scalars` | Use `inspect_reacting_bc_scalars.py` to confirm active boundary scalar names |
+| 7 | `set-cfd-boundaries` | Set velocities, temperatures, turbulence, `mean_mixture_fraction`, `mixture_fraction_variance`, and progress variable |
+| 8 | `initialize-run-write` | Hybrid initialize or load developed data, iterate, write case/data |
+| 9 | `readback-check` | In a fresh session, use `read_case_pdf_data.py`: `read_case -> read_pdf -> read_data` |
+| 10 | `extract-output` | Extract at least one physical output requested by the user |
+
+### Completion Condition
+- `setup-partially-premixed-flamelet` reports `flamelets_generated = true` and `pdf_table_generated = true`.
+- `write-pdf-table` reports `pdf_written = true`.
+- Case/data files exist after the solve step.
+- A fresh-session readback succeeds in the order `read_case`, `read_pdf`, `read_data`.
+- At least one requested physical output is present and reported with actual values or artifact paths.
+
+---
+
 ## Notes on Template Selection
 
 - If the user says "mesh the geometry", ask which workflow type (watertight vs. fault-tolerant) — do not guess from file extension alone.
 - If the user says "run the simulation", ask whether a case file already exists or whether meshing must be done first.
+- If the user asks for flamelet, non-premixed, partially premixed, PDF table, or combustion lookup-table work, choose Template 5 unless they explicitly request Composition PDF Transport instead.
 - Templates may be chained (meshing → solver) but must remain in separate sessions unless `switch_to_solver()` is used within a meshing session.
 - **Reference example values are for API syntax illustration only.** Parameter values in `reference/pyfluent_examples/` (e.g., 0.4 m/s, 293.15 K, `water-liquid` from the mixing elbow example) describe a specific published test case. They must not be used to fill in missing user inputs. When required inputs are absent, apply SKILL.md §5.1: ask for Category A inputs — do not substitute example values.

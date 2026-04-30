@@ -10,6 +10,7 @@ class SessionInfo:
     mode: str       # "meshing" | "solver"
     source: str     # "launch" | "connection"
     session: object  # live pyfluent session object (not serialised)
+    launch_options: dict | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -17,6 +18,7 @@ class SessionInfo:
             "session_id": self.session_id,
             "mode": self.mode,
             "source": self.source,
+            "launch_options": self.launch_options or {},
         }
 
 
