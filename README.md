@@ -182,6 +182,8 @@ The manifest is anonymous-GET (no auth required) and updated whenever a new whee
 
 `sim-cli` core is **fully solver-agnostic** — it ships with **zero built-in drivers**. Every solver, including OpenFOAM, is reached through a **plugin package** registered via the `sim.drivers` entry-point group. Adding a new backend is a ~200-LOC `DriverProtocol` implementation in its own `sim-plugin-<name>` repo.
 
+`sim` is most useful for **GUI-heavy solvers** — COMSOL, ANSYS Mechanical, ANSYS Fluent, MATLAB Simulink, Abaqus, Flotherm — where every agent iteration would otherwise mean clicking through dialog boxes.
+
 Plugin coverage spans CFD, multiphysics, electronics thermal, implicit and explicit structural FEA, pre/post-processing, mesh generation, embodied-AI / GPU physics, molecular dynamics, optimization / MDAO, battery modeling, thermo properties, power-systems and RF simulation, and discrete-event modeling. Browse the curated index:
 
 ```bash
