@@ -14,30 +14,35 @@ ruff check src/sim tests
 
 ## Adding a new driver
 
-Drop a `DriverProtocol` implementation under `src/sim/drivers/<name>/driver.py` and register it in `_BUILTIN_REGISTRY` inside `drivers/__init__.py`. For an out-of-tree driver, expose it via the `sim.drivers` entry-point group from your own package. See `pybamm/driver.py` for the smallest reference. Persistent-session driver examples live in the out-of-tree plugin packages.
+Every driver ships as its own `sim-plugin-<name>` package — sim-cli core has no built-in drivers. Implement `DriverProtocol` in your plugin package, register it via the `sim.drivers` entry-point group in your `pyproject.toml`:
 
-The server routes all drivers through `DriverProtocol` — no `server.py` changes needed. Set `supports_session = True` for persistent-session drivers, `False` for one-shot only.
+```toml
+[project.entry-points."sim.drivers"]
+<name> = "sim_plugin_<name>.driver:MyDriver"
+```
+
+Set `supports_session = True` for persistent-session drivers, `False` for one-shot only. The server routes all drivers through `DriverProtocol` — no `server.py` changes needed.
+
+Read [`sim-plugin-ltspice`](https://github.com/svd-ai-lab/sim-plugin-ltspice) for shape: driver implementation + skill packaged together.
 
 ## Project layout
 
 ```
 src/sim/
-  cli.py           Click app, all subcommands
-  server.py        FastAPI server (sim serve)
-  session.py       HTTP client used by connect/exec/inspect
-  driver.py        DriverProtocol + result dataclasses
-  compat.py        Version-compat profiles + layered skill resolution
+  cli.py             Click app, all subcommands
+  server.py          FastAPI server (sim serve)
+  session.py         HTTP client used by connect/exec/inspect
+  driver.py          DriverProtocol + result dataclasses
+  compat.py          Version-compat profiles + layered skill resolution
+  plugins.py         Plugin discovery, listing, info
+  _plugin_install.py Install / uninstall / index resolution
   drivers/
-    pybamm/        Reference: smallest one-shot driver
-    openfoam/      Reference: SDK-less batch-CLI driver
-    …              one folder per built-in (open-source) backend
-    __init__.py    _BUILTIN_REGISTRY — register new built-in backends
-                   here; external plugins register via the
-                   `sim.drivers` entry-point group from their own
-                   package
-tests/             unit tests + fixtures (84 tests)
-assets/            logo · banner · architecture (SVG)
-docs/              translated READMEs (de · ja · zh) + architecture docs
+    __init__.py      Plugin registry — discovers external plugins
+                     via the `sim.drivers` entry-point group at
+                     import time
+tests/               unit tests + fixtures
+assets/              logo · banner · architecture (SVG)
+docs/                translated READMEs (de · ja · zh) + architecture docs
 ```
 
 ## Dev flags and utilities
