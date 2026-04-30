@@ -123,6 +123,123 @@ def test_resolve_garbage_raises():
         resolve_source("???not-a-source???")
 
 
+# ── R2 manifest + chained lookup ────────────────────────────────────────────
+
+
+def _seed_caches(tmp_path: Path, monkeypatch,
+                 r2_plugins: dict | None = None,
+                 github_plugins: list | None = None):
+    """Set up isolated R2 + GitHub cache files and point fetch_index at them."""
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+    r2_cache = cache_dir / "manifest-r2.json"
+    github_cache = cache_dir / "index.json"
+    r2_cache.write_text(json.dumps({"plugins": r2_plugins or {}}), encoding="utf-8")
+    github_cache.write_text(
+        json.dumps({"schema_version": 1, "plugins": github_plugins or []}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("sim._plugin_install._index_cache_dir", lambda: cache_dir)
+    monkeypatch.setattr("sim._plugin_install._index_cache_path", lambda: github_cache)
+    monkeypatch.setattr("sim._plugin_install._r2_cache_path", lambda: r2_cache)
+
+
+def test_r2_lookup_normalizes_to_github_shape(tmp_path: Path, monkeypatch):
+    from sim._plugin_install import _r2_lookup
+    _seed_caches(tmp_path, monkeypatch, r2_plugins={
+        "comsol": {"version": "0.1.0",
+                    "wheel": "https://cdn.svdailab.com/wheels/comsol.whl"},
+    })
+    e = _r2_lookup("comsol", offline=True)
+    assert e is not None
+    assert e["name"] == "comsol"
+    assert e["latest_version"] == "0.1.0"
+    assert e["latest_wheel_url"] == "https://cdn.svdailab.com/wheels/comsol.whl"
+
+    assert _r2_lookup("absent", offline=True) is None
+
+
+def test_r2_lookup_skips_entry_without_wheel(tmp_path: Path, monkeypatch):
+    """A malformed R2 entry (no wheel) must miss so we fall back."""
+    from sim._plugin_install import _r2_lookup
+    _seed_caches(tmp_path, monkeypatch, r2_plugins={
+        "comsol": {"version": "0.1.0"},  # missing wheel
+    })
+    assert _r2_lookup("comsol", offline=True) is None
+
+
+def test_index_entry_chained_prefers_r2(tmp_path: Path, monkeypatch):
+    from sim._plugin_install import index_entry_chained
+    _seed_caches(
+        tmp_path, monkeypatch,
+        r2_plugins={"ltspice": {"version": "0.2.1",
+                                  "wheel": "https://r2.example/ltspice.whl"}},
+        github_plugins=[{"name": "ltspice", "license_class": "oss",
+                          "latest_wheel_url": "https://gh.example/ltspice.whl"}],
+    )
+    e = index_entry_chained("ltspice", offline=True)
+    assert e["latest_wheel_url"] == "https://r2.example/ltspice.whl"
+
+
+def test_index_entry_chained_falls_back_to_github(tmp_path: Path, monkeypatch):
+    from sim._plugin_install import index_entry_chained
+    _seed_caches(
+        tmp_path, monkeypatch,
+        r2_plugins={},
+        github_plugins=[{"name": "pybamm", "license_class": "oss",
+                          "latest_wheel_url": "https://gh.example/pybamm.whl"}],
+    )
+    e = index_entry_chained("pybamm", offline=True)
+    assert e is not None
+    assert e["latest_wheel_url"] == "https://gh.example/pybamm.whl"
+
+
+def test_index_entry_chained_returns_none_when_neither_has_it(tmp_path: Path, monkeypatch):
+    from sim._plugin_install import index_entry_chained
+    _seed_caches(tmp_path, monkeypatch)
+    assert index_entry_chained("nope", offline=True) is None
+
+
+def test_resolve_bare_name_uses_r2_wheel(tmp_path: Path, monkeypatch):
+    """Default chain lookup: R2 hit wins."""
+    _seed_caches(
+        tmp_path, monkeypatch,
+        r2_plugins={"comsol": {"version": "0.1.0",
+                                 "wheel": "https://r2.example/comsol.whl"}},
+        github_plugins=[],
+    )
+    rs = resolve_source("comsol", offline=True)
+    assert rs.kind == "name"
+    assert rs.pip_target == "https://r2.example/comsol.whl"
+
+
+def test_resolve_bare_name_falls_back_to_github(tmp_path: Path, monkeypatch):
+    """Default chain lookup: R2 miss → GitHub wheel URL."""
+    _seed_caches(
+        tmp_path, monkeypatch,
+        r2_plugins={},
+        github_plugins=[{"name": "pybamm", "license_class": "oss",
+                          "latest_wheel_url": "https://gh.example/pybamm.whl"}],
+    )
+    rs = resolve_source("pybamm", offline=True)
+    assert rs.kind == "name"
+    assert rs.pip_target == "https://gh.example/pybamm.whl"
+
+
+def test_resolve_explicit_index_url_skips_chain(tmp_path: Path, monkeypatch):
+    """Explicit index_url uses just that source — no R2 fallback."""
+    _seed_caches(
+        tmp_path, monkeypatch,
+        r2_plugins={"comsol": {"version": "0.1.0",
+                                 "wheel": "https://r2.example/comsol.whl"}},
+        github_plugins=[{"name": "comsol", "license_class": "oss",
+                          "latest_wheel_url": "https://gh.example/comsol.whl"}],
+    )
+    from sim._plugin_install import DEFAULT_INDEX_URL
+    rs = resolve_source("comsol", offline=True, index_url=DEFAULT_INDEX_URL)
+    assert rs.pip_target == "https://gh.example/comsol.whl"
+
+
 # ── Index fetch + cache ──────────────────────────────────────────────────────
 
 

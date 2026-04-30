@@ -33,6 +33,13 @@ from typing import Any
 
 # ── Index ───────────────────────────────────────────────────────────────────
 
+# Curated wheels published by the project — primary index. Anonymous GET; updated
+# whenever a new wheel is published via tools/publish-wheel.sh.
+R2_MANIFEST_URL = "https://cdn.svdailab.com/manifest.json"
+
+# Community-maintained OSS plugin catalogue — fallback for entries the curated
+# manifest does not carry. Different schema (array of entries with git+homepage
+# fields), normalized at lookup time.
 DEFAULT_INDEX_URL = (
     "https://raw.githubusercontent.com/svd-ai-lab/sim-plugin-index/main/index.json"
 )
@@ -46,16 +53,26 @@ def _index_cache_dir() -> Path:
 
 
 def _index_cache_path() -> Path:
+    """Cache file for the GitHub OSS index (``DEFAULT_INDEX_URL``)."""
     return _index_cache_dir() / "index.json"
 
 
+def _r2_cache_path() -> Path:
+    """Cache file for the curated R2 manifest (``R2_MANIFEST_URL``)."""
+    return _index_cache_dir() / "manifest-r2.json"
+
+
+def _cache_for(url: str) -> Path:
+    return _r2_cache_path() if url == R2_MANIFEST_URL else _index_cache_path()
+
+
 def fetch_index(url: str = DEFAULT_INDEX_URL, *, force: bool = False, offline: bool = False) -> dict[str, Any]:
-    """Fetch the public plugin index. Caches under ~/.sim/index-cache/.
+    """Fetch a plugin index by URL. Caches under ``~/.sim/index-cache/`` keyed by URL.
 
     In ``--offline`` mode, only the local cache is consulted; an empty index
     is returned if no cache exists.
     """
-    cache = _index_cache_path()
+    cache = _cache_for(url)
     if offline:
         if cache.is_file():
             try:
@@ -93,13 +110,51 @@ def fetch_index(url: str = DEFAULT_INDEX_URL, *, force: bool = False, offline: b
     return parsed
 
 
+def _normalize_r2_entry(name: str, info: dict[str, Any]) -> dict[str, Any]:
+    """Convert an R2 manifest entry to the GitHub-style entry shape that
+    ``resolve_source`` consumes (``latest_version`` + ``latest_wheel_url``)."""
+    return {
+        "name": name,
+        "latest_version": info.get("version"),
+        "latest_wheel_url": info.get("wheel"),
+    }
+
+
+def _r2_lookup(name: str, *, offline: bool = False) -> dict[str, Any] | None:
+    """Look up ``name`` in the R2 curated manifest, returning a normalized entry."""
+    manifest = fetch_index(url=R2_MANIFEST_URL, offline=offline)
+    plugins = manifest.get("plugins")
+    if not isinstance(plugins, dict):
+        return None
+    info = plugins.get(name)
+    if not isinstance(info, dict) or not info.get("wheel"):
+        return None
+    return _normalize_r2_entry(name, info)
+
+
 def index_entry(name: str, *, offline: bool = False, url: str = DEFAULT_INDEX_URL) -> dict[str, Any] | None:
-    """Look up one plugin by name in the index."""
+    """Look up one plugin by name in a single index URL.
+
+    For ``url == R2_MANIFEST_URL`` the entry is normalized to the GitHub-style
+    shape so callers get a consistent dict regardless of which index served it.
+    """
+    if url == R2_MANIFEST_URL:
+        return _r2_lookup(name, offline=offline)
     idx = fetch_index(url=url, offline=offline)
     for entry in idx.get("plugins", []):
         if entry.get("name") == name:
             return entry
     return None
+
+
+def index_entry_chained(name: str, *, offline: bool = False) -> dict[str, Any] | None:
+    """Resolve ``name`` against the curated R2 manifest first, then fall back
+    to the community GitHub OSS index. Returns the first hit, or ``None`` if
+    neither has it."""
+    e = _r2_lookup(name, offline=offline)
+    if e is not None:
+        return e
+    return index_entry(name, offline=offline, url=DEFAULT_INDEX_URL)
 
 
 # ── Source resolution ──────────────────────────────────────────────────────
@@ -120,14 +175,22 @@ _NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
 _NAME_VERSION_RE = re.compile(r"^([A-Za-z][A-Za-z0-9_]*)@([A-Za-z0-9._\-+]+)$")
 
 
-def resolve_source(source: str, *, offline: bool = False, index_url: str = DEFAULT_INDEX_URL) -> ResolvedSource:
+def resolve_source(source: str, *, offline: bool = False,
+                   index_url: str | None = None) -> ResolvedSource:
     """Classify a source argument and choose what to hand to pip.
 
-    For named (index-resolved) installs, prefers wheel-from-release URL when
-    the index entry has one; falls back to git+https. Raises ``ValueError``
-    if the name isn't in the index in offline mode.
+    For named installs, lookup chains the curated R2 manifest first and falls
+    back to the GitHub OSS index. Pass ``index_url`` to force a single source.
+    Prefers wheel-from-release URL when the index entry has one; falls back to
+    git+https. Raises ``ValueError`` if the name isn't in the index in offline
+    mode.
     """
     s = source.strip()
+
+    def _lookup(name: str) -> dict[str, Any] | None:
+        if index_url is None:
+            return index_entry_chained(name, offline=offline)
+        return index_entry(name, offline=offline, url=index_url)
 
     # Local files / dirs first (cheapest to check).
     p = Path(s)
@@ -160,7 +223,7 @@ def resolve_source(source: str, *, offline: bool = False, index_url: str = DEFAU
     m = _NAME_VERSION_RE.match(s)
     if m:
         name, version = m.group(1), m.group(2)
-        entry = index_entry(name, offline=offline, url=index_url)
+        entry = _lookup(name)
         if entry is None and offline:
             raise ValueError(f"plugin {name!r} not in offline index")
         if entry is None:
@@ -180,7 +243,7 @@ def resolve_source(source: str, *, offline: bool = False, index_url: str = DEFAU
 
     # bare name
     if _NAME_RE.match(s):
-        entry = index_entry(s, offline=offline, url=index_url)
+        entry = _lookup(s)
         if entry is None and offline:
             raise ValueError(f"plugin {s!r} not in offline index")
         if entry is None:
@@ -440,10 +503,12 @@ def bundle_plugins(names: list[str], output_dir: Path, *,
 
 __all__ = [
     "DEFAULT_INDEX_URL",
+    "R2_MANIFEST_URL",
     "ResolvedSource",
     "InstallReport",
     "fetch_index",
     "index_entry",
+    "index_entry_chained",
     "resolve_source",
     "install_plugin",
     "uninstall_plugin",

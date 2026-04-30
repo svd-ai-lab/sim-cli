@@ -135,15 +135,16 @@ sim --host <server-ip> disconnect
 
 ---
 
-## 📦 Curated 插件
+## 📦 插件索引
 
-精选插件 wheel 发布在公共 CDN：
+`sim plugin install <name>` 按顺序查两个索引：
 
-```
-https://cdn.svdailab.com/manifest.json
-```
+1. **svd 维护的 wheel manifest**：`https://cdn.svdailab.com/manifest.json` —— 项目自己发布的预构建 wheel。匿名 GET，每次有新 wheel 就更新。
+2. **社区维护的 catalogue**：[`sim-plugin-index`](https://github.com/svd-ai-lab/sim-plugin-index) —— 更广的插件清单，由社区维护；条目可以是 OSS 也可以是第三方插件，指向 GitHub release 或 git+https。
 
-Manifest schema：
+第一个命中的赢。多数用户感知不到这个分层 —— `sim plugin install ltspice` 直接就能装上。
+
+svd manifest 的 schema（社区 catalogue 是另一种 shape，看它仓库里的说明）：
 
 ```json
 {
@@ -157,13 +158,7 @@ Manifest schema：
 }
 ```
 
-用任意 HTTP 客户端拉取 manifest，挑出需要的 wheel，然后：
-
-```bash
-sim plugin install <wheel-url>
-```
-
-Manifest 匿名 GET 即可（无需认证），每次有新 wheel 发布时更新。
+如果想跳过 resolver 直接装某个 wheel，把 URL 直接给 `sim plugin install`：`sim plugin install https://cdn.svdailab.com/wheels/<file>.whl`。
 
 ---
 
