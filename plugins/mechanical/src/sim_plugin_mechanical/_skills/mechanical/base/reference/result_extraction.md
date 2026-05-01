@@ -1,5 +1,11 @@
 # Result extraction
 
+There are two extraction modes: live Mechanical result objects via `sim exec`,
+and post-mortem `.rst` reads with DPF in normal CPython. Default to the
+post-mortem DPF path when the solve already finished and the result file is on
+disk; use the live path when you need to mutate or evaluate the current
+Mechanical project.
+
 ## Adding result objects
 
 Before you can query results, they must exist in the Solution tree:
@@ -73,6 +79,27 @@ Then on the **client side** (not inside `run_python_script`):
 result = mech.download(files="*.rst", target_dir="C:/work/results")
 print(result)
 ```
+
+## Reading `.rst` on the agent side with PyDPF
+
+For post-mortem result extraction (no live Mechanical session needed), use
+`ansys-dpf-core` in normal CPython:
+
+```python
+from ansys.dpf import core as dpf
+
+ds = dpf.DataSources("path/to/file.rst")
+model = dpf.Model(ds)
+disp = model.results.displacement().eval()
+stress = model.results.stress().eval()
+```
+
+Pick this when: solve already finished, you only need to read results, and you
+do not need to add new result objects.
+
+Pick the live `sim exec` path above when: you need to add a new result type,
+evaluate scoped results against a NamedSelection that is not computed yet, or
+the user wants the live Mechanical window to update.
 
 ## Common numbers cheat sheet
 

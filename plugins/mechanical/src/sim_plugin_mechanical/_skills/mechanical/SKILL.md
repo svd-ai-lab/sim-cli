@@ -1,13 +1,13 @@
 ---
 name: mechanical-sim
-description: Use when driving Ansys Mechanical via PyMechanical (ansys-mechanical-core) through the sim runtime — boundary conditions, loads, solver execution, and result extraction. This is the physics-layer counterpart to workbench-sim (which orchestrates cells 1-3); mechanical-sim owns cells 4-6 of the Static Structural workflow. Observation commands (sim screenshot / inspect) are tightly coupled with both the PyMechanical gRPC client *and* the Mechanical.exe GUI window — always launch with `batch=False` so the window is on the desktop.
+description: Use when driving Ansys Mechanical via PyMechanical (ansys-mechanical-core) through the sim runtime, or reading solved `.rst` files with DPF on the agent side. Covers boundary conditions, loads, solver execution, and result extraction. This is the physics-layer counterpart to workbench-sim (which orchestrates cells 1-3); mechanical-sim owns cells 4-6 of the Static Structural workflow. Observation commands (sim screenshot / inspect) are tightly coupled with both the PyMechanical gRPC client *and* the Mechanical.exe GUI window — always launch with `batch=False` so the window is on the desktop for live sessions.
 ---
 
 # mechanical-sim
 
-You are connected to **Ansys Mechanical** via sim-cli. This file is the
-**index**. It tells you where to look — it does not contain the content
-itself.
+This file is the **Ansys Mechanical** index. Use DPF for solved `.rst` files
+on disk; use sim-cli/PyMechanical for live Mechanical sessions that mutate,
+solve, inspect, or update the GUI-backed project.
 
 This is **not** the Abaqus plugin. Do not run Abaqus `.inp` decks or
 Abaqus/CAE scripts here. Use `solver=abaqus` for Dassault SIMULIA Abaqus;
@@ -97,6 +97,9 @@ files.
    import or material definition, hand back to workbench-sim.
 
 ## Required protocol
+
+If the user's question is about an existing solved project (a `.rst` on
+disk), use DPF on the agent side; do not launch Mechanical at all.
 
 Before every Mechanical script:
 
