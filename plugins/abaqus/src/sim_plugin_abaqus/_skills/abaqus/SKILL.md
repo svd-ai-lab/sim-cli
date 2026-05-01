@@ -13,8 +13,10 @@ Abaqus is a commercial finite element analysis (FEA) solver by Dassault
 Systemes SIMULIA. The sim plugin supports two execution styles:
 
 1. **Batch execution** for complete `.inp` decks or Abaqus/CAE Python files.
-2. **File-backed CAE authoring sessions** for iterative model creation,
-   inspection, debugging, job submission, and report preparation.
+2. **CAE authoring sessions** for iterative model creation, inspection,
+   debugging, job submission, and report preparation. The default backend is
+   file-backed; the optional bridge backend keeps one noGUI CAE process alive
+   for faster agent loops.
 
 It supports two script formats:
 
@@ -26,8 +28,11 @@ It supports two script formats:
 The driver runs these via subprocess (`abaqus job=X input=file.inp
 interactive` or `abaqus cae noGUI=script.py`). In CAE authoring sessions,
 each `sim exec` snippet runs inside Abaqus/CAE against a saved session `.cae`
-database, then saves the database back for the next step. No Abaqus Python
-module is imported into the sim process.
+database, then saves the database back for the next step. With
+`--backend bridge`, snippets are sent to one long-lived noGUI CAE process over
+a localhost command channel protected by a per-session token. Use bridge mode
+only in trusted workspaces owned by the session user. No Abaqus Python module
+is imported into the sim process.
 
 This is **not** the Ansys Mechanical plugin. Do not route Abaqus `.inp`
 decks or Abaqus/CAE Python scripts through `solver=mechanical`; use
@@ -42,6 +47,7 @@ for PyMechanical / Ansys Mechanical sessions.
 |---|---|
 | `base/reference/input_deck_reference.md` | `.inp` file format: keyword syntax, node/element definitions, material, steps, BCs, output requests. |
 | `base/reference/abaqus_scripting.md` | Abaqus/CAE Python scripting: `mdb`, `Part`, `Material`, `Step`, `Load`, `Job` objects. |
+| `base/reference/doc_lookup.md` | How to check installed/official Abaqus docs, command help, fetched examples, and runtime API probes before guessing syntax. |
 | `base/reference/authoring_workflow.md` | Agent workflow for iterative CAE modeling with `connect`, `exec`, `inspect`, and saved `.cae` state. |
 | `base/reference/debug_reporting.md` | Debug loop and report checklist for `.msg`, `.sta`, `.dat`, ODB-derived results, assumptions, and acceptance criteria. |
 | `base/reference/analysis_types.md` | Supported analysis types: Static, Dynamic, Heat Transfer, Coupled, etc. |
@@ -72,10 +78,15 @@ for PyMechanical / Ansys Mechanical sessions.
 5. **Use the right mode.** If the model is already fully specified, prefer
    `sim run --solver abaqus file.inp` or `sim run --solver abaqus script.py`.
    If the agent is building/debugging the model incrementally, use
-   `sim connect --solver abaqus --mode cae` and iterate with `sim exec`.
+   `sim connect --solver abaqus --mode cae` and iterate with `sim exec`. Use
+   `--backend bridge` when repeated small snippets need a live in-memory CAE
+   session.
 6. **Save and inspect after every modeling step.** In CAE authoring mode,
    each snippet should leave the `.cae` database in a coherent state and then
    check `sim inspect cae.model_summary` or `sim inspect job.diagnostics`.
+7. **Check docs or probe before guessing APIs.** If unsure about an Abaqus
+   keyword, CAE method, command option, or output variable, follow
+   `base/reference/doc_lookup.md` before editing the real model.
 
 ---
 
@@ -90,7 +101,8 @@ execute with `sim run --solver abaqus`, parse `.dat` / ODB-derived outputs,
 and validate against physics-based acceptance criteria.
 
 For modeling/debug/reporting work: start `sim connect --solver abaqus --mode
-cae --ui-mode no_gui`, build the model in small CAE Python snippets, inspect
-after each major step, submit jobs from the session, read diagnostics, fix the
-model, and produce a report that states assumptions, units, mesh, BCs, loads,
-solver messages, result checks, and acceptance status.
+cae --ui-mode no_gui`, optionally adding `--backend bridge` for a live noGUI
+CAE process. Build the model in small CAE Python snippets, inspect after each
+major step, submit jobs from the session, read diagnostics, fix the model, and
+produce a report that states assumptions, units, mesh, BCs, loads, solver
+messages, result checks, and acceptance status.

@@ -16,7 +16,9 @@ import ast
 import json
 import os
 import re
+import secrets
 import shutil
+import socket
 import subprocess
 import time
 import uuid
@@ -265,11 +267,21 @@ class AbaqusDriver:
         self._session_cae: Path | None = None
         self._session_ui_mode: str = "no_gui"
         self._session_mode: str = "cae"
+        self._session_backend: str = "file"
         self._abaqus_bat: str | None = None
         self._run_count = 0
         self._last_result: dict | None = None
         self._last_run_started_at: float | None = None
         self._snippet_timeout_s = 600.0
+        self._launch_timeout_s = 120.0
+        self._bridge_proc: subprocess.Popen[str] | None = None
+        self._bridge_host: str | None = None
+        self._bridge_port: int | None = None
+        self._bridge_token: str | None = None
+        self._bridge_stdout_handle = None
+        self._bridge_stderr_handle = None
+        self._bridge_stdout_path: Path | None = None
+        self._bridge_stderr_path: Path | None = None
 
     @property
     def name(self) -> str:
@@ -550,34 +562,53 @@ class AbaqusDriver:
         ui_mode: str = "no_gui",
         workspace: str | None = None,
         snippet_timeout: float | int | str | None = None,
+        backend: str | None = None,
+        launch_timeout: float | int | str | None = None,
         **kwargs,
     ) -> dict:
-        """Create a file-backed Abaqus/CAE authoring session.
+        """Create an Abaqus/CAE authoring session.
 
-        The Abaqus process is still one-shot per snippet, but the CAE model
-        database is persistent: every exec loads the session .cae file, runs
-        the snippet, then saves it back. This gives agents an iterative
-        create -> inspect -> debug -> report loop without requiring a fragile
-        GUI automation channel.
+        By default this uses the conservative file-backed backend: every exec
+        starts CAE, loads the session .cae file, runs the snippet, and saves it
+        back. ``backend="bridge"`` starts one long-lived noGUI CAE process with
+        a localhost command bridge for lower-latency iterative modeling.
         """
         installs = self.detect_installed()
         if not installs:
             raise RuntimeError(_NOT_INSTALLED_HINT)
 
+        self._close_bridge()
         self._session_id = f"abaqus-{uuid.uuid4().hex[:8]}"
         self._session_mode = mode or "cae"
         self._session_ui_mode = ui_mode or "no_gui"
+        self._session_backend = (backend or "file").replace("_", "-")
+        if self._session_backend in {"file-backed-cae", "file-backed"}:
+            self._session_backend = "file"
+        if self._session_backend in {"live", "persistent"}:
+            self._session_backend = "bridge"
+        if self._session_backend not in {"file", "bridge"}:
+            raise ValueError("Unsupported Abaqus session backend: %s" % self._session_backend)
+        if self._session_backend == "bridge" and self._session_ui_mode not in {"no_gui", "nogui", "no-gui"}:
+            raise ValueError("Abaqus bridge backend currently supports no_gui sessions only")
         self._abaqus_bat = installs[0].extra.get("bat", "abaqus")
         if snippet_timeout is not None:
             self._snippet_timeout_s = float(snippet_timeout)
         else:
             self._snippet_timeout_s = 600.0
+        if launch_timeout is not None:
+            self._launch_timeout_s = float(launch_timeout)
+        else:
+            self._launch_timeout_s = 120.0
         root = Path(workspace) if workspace else Path.cwd() / ".sim" / "abaqus" / self._session_id
         root.mkdir(parents=True, exist_ok=True)
         self._session_workspace = root
         self._session_cae = root / "session.cae"
         self._run_count = 0
         self._last_result = None
+        self._last_run_started_at = None
+
+        if self._session_backend == "bridge":
+            self._start_bridge()
 
         return {
             "ok": True,
@@ -586,14 +617,268 @@ class AbaqusDriver:
             "ui_mode": self._session_ui_mode,
             "workspace": str(root),
             "cae_path": str(self._session_cae),
-            "persistence": "file-backed-cae",
+            "persistence": "live-bridge" if self._session_backend == "bridge" else "file-backed-cae",
+            "backend": self._session_backend,
             "snippet_timeout_s": self._snippet_timeout_s,
+            "launch_timeout_s": self._launch_timeout_s,
+            "bridge": {
+                "host": self._bridge_host,
+                "port": self._bridge_port,
+                "pid": None if self._bridge_proc is None else self._bridge_proc.pid,
+            } if self._session_backend == "bridge" else None,
         }
 
     def _require_session(self) -> tuple[Path, Path, str]:
         if self._session_workspace is None or self._session_cae is None or self._abaqus_bat is None:
             raise RuntimeError("No active Abaqus CAE session. Run sim connect first.")
         return self._session_workspace, self._session_cae, self._abaqus_bat
+
+    def _write_bridge_server(self) -> Path:
+        workspace, cae_path, _ = self._require_session()
+        server_path = workspace / "sim_bridge_server.py"
+        result = f'''# Auto-generated by sim-plugin-abaqus.
+import contextlib
+import io
+import json
+import os
+import socket
+import sys
+import traceback
+
+from abaqus import *
+from abaqusConstants import *
+from caeModules import *
+
+HOST = "127.0.0.1"
+PORT = int(os.environ.get("SIM_ABAQUS_BRIDGE_PORT", "0"))
+READY_PATH = os.environ.get("SIM_ABAQUS_BRIDGE_READY")
+TOKEN = os.environ["SIM_ABAQUS_BRIDGE_TOKEN"]
+SESSION_CAE = {str(cae_path)!r}
+CONNECTION_TIMEOUT_S = 10.0
+MAX_REQUEST_BYTES = 10 * 1024 * 1024
+_shutdown = False
+_globals = globals()
+
+def _repo_names(obj, attr):
+    try:
+        repo = getattr(obj, attr)
+        return sorted([str(k) for k in repo.keys()])
+    except Exception:
+        return []
+
+def _model_summary():
+    out = {{"models": {{}}, "jobs": []}}
+    try:
+        out["jobs"] = sorted([str(k) for k in mdb.jobs.keys()])
+    except Exception:
+        pass
+    try:
+        items = mdb.models.items()
+    except Exception:
+        items = []
+    for name, model in items:
+        item = {{
+            "parts": _repo_names(model, "parts"),
+            "materials": _repo_names(model, "materials"),
+            "sections": _repo_names(model, "sections"),
+            "steps": _repo_names(model, "steps"),
+            "loads": _repo_names(model, "loads"),
+            "boundary_conditions": _repo_names(model, "boundaryConditions"),
+        }}
+        try:
+            item["instances"] = sorted([str(k) for k in model.rootAssembly.instances.keys()])
+        except Exception:
+            item["instances"] = []
+        out["models"][str(name)] = item
+    return out
+
+def _write_ready(port):
+    payload = {{"ok": True, "host": HOST, "port": port, "session_cae": SESSION_CAE}}
+    if READY_PATH:
+        with open(READY_PATH, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh, sort_keys=True)
+    print("__SIM_BRIDGE_READY__" + json.dumps(payload, sort_keys=True))
+    sys.stdout.flush()
+
+def _save():
+    mdb.saveAs(pathName=SESSION_CAE)
+
+def _handle(req):
+    global _shutdown
+    if req.get("token") != TOKEN:
+        return {{"ok": False, "error": "unauthorized"}}
+    op = req.get("op")
+    if op == "ping":
+        return {{"ok": True, "pong": True}}
+    if op == "inspect":
+        return {{"ok": True, "model_summary": _model_summary()}}
+    if op == "save":
+        _save()
+        return {{"ok": True, "cae_path": SESSION_CAE, "model_summary": _model_summary()}}
+    if op == "shutdown":
+        _shutdown = True
+        return {{"ok": True, "shutdown": True}}
+    if op == "exec":
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        payload = {{"ok": True, "result": None, "model_summary": None}}
+        try:
+            with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                exec(compile(req.get("code", ""), "<sim-bridge>", "exec"), _globals, _globals)
+            payload["result"] = _globals.get("_sim_result")
+            payload["model_summary"] = _model_summary()
+            _save()
+        except Exception as exc:
+            payload["ok"] = False
+            payload["error"] = str(exc)
+            payload["traceback"] = traceback.format_exc()
+            try:
+                payload["model_summary"] = _model_summary()
+            except Exception:
+                pass
+        payload["stdout"] = stdout.getvalue()
+        payload["stderr"] = stderr.getvalue()
+        return payload
+    return {{"ok": False, "error": "unknown op: %s" % op}}
+
+if os.path.exists(SESSION_CAE):
+    openMdb(pathName=SESSION_CAE)
+
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+sock.bind((HOST, PORT))
+sock.listen(4)
+sock.settimeout(0.25)
+_write_ready(sock.getsockname()[1])
+
+while not _shutdown:
+    try:
+        conn, _addr = sock.accept()
+    except socket.timeout:
+        continue
+    try:
+        with conn:
+            conn.settimeout(CONNECTION_TIMEOUT_S)
+            data = b""
+            while not data.endswith(b"\\n"):
+                chunk = conn.recv(65536)
+                if not chunk:
+                    break
+                data += chunk
+                if len(data) > MAX_REQUEST_BYTES:
+                    raise ValueError("bridge request exceeds maximum size")
+            try:
+                req = json.loads(data.decode("utf-8"))
+                resp = _handle(req)
+            except Exception as exc:
+                resp = {{"ok": False, "error": str(exc), "traceback": traceback.format_exc()}}
+            conn.sendall((json.dumps(resp, default=str, sort_keys=True) + "\\n").encode("utf-8"))
+    except Exception:
+        continue
+sock.close()
+'''
+        server_path.write_text(result, encoding="utf-8")
+        return server_path
+
+    def _start_bridge(self) -> None:
+        workspace, _, abaqus_bat = self._require_session()
+        server_path = self._write_bridge_server()
+        ready_path = workspace / "bridge_ready.json"
+        try:
+            ready_path.unlink()
+        except FileNotFoundError:
+            pass
+        self._bridge_stdout_path = workspace / "bridge.stdout.log"
+        self._bridge_stderr_path = workspace / "bridge.stderr.log"
+        self._bridge_token = secrets.token_hex(32)
+        env = os.environ.copy()
+        env["SIM_ABAQUS_BRIDGE_READY"] = str(ready_path)
+        env["SIM_ABAQUS_BRIDGE_PORT"] = "0"
+        env["SIM_ABAQUS_BRIDGE_TOKEN"] = self._bridge_token
+        self._bridge_stdout_handle = self._bridge_stdout_path.open("w", encoding="utf-8", errors="replace")
+        self._bridge_stderr_handle = self._bridge_stderr_path.open("w", encoding="utf-8", errors="replace")
+        try:
+            self._bridge_proc = subprocess.Popen(
+                [abaqus_bat, "cae", f"noGUI={server_path}"],
+                cwd=str(workspace),
+                env=env,
+                stdout=self._bridge_stdout_handle,
+                stderr=self._bridge_stderr_handle,
+                text=True,
+            )
+        except Exception:
+            self._close_bridge(force=True)
+            raise
+        deadline = time.time() + self._launch_timeout_s
+        while time.time() < deadline and not ready_path.exists():
+            if self._bridge_proc.poll() is not None:
+                message = self._bridge_failure_message("Abaqus bridge exited before it was ready")
+                self._close_bridge(force=True)
+                raise RuntimeError(message)
+            time.sleep(0.25)
+        if not ready_path.exists():
+            self._close_bridge(force=True)
+            raise TimeoutError("Timed out waiting for Abaqus bridge to become ready")
+        ready = json.loads(ready_path.read_text(encoding="utf-8"))
+        self._bridge_host = ready["host"]
+        self._bridge_port = int(ready["port"])
+
+    def _bridge_failure_message(self, prefix: str) -> str:
+        pieces = [prefix]
+        if self._bridge_stdout_path and self._bridge_stdout_path.exists():
+            pieces.append("stdout_tail=" + self._bridge_stdout_path.read_text(encoding="utf-8", errors="replace")[-2000:])
+        if self._bridge_stderr_path and self._bridge_stderr_path.exists():
+            pieces.append("stderr_tail=" + self._bridge_stderr_path.read_text(encoding="utf-8", errors="replace")[-2000:])
+        return "\n".join(pieces)
+
+    def _bridge_request(self, payload: dict, timeout: float | None = None) -> dict:
+        if self._bridge_proc is None or self._bridge_host is None or self._bridge_port is None or self._bridge_token is None:
+            raise RuntimeError("Abaqus bridge is not connected")
+        if self._bridge_proc.poll() is not None:
+            raise RuntimeError(self._bridge_failure_message("Abaqus bridge process is not running"))
+        request_timeout = timeout if timeout is not None else self._snippet_timeout_s
+        request = dict(payload)
+        request["token"] = self._bridge_token
+        with socket.create_connection((self._bridge_host, self._bridge_port), timeout=request_timeout) as sock:
+            sock.settimeout(request_timeout)
+            sock.sendall((json.dumps(request) + "\n").encode("utf-8"))
+            data = b""
+            while not data.endswith(b"\n"):
+                chunk = sock.recv(65536)
+                if not chunk:
+                    break
+                data += chunk
+        return json.loads(data.decode("utf-8"))
+
+    def _close_bridge(self, force: bool = False) -> None:
+        if self._bridge_proc is not None and self._bridge_proc.poll() is None:
+            if force:
+                self._bridge_proc.terminate()
+            elif self._bridge_host is not None and self._bridge_port is not None:
+                try:
+                    self._bridge_request({"op": "shutdown"}, timeout=10)
+                except Exception:
+                    pass
+            try:
+                self._bridge_proc.wait(timeout=20)
+            except subprocess.TimeoutExpired:
+                self._bridge_proc.terminate()
+                try:
+                    self._bridge_proc.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    self._bridge_proc.kill()
+        for handle in (self._bridge_stdout_handle, self._bridge_stderr_handle):
+            if handle is not None:
+                try:
+                    handle.close()
+                except Exception:
+                    pass
+        self._bridge_proc = None
+        self._bridge_host = None
+        self._bridge_port = None
+        self._bridge_token = None
+        self._bridge_stdout_handle = None
+        self._bridge_stderr_handle = None
 
     def _write_cae_wrapper(self, code: str, label: str) -> tuple[Path, Path]:
         workspace, cae_path, _ = self._require_session()
@@ -726,6 +1011,9 @@ print("__SIM_RESULT__" + json.dumps(payload, default=str, sort_keys=True))
                 "message": str(exc),
             }
 
+        if self._session_backend == "bridge":
+            return self._run_bridge(code, label)
+
         wrapper_path, result_path = self._write_cae_wrapper(code, label or "snippet")
         scan_since = time.time()
         self._last_run_started_at = scan_since
@@ -792,6 +1080,75 @@ print("__SIM_RESULT__" + json.dumps(payload, default=str, sort_keys=True))
         self._last_result = result
         return result
 
+    def _run_bridge(self, code: str, label: str = "") -> dict:
+        workspace, cae_path, _ = self._require_session()
+        scan_since = time.time()
+        self._last_run_started_at = scan_since
+        start = time.monotonic()
+        try:
+            payload = self._bridge_request(
+                {"op": "exec", "code": code, "label": label or "snippet"},
+                timeout=self._snippet_timeout_s,
+            )
+        except (OSError, TimeoutError, RuntimeError, json.JSONDecodeError) as exc:
+            duration = time.monotonic() - start
+            diagnostics = self._scan_diagnostics(workspace, modified_since=scan_since)
+            artifacts = self._collect_artifacts(workspace, modified_since=scan_since)
+            result = {
+                "ok": False,
+                "label": label,
+                "error_code": "bridge_request_failed",
+                "exit_code": -1,
+                "message": str(exc),
+                "stdout": "",
+                "stderr": "",
+                "duration_s": round(duration, 3),
+                "workspace": str(workspace),
+                "cae_path": str(cae_path),
+                "result": None,
+                "model_summary": None,
+                "diagnostics": diagnostics,
+                "artifacts": artifacts,
+                "errors": [d["message"] for d in diagnostics if d.get("level") == "error"],
+                "backend": "bridge",
+            }
+            self._run_count += 1
+            self._last_result = result
+            return result
+
+        duration = time.monotonic() - start
+        diagnostics = self._scan_diagnostics(workspace, modified_since=scan_since)
+        artifacts = self._collect_artifacts(workspace, modified_since=scan_since)
+        errors = [
+            d["message"]
+            for d in diagnostics
+            if d.get("level") == "error"
+        ]
+        ok = payload.get("ok", False) is True
+        result = {
+            "ok": ok and not errors,
+            "label": label,
+            "exit_code": 0 if ok else 1,
+            "stdout": payload.get("stdout", ""),
+            "stderr": payload.get("stderr", ""),
+            "duration_s": round(duration, 3),
+            "workspace": str(workspace),
+            "cae_path": str(cae_path),
+            "result": payload.get("result"),
+            "model_summary": payload.get("model_summary"),
+            "diagnostics": diagnostics,
+            "artifacts": artifacts,
+            "errors": errors,
+            "backend": "bridge",
+        }
+        if not result["ok"]:
+            result["message"] = payload.get("error") or "Abaqus bridge snippet failed"
+            if payload.get("traceback"):
+                result["traceback"] = payload["traceback"]
+        self._run_count += 1
+        self._last_result = result
+        return result
+
     def query(self, name: str) -> dict:
         """Driver-specific inspect targets for Abaqus authoring sessions."""
         if name in {"session.summary", "health", "session.health"}:
@@ -800,14 +1157,27 @@ print("__SIM_RESULT__" + json.dumps(payload, default=str, sort_keys=True))
                 "session_id": self._session_id,
                 "mode": self._session_mode,
                 "ui_mode": self._session_ui_mode,
+                "backend": self._session_backend,
                 "workspace": str(self._session_workspace) if self._session_workspace else None,
                 "cae_path": str(self._session_cae) if self._session_cae else None,
                 "run_count": self._run_count,
                 "last_ok": None if self._last_result is None else self._last_result.get("ok"),
                 "snippet_timeout_s": self._snippet_timeout_s,
+                "bridge": {
+                    "running": self._bridge_proc is not None and self._bridge_proc.poll() is None,
+                    "host": self._bridge_host,
+                    "port": self._bridge_port,
+                    "pid": None if self._bridge_proc is None else self._bridge_proc.pid,
+                } if self._session_backend == "bridge" else None,
             }
         if name in {"cae.model_summary", "model.summary"}:
             summary = (self._last_result or {}).get("model_summary")
+            if summary is None and self._session_backend == "bridge":
+                try:
+                    response = self._bridge_request({"op": "inspect"}, timeout=30)
+                    summary = response.get("model_summary")
+                except Exception:
+                    summary = None
             return {
                 "connected": self._session_id is not None,
                 "available": summary is not None,
@@ -837,11 +1207,14 @@ print("__SIM_RESULT__" + json.dumps(payload, default=str, sort_keys=True))
 
     def disconnect(self) -> dict:
         sid = self._session_id
+        backend = self._session_backend
+        self._close_bridge()
         self._session_id = None
         self._session_workspace = None
         self._session_cae = None
+        self._session_backend = "file"
         self._abaqus_bat = None
         self._last_result = None
         self._last_run_started_at = None
         self._run_count = 0
-        return {"ok": True, "session_id": sid, "disconnected": True}
+        return {"ok": True, "session_id": sid, "backend": backend, "disconnected": True}

@@ -46,10 +46,15 @@ into the sim process (Abaqus modules live in Abaqus's own embedded Python):
 - Input decks (`.inp`): `abaqus job=<name> input=<file> interactive`
 - CAE Python scripts (`.py`): `abaqus cae noGUI=<file>`
 
-For iterative CAE authoring, the plugin also supports a file-backed
-`sim connect` / `sim exec` workflow. Each snippet runs inside Abaqus/CAE,
+For iterative CAE authoring, the plugin supports `sim connect` / `sim exec`
+workflows. The default file-backed backend launches Abaqus/CAE per snippet,
 loads the session `.cae` database, mutates it, saves it back, and returns
-model/workspace diagnostics for `sim inspect`.
+model/workspace diagnostics for `sim inspect`. For lower-latency agent loops,
+`backend=bridge` starts one long-lived noGUI CAE process with a localhost
+command bridge, so repeated snippets operate on the same in-memory CAE state
+before saving back to the session `.cae` file. The bridge is local-only and
+uses a per-session token; use it only in workspaces trusted by the user running
+the session.
 
 Use `sim-plugin-mechanical` only for Ansys Mechanical/PyMechanical workflows,
 not for Abaqus input decks or CAE scripts.

@@ -36,6 +36,7 @@ def test_wheel_contains_skills(tmp_path: Path) -> None:
         "sim_plugin_abaqus/__init__.py",
         "sim_plugin_abaqus/driver.py",
         "sim_plugin_abaqus/_skills/abaqus/SKILL.md",
+        "sim_plugin_abaqus/_skills/abaqus/base/reference/doc_lookup.md",
     }
     missing = required - names
     assert not missing, f"missing from wheel: {missing}"

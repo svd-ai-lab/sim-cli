@@ -5,7 +5,8 @@ run a completed input deck.
 
 ## Session Shape
 
-The Abaqus plugin uses a file-backed CAE session:
+The Abaqus plugin supports two CAE session backends. Use the default
+file-backed backend when maximum isolation matters:
 
 ```powershell
 sim connect --solver abaqus --mode cae --ui-mode no_gui --workspace runs/abaqus_case
@@ -19,6 +20,23 @@ Each `sim exec` call launches Abaqus/CAE for one snippet, loads the session
 `.cae` database if it exists, runs the snippet, saves the database, and returns
 model/workspace diagnostics. Treat this as persistent model state, not as a
 live GUI process.
+
+Use the bridge backend for faster iterative authoring:
+
+```powershell
+sim connect --solver abaqus --mode cae --ui-mode no_gui --backend bridge --workspace runs/abaqus_case
+sim exec "<Abaqus/CAE Python snippet>"
+sim inspect cae.model_summary
+sim disconnect
+```
+
+The bridge backend keeps one noGUI CAE process alive and sends snippets through
+a localhost command channel. It preserves in-memory CAE state across snippets,
+returns stdout/stderr/tracebacks, saves the session `.cae` after each exec, and
+still avoids GUI automation. Prefer this for agent-driven build/debug/report
+loops when a local interactive process is acceptable. The bridge uses a
+per-session token and should be used only in trusted workspaces owned by the
+session user.
 
 ## Agent Loop
 
