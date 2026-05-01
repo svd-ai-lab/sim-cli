@@ -62,29 +62,34 @@ for PyMechanical / Ansys Mechanical sessions.
 
 ## Hard constraints (apply to every session)
 
-0. **Availability first.** Run `sim check abaqus` before creating files. If
+0. **Respect the Abaqus embedded-Python boundary.** Ordinary file-side
+   plotting/post-processing follows the sim-cli Python-helper environment
+   guidance. Abaqus/CAE and ODB scripts are different: execute them through
+   `sim run --solver abaqus script.py` so Abaqus launches its embedded Python
+   with the vendor modules available.
+1. **Availability first.** Run `sim check abaqus` before creating files. If
    it reports `not_installed`, do not keep trying random paths. Ask the user
    to install Abaqus or set `SIM_ABAQUS_COMMAND` / `ABAQUS_COMMAND` /
    `ABAQUS_BAT_PATH` to the exact launcher, for example
    `C:\SIMULIA\Commands\abq2026.bat`.
-1. **Never invent Category A defaults.** Geometry, materials, BCs,
+2. **Never invent Category A defaults.** Geometry, materials, BCs,
    analysis type, acceptance criteria — if missing, ask the user.
-2. **Acceptance != exit code.** Validate against physics-based criteria
+3. **Acceptance != exit code.** Validate against physics-based criteria
    (displacement, stress, temperature ranges), not just `exit_code == 0`.
-3. **Input deck keywords are case-insensitive** but use `*UPPERCASE` by
+4. **Input deck keywords are case-insensitive** but use `*UPPERCASE` by
    convention. Always include `*HEADING`.
-4. **Working directory matters.** Abaqus creates output files (.dat, .odb,
+5. **Working directory matters.** Abaqus creates output files (.dat, .odb,
    .msg, .sta) next to the input file. Use `cwd` appropriately.
-5. **Use the right mode.** If the model is already fully specified, prefer
+6. **Use the right mode.** If the model is already fully specified, prefer
    `sim run --solver abaqus file.inp` or `sim run --solver abaqus script.py`.
    If the agent is building/debugging the model incrementally, use
    `sim connect --solver abaqus --mode cae` and iterate with `sim exec`. Use
    `--backend bridge` when repeated small snippets need a live in-memory CAE
    session.
-6. **Save and inspect after every modeling step.** In CAE authoring mode,
+7. **Save and inspect after every modeling step.** In CAE authoring mode,
    each snippet should leave the `.cae` database in a coherent state and then
    check `sim inspect cae.model_summary` or `sim inspect job.diagnostics`.
-7. **Check docs or probe before guessing APIs.** If unsure about an Abaqus
+8. **Check docs or probe before guessing APIs.** If unsure about an Abaqus
    keyword, CAE method, command option, or output variable, follow
    `base/reference/doc_lookup.md` before editing the real model.
 
@@ -100,7 +105,9 @@ For batch work: write the `.inp` deck or `.py` script, lint with `sim lint`,
 execute with `sim run --solver abaqus`, then choose the post-processing path
 by artifact: `.dat` -> Python text parsing on the fetched file; ODB -> vendor
 Python via `sim run --solver abaqus script.py` (sim-cli is the right and only
-tool here). Validate against physics-based acceptance criteria.
+tool here). For ordinary file-side post-processing and plotting, follow the
+sim-cli Python-helper environment guidance. Validate against physics-based
+acceptance criteria.
 
 For modeling/debug/reporting work: start `sim connect --solver abaqus --mode
 cae --ui-mode no_gui`, optionally adding `--backend bridge` for a live noGUI
