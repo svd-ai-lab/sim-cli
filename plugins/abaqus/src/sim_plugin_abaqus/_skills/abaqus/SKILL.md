@@ -5,9 +5,9 @@ description: Use when driving Dassault Systemes SIMULIA Abaqus via input decks (
 
 # abaqus-sim
 
-You are connected to **Abaqus** via sim-cli. This file is the
-**index**. It tells you where to look for actual content — it does not
-contain the content itself.
+This file is the **Abaqus** index. Use sim-cli for solver execution and live
+CAE authoring; use portable Python text parsing for completed text artifacts
+when the job files are already on disk.
 
 Abaqus is a commercial finite element analysis (FEA) solver by Dassault
 Systemes SIMULIA. The sim plugin supports two execution styles:
@@ -97,8 +97,10 @@ inputs from the user (geometry, material properties, loads, BCs, analysis
 type, acceptance criteria).
 
 For batch work: write the `.inp` deck or `.py` script, lint with `sim lint`,
-execute with `sim run --solver abaqus`, parse `.dat` / ODB-derived outputs,
-and validate against physics-based acceptance criteria.
+execute with `sim run --solver abaqus`, then choose the post-processing path
+by artifact: `.dat` -> Python text parsing on the fetched file; ODB -> vendor
+Python via `sim run --solver abaqus script.py` (sim-cli is the right and only
+tool here). Validate against physics-based acceptance criteria.
 
 For modeling/debug/reporting work: start `sim connect --solver abaqus --mode
 cae --ui-mode no_gui`, optionally adding `--backend bridge` for a live noGUI

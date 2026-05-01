@@ -15,11 +15,21 @@ Inspect these outputs after every job:
 | `.odb` | Binary result database | field outputs for reporting plots and extrema |
 | `.com` | Command echo | job options and command context |
 
-Use:
+Use the mode closest to where the job state lives:
 
-```powershell
-sim inspect job.diagnostics
-sim inspect workdir.files
+| Mode | Pick when | Recipe |
+|---|---|---|
+| Live | The solve is in progress or an Abaqus session is already open. This wins on Windows hosts because there is no portable streaming-tail alternative. | `sim inspect job.diagnostics` and `sim inspect workdir.files` |
+| Post-mortem | The job finished and the files are on disk. | Use Python stdlib text parsing locally against fetched files, or via `ssh win1 python -c "..."` for a short one-shot. |
+
+```python
+from pathlib import Path
+import re
+
+p = "job.msg"
+msg = Path(p).read_text(errors="replace")
+errors = re.findall(r"^\s*\*+\s*ERROR.*", msg, re.M)
+print("\n".join(errors))
 ```
 
 ## Debug Loop
