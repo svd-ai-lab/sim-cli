@@ -1,13 +1,13 @@
 ---
 name: comsol-sim
-description: Use when driving COMSOL Multiphysics through the sim runtime — building, inspecting, debugging, and solving stateful COMSOL models through the JPype Java API, optionally with a human watching the COMSOL GUI client. Includes runtime introspection and verification utilities to compensate for broken Windows image export.
+description: Use when working with COMSOL Multiphysics through the sim runtime or inspecting saved `.mph` artifacts — building, inspecting, debugging, and solving stateful COMSOL models through the JPype Java API, optionally with a human watching the COMSOL GUI client, plus offline `.mph` introspection without a JVM.
 ---
 
 # comsol-sim
 
-You are driving **COMSOL Multiphysics** via sim-cli in a **persistent
-session** (JPype Java API). This file is the **index** — it tells you
-where to look for content, not what the content says.
+This file is the **COMSOL Multiphysics** index. Use the offline `.mph`
+inspection path for saved artifacts; use sim-cli for persistent live sessions
+that mutate, solve, or inspect the current JPype Java API model.
 
 > **First, read [`../sim-cli/SKILL.md`](../sim-cli/SKILL.md)** — it owns
 > the shared runtime contract (session lifecycle, Step-0 version probe,
@@ -93,6 +93,9 @@ documentation that ships with every install:
 ```bash
 uv run --project <sim-skills>/comsol/doc-search sim-comsol-doc search "<term>" [--module <substring>]
 ```
+
+`doc-search` runs in pure CPython: no live COMSOL session, no sim runtime,
+and no JVM. It scans the installed COMSOL HTML help on disk.
 
 One-time setup on any host that has COMSOL installed:
 
@@ -205,6 +208,10 @@ These add to — do not replace — the shared skill's hard constraints.
 COMSOL through sim is a persistent, inspectable modeling session. Treat
 it as a live engineering state, not as a one-shot code generator.
 
+0. If the question is about a saved `.mph` (parameters, physics tags,
+   solved/unsolved state, mesh size), use `inspect_mph(path)` first — no
+   JVM and no `sim connect` needed. Skip to step 1 only if the model needs
+   to be mutated or solved.
 1. Connect with `sim connect --solver comsol`.
 2. Run the shared Step-0 version probe and read `session.versions`.
 3. Inspect `sim inspect session.health`.
