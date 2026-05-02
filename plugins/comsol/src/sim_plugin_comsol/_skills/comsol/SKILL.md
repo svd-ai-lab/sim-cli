@@ -212,7 +212,15 @@ it as a live engineering state, not as a one-shot code generator.
    solved/unsolved state, mesh size), use `inspect_mph(path)` first — no
    JVM and no `sim connect` needed. Skip to step 1 only if the model needs
    to be mutated or solved.
-1. Connect with `sim connect --solver comsol`.
+1. Choose the control path. For interactive Windows work, default to the
+   human-collaboration path unless the task explicitly needs the driver
+   runtime:
+   - Use the standalone Desktop attach helper when the user wants ordinary,
+     realtime-visible COMSOL Desktop work, when they already opened Desktop,
+     or when avoiding the `mphclient` server login dialog matters.
+   - Use `sim connect --solver comsol` only when you need `sim inspect`,
+     JPype session state, driver-managed artifacts, headless/server
+     execution, or compatibility with existing sim runtime workflows.
 2. Run the shared Step-0 version probe and read `session.versions`.
 3. Inspect `sim inspect session.health`.
 4. Inspect the baseline model with `sim inspect comsol.model.describe_text`
@@ -242,12 +250,41 @@ COMSOL has several visual surfaces. Do not collapse them into one
 | `server-graphics` | `comsolmphserver -graphics`; plot windows may appear when a result plot is run. This is the current default effective mode. Legacy `ui_mode=gui` is an alias for this. | Yes for the server-side model, but there is no Model Builder tree. |
 | `desktop-inspection` | Save a `.mph` artifact, then open it in full COMSOL Desktop / Model Builder. | No. It is an inspection copy unless explicitly reloaded. |
 | `shared-desktop` | Full COMSOL Desktop attached to the same server, with the agent binding to the Desktop's active model tag. Request from sim-cli with `--driver-option visual_mode=shared-desktop`. | Yes, when `model_builder_live: true`. |
+| `desktop-attach` | Ordinary COMSOL Desktop, controlled through the Java Shell UIA channel via `sim-comsol-attach`. No `mphclient`, no shared server login dialog. | Yes, in the visible Desktop model, but without `sim inspect`/JPype session introspection. |
 
 Use `sim inspect session.health` or `sim exec` target `session.health`
 to check `requested_ui_mode`, `effective_ui_mode`, `ui_capabilities`,
 PIDs, logs, and visible COMSOL window titles. Treat `model_builder_live:
 false` as authoritative: agent-side JPype edits will not automatically
 refresh a separately opened COMSOL Desktop window.
+
+### Ordinary Desktop attach helper
+
+For interactive Windows work, the normal user-facing default is the
+standalone helper:
+
+```powershell
+sim-comsol-attach open --json --timeout 120
+sim-comsol-attach health --json
+sim-comsol-attach exec --file step.java --json
+```
+
+`open` launches normal `comsol.exe` if no suitable Desktop exists,
+clicks Blank Model when needed, opens Java Shell, and waits for a
+`SyntaxEditor` input. It does not launch `comsol.exe mphclient`, so it
+avoids the repeated "Connect to COMSOL Multiphysics Server" dialog.
+
+For `exec`, submit bounded Java Shell snippets that use COMSOL's Java API
+against the visible Desktop model. Keep the same modeling discipline as
+`sim exec`: one layer at a time, verify the Desktop after each geometry,
+material, physics, mesh, solve, and plot step, then continue. The helper
+audits submissions under `.sim/comsol-desktop-attach/audit.jsonl`.
+
+By default, `exec` rejects arbitrary Java lines that do not start from the
+COMSOL model surface. Use `--allow-arbitrary-java` only for deliberate
+diagnostic snippets. If you need structured model introspection, saved
+artifacts, or cross-session runtime state, switch back to the driver path
+with `sim connect --solver comsol`.
 
 Shared-desktop gotcha verified on Win1 with COMSOL 6.4: launching
 `comsol.exe mphclient -host localhost -port <port>` does attach a full

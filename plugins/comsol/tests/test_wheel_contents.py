@@ -35,6 +35,8 @@ def test_wheel_contains_skills(tmp_path: Path) -> None:
     required = {
         "sim_plugin_comsol/__init__.py",
         "sim_plugin_comsol/driver.py",
+        "sim_plugin_comsol/desktop_attach/__init__.py",
+        "sim_plugin_comsol/desktop_attach/cli.py",
         "sim_plugin_comsol/_skills/comsol/SKILL.md",
         "sim_plugin_comsol/_skills/comsol/base/reference/runtime_introspection.md",
         "sim_plugin_comsol/_skills/comsol/base/workflows/debug_failed_exec.md",

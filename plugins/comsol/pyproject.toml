@@ -40,6 +40,9 @@ comsol = "sim_plugin_comsol:skills_dir"
 [project.entry-points."sim.plugins"]
 comsol = "sim_plugin_comsol:plugin_info"
 
+[project.scripts]
+sim-comsol-attach = "sim_plugin_comsol.desktop_attach.cli:main"
+
 [project.urls]
 Homepage = "https://github.com/svd-ai-lab/sim-plugin-comsol"
 Issues = "https://github.com/svd-ai-lab/sim-plugin-comsol/issues"
