@@ -148,12 +148,11 @@ sim --host <server-ip> disconnect
 插件发现和安装分开：
 
 ```bash
-sim plugin catalog              # 查看 community catalogue 里的可用插件
-sim plugin search ltspice       # 查看包名和推荐的显式安装命令
+sim plugin catalog              # 查看官方插件目录（含可直接复制的安装命令）
 sim plugin list                 # 查看本机已安装/已注册插件
 ```
 
-`ltspice` 这样的短别名是 catalogue 名称，不是安装来源。先用 `sim plugin search <name>` 发现包名，再执行它打印出来的显式安装命令。
+`ltspice` 这样的短别名是 catalogue 名称，不是安装来源。运行 `sim plugin catalog` 查看每个插件推荐的安装字符串，然后将其传给 `sim plugin install`。
 
 ---
 

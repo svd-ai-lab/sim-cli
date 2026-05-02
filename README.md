@@ -157,12 +157,11 @@ That's the full loop: **detect → bootstrap → launch → drive → observe �
 Discovery is separate from installation:
 
 ```bash
-sim plugin catalog              # available plugins from the community catalogue
-sim plugin search ltspice       # show package name + explicit install command
+sim plugin catalog              # official plugins (display + copy-paste install string)
 sim plugin list                 # installed/registered plugins on this machine
 ```
 
-Short solver aliases such as `ltspice` are catalogue names, not install sources. Use `sim plugin search <name>` to discover the package, then run the explicit install command it prints.
+Short solver aliases such as `ltspice` are catalogue names, not install sources. Run `sim plugin catalog` to find the recommended install string for each plugin, then pass it to `sim plugin install`.
 
 ---
 
@@ -175,7 +174,7 @@ Short solver aliases such as `ltspice` are catalogue names, not install sources.
 Install from a discovered package, then list what is installed locally:
 
 ```bash
-sim plugin search ltspice       # discover package + explicit install command
+sim plugin catalog              # discover what's available + install strings
 sim plugin install sim-plugin-ltspice
 sim plugin list                 # show installed plugins
 ```

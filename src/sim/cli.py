@@ -1034,49 +1034,14 @@ def plugin_catalog_cmd(ctx, offline, refresh, catalog_url):
 
     click.echo(f"[sim] {len(rows)} available plugin(s) in catalog:")
     for r in rows:
-        ver = f" {r.latest_version}" if r.latest_version else ""
+        ver = f" {r.version}" if r.version else ""
         license_class = f" ({r.license_class})" if r.license_class else ""
-        click.echo(f"  {r.name:20s} {r.package}{ver}{license_class}")
+        dist = f" [{r.distribution}]" if r.distribution else ""
+        click.echo(f"  {r.id:20s} {r.name}{ver}{dist}{license_class}")
         if r.summary:
             click.echo(f"    {r.summary}")
-        click.echo(f"    install: {r.install_command}")
-
-
-@plugin.command("search")
-@click.argument("query")
-@click.option("--offline", is_flag=True,
-              help="Use the cached discovery catalogue only.")
-@click.option("--refresh", is_flag=True,
-              help="Refresh the cached discovery catalogue.")
-@click.option("--catalog-url", default=None,
-              help="Override the discovery catalogue URL.")
-@click.pass_context
-def plugin_search_cmd(ctx, query, offline, refresh, catalog_url):
-    """Search available plugins in the discovery catalogue."""
-    from sim.plugin_catalog import DEFAULT_CATALOG_URL, list_catalog
-
-    rows = list_catalog(
-        query=query,
-        url=catalog_url or DEFAULT_CATALOG_URL,
-        offline=offline,
-        force=refresh,
-    )
-    if ctx.obj["json"]:
-        click.echo(json_mod.dumps([r.to_dict() for r in rows], indent=2))
-        return
-
-    if not rows:
-        click.echo(f"[sim] plugin search: no catalog matches for {query!r}")
-        return
-
-    click.echo(f"[sim] {len(rows)} catalog match(es):")
-    for r in rows:
-        ver = f" {r.latest_version}" if r.latest_version else ""
-        license_class = f" ({r.license_class})" if r.license_class else ""
-        click.echo(f"  {r.name:20s} {r.package}{ver}{license_class}")
-        if r.summary:
-            click.echo(f"    {r.summary}")
-        click.echo(f"    install: {r.install_command}")
+        if r.install:
+            click.echo(f"    install: sim plugin install {r.install}")
 
 
 @plugin.command("list")

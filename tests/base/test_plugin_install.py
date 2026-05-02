@@ -96,8 +96,8 @@ def test_resolve_bare_short_name_rejected(name: str):
     with pytest.raises(ValueError) as exc:
         resolve_source(name)
     msg = str(exc.value)
-    assert "catalog name" in msg
-    assert f"sim plugin search {name}" in msg
+    assert "explicit plugin install source" in msg
+    assert "sim plugin catalog" in msg
     assert f"sim-plugin-{name}" in msg
 
 

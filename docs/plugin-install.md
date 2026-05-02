@@ -8,7 +8,7 @@ covers every way to install one.
 
 | Situation | Command |
 |---|---|
-| Discover available plugins | `sim plugin catalog` / `sim plugin search coolprop` |
+| Discover available plugins | `sim plugin catalog` |
 | PyPI package | `sim plugin install sim-plugin-coolprop` |
 | Pinned PyPI package | `sim plugin install sim-plugin-coolprop==0.1.0` |
 | Private package index | `sim plugin install sim-plugin-mechanical --extra-index-url https://example.com/simple/` |
@@ -33,8 +33,9 @@ covers every way to install one.
 6. `git+https://...` or `git+ssh://...` — git URL (when git is available).
 
 Bare short names such as `coolprop` or `ltspice` are catalogue names, not
-install sources. Use `sim plugin search <name>` to discover the package and
-recommended explicit install command, then run that command.
+install sources. Run `sim plugin catalog` to see the official plugin list
+with the recommended explicit install command for each, then pass that
+command's argument to `sim plugin install`.
 
 After the package installs, `sim plugin install` runs `sync-skills`
 automatically so the plugin's bundled `_skills/<solver>/` becomes
@@ -46,12 +47,12 @@ Agents can discover available plugins without installing anything:
 
 ```sh
 sim plugin catalog
-sim plugin search coolprop
-sim plugin search coolprop --json
+sim plugin catalog --json
 ```
 
-The catalogue is for discovery only. It may print recommended explicit
-install commands, but `sim plugin install <short-name>` does not silently
+The catalogue is for discovery only. Each entry includes a copy-paste
+`install` string that callers pass to `sim plugin install`. The catalogue
+is advisory metadata; `sim plugin install <short-name>` does not silently
 resolve a catalogue name into a URL or package.
 
 ## Online

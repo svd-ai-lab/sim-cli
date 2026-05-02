@@ -2,8 +2,29 @@
 
 The catalogue answers "what plugins exist?" for users and agents. It is
 intentionally separate from ``sim plugin install`` source resolution: catalogue
-entries may suggest explicit install commands, but installing still requires a
-pip-native package spec, URL, git URL, or local path.
+entries advertise an explicit install string, but installing still requires the
+caller to pass that string (or any other pip-native source) to
+``sim plugin install``. The catalogue is advisory metadata, not a trust
+boundary or a runtime resolver.
+
+Schema (sim-plugin-index ``index.json``, ``schema_version: 2``):
+
+    {
+      "id":           "ltspice",                  # short slug
+      "name":         "LTspice",                  # display name
+      "distribution": "pypi" | "wheel" | "git",   # advisory tag
+      "install":      "sim-plugin-ltspice==0.2.3" # literal arg to `sim plugin install`
+                      | "https://.../foo.whl#sha256=..."
+                      | "git+https://...",
+      "version":      "0.2.3",
+      "summary":      "...",                      # optional, display only
+      "homepage":     "...",                      # optional, display only
+      "license_class": "oss" | "commercial"       # optional, display only
+    }
+
+The reader also accepts the legacy ``schema_version: 1`` shape (``name`` as
+slug, ``latest_version``, ``latest_wheel_url``/``git``/``package``) so the
+catalogue can migrate independently of sim-cli releases.
 """
 from __future__ import annotations
 
@@ -26,26 +47,28 @@ def _catalog_cache_path() -> Path:
 
 @dataclass(frozen=True)
 class CatalogEntry:
-    """One available plugin as shown by the discovery catalogue."""
+    """One available plugin as advertised by the discovery catalogue."""
 
-    name: str
-    package: str
+    id: str                     # short slug, e.g. "ltspice"
+    name: str = ""              # display name, e.g. "LTspice"
+    distribution: str = ""      # "pypi" | "wheel" | "git" | ""
+    install: str = ""           # literal arg to `sim plugin install`
+    version: str = ""           # advertised current version
     summary: str = ""
     homepage: str = ""
     license_class: str = ""
-    latest_version: str = ""
-    install_command: str = ""
     source: str = "catalog"
 
     def to_dict(self) -> dict[str, str]:
         return {
+            "id": self.id,
             "name": self.name,
-            "package": self.package,
+            "distribution": self.distribution,
+            "install": self.install,
+            "version": self.version,
             "summary": self.summary,
             "homepage": self.homepage,
             "license_class": self.license_class,
-            "latest_version": self.latest_version,
-            "install_command": self.install_command,
             "source": self.source,
         }
 
@@ -58,8 +81,7 @@ def fetch_catalog(
 ) -> dict[str, Any]:
     """Fetch the plugin discovery catalogue with a small local cache.
 
-    The cache is only for discovery. It is never used by ``resolve_source`` or
-    install-time short-name resolution.
+    The cache is only for discovery. It is never consulted at install time.
     """
 
     cache = _catalog_cache_path()
@@ -68,8 +90,8 @@ def fetch_catalog(
             try:
                 return json.loads(cache.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError):
-                return {"schema_version": 1, "plugins": []}
-        return {"schema_version": 1, "plugins": []}
+                return {"schema_version": 2, "plugins": []}
+        return {"schema_version": 2, "plugins": []}
 
     if not force and cache.is_file():
         try:
@@ -88,58 +110,85 @@ def fetch_catalog(
                 return json.loads(cache.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError):
                 pass
-        return {"schema_version": 1, "plugins": []}
+        return {"schema_version": 2, "plugins": []}
 
     cache.parent.mkdir(parents=True, exist_ok=True)
     cache.write_text(data, encoding="utf-8")
     return parsed
 
 
-def _default_package_name(name: str) -> str:
-    return f"sim-plugin-{name.replace('_', '-')}"
+def _legacy_install_string(raw: dict[str, Any]) -> tuple[str, str]:
+    """Derive (install, distribution) from a v1 catalogue entry.
+
+    v1 entries had ``package`` / ``latest_version`` / ``latest_wheel_url`` /
+    ``git`` instead of a single ``install`` string. Order of preference:
+    pinned wheel URL → PyPI package spec → git URL → bare package name.
+    """
+    package = str(raw.get("package") or raw.get("pypi_package") or "").strip()
+    version = str(raw.get("latest_version") or raw.get("version") or "").strip()
+    wheel_url = str(raw.get("latest_wheel_url") or "").strip()
+    git_url = str(raw.get("git") or "").strip()
+
+    if wheel_url:
+        return wheel_url, "wheel"
+    if package and version:
+        return f"{package}=={version}", "pypi"
+    if package:
+        return package, "pypi"
+    if git_url:
+        return f"git+{git_url}", "git"
+    return "", ""
 
 
 def _entry_from_mapping(raw: dict[str, Any], *, source: str) -> CatalogEntry | None:
-    name = str(raw.get("name") or "").strip()
-    if not name:
+    # Slug: prefer v2 `id`, fall back to v1 `name`.
+    slug = str(raw.get("id") or raw.get("name") or "").strip()
+    if not slug:
         return None
 
-    package = str(raw.get("package") or raw.get("pypi_package") or _default_package_name(name))
-    latest_version = str(raw.get("latest_version") or raw.get("version") or "")
-    install = raw.get("install")
-    install_command = ""
-    if isinstance(install, dict):
-        install_command = str(install.get("command") or "")
-    elif isinstance(install, str):
-        install_command = install
-    if not install_command:
-        install_command = f"sim plugin install {package}"
-        if latest_version and raw.get("pin_latest"):
-            install_command = f"sim plugin install {package}=={latest_version}"
+    # Display name: prefer explicit `name`, fall back to slug.
+    display = str(raw.get("name") or slug).strip()
+    # If both `id` and `name` were absent we used `name` as slug — re-derive
+    # display from the slug to avoid showing the raw key as both fields.
+    if not raw.get("id") and raw.get("name"):
+        display = str(raw["name"]).strip()
+
+    distribution = str(raw.get("distribution") or "").strip()
+    install = str(raw.get("install") or "").strip()
+    version = str(raw.get("version") or raw.get("latest_version") or "").strip()
+
+    # v1 fallback: synthesize install + distribution from legacy fields.
+    if not install:
+        install, legacy_dist = _legacy_install_string(raw)
+        if not distribution:
+            distribution = legacy_dist
 
     return CatalogEntry(
-        name=name,
-        package=package,
+        id=slug,
+        name=display,
+        distribution=distribution,
+        install=install,
+        version=version,
         summary=str(raw.get("summary") or raw.get("description") or ""),
         homepage=str(raw.get("homepage") or raw.get("url") or raw.get("git") or ""),
         license_class=str(raw.get("license_class") or raw.get("license") or ""),
-        latest_version=latest_version,
-        install_command=install_command,
         source=source,
     )
 
 
 def normalize_catalog(raw: dict[str, Any], *, source: str = "catalog") -> list[CatalogEntry]:
-    """Normalize current and future catalogue shapes into ``CatalogEntry`` rows."""
+    """Normalize current and legacy catalogue shapes into ``CatalogEntry`` rows."""
 
     plugins = raw.get("plugins", [])
     if isinstance(plugins, dict):
         iterable = []
-        for name, info in plugins.items():
+        for slug, info in plugins.items():
             if isinstance(info, dict):
-                item = {"name": name, **info}
+                # If the value already carries `id` we trust it; otherwise
+                # promote the dict key to the slug.
+                item = {"id": slug, **info} if "id" not in info else dict(info)
             else:
-                item = {"name": name}
+                item = {"id": slug}
             iterable.append(item)
     elif isinstance(plugins, list):
         iterable = [p for p in plugins if isinstance(p, dict)]
@@ -151,7 +200,7 @@ def normalize_catalog(raw: dict[str, Any], *, source: str = "catalog") -> list[C
         row = _entry_from_mapping(item, source=source)
         if row is not None:
             rows.append(row)
-    return sorted(rows, key=lambda r: r.name.lower())
+    return sorted(rows, key=lambda r: r.id.lower())
 
 
 def list_catalog(
@@ -161,7 +210,13 @@ def list_catalog(
     offline: bool = False,
     force: bool = False,
 ) -> list[CatalogEntry]:
-    """List/search available plugins from the discovery catalogue."""
+    """List available plugins from the discovery catalogue.
+
+    ``query`` is an optional case-insensitive substring filter over
+    ``id``/``name``/``summary``/``homepage``. Kept as a helper-level option for
+    callers that want to filter the same data; the CLI exposes only the full
+    listing (``sim plugin catalog``).
+    """
 
     raw = fetch_catalog(url=url, offline=offline, force=force)
     rows = normalize_catalog(raw, source=url)
@@ -170,8 +225,8 @@ def list_catalog(
     q = query.lower()
     return [
         row for row in rows
-        if q in row.name.lower()
-        or q in row.package.lower()
+        if q in row.id.lower()
+        or q in row.name.lower()
         or q in row.summary.lower()
         or q in row.homepage.lower()
     ]

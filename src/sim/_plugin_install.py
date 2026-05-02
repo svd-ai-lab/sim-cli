@@ -51,10 +51,11 @@ _VERSION_PIN_RE = re.compile(r"(?:==|!=|~=|>=|<=|>|<)\s*(.+)$")
 
 def _short_name_error(name: str) -> str:
     return (
-        f"{name!r} is a catalog name, not an explicit plugin install source. "
-        f"Run 'sim plugin search {name}' to discover the package, then install "
-        "with a local path, direct wheel/sdist URL, git URL, or exact package "
-        f"spec such as 'sim-plugin-{name}' if that package exists."
+        f"{name!r} is not an explicit plugin install source. "
+        "See 'sim plugin catalog' for the official plugin list, or pass an "
+        "explicit pip-installable source: a local wheel/sdist path, a direct "
+        "wheel/sdist URL, a git URL, or a package spec such as "
+        f"'sim-plugin-{name}'."
     )
 
 
