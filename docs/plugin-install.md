@@ -47,7 +47,7 @@ Agents can discover available plugins without installing anything:
 
 ```sh
 sim plugin catalog
-sim plugin catalog --json
+sim --json plugin catalog
 ```
 
 The catalogue is for discovery only. Each entry includes a copy-paste
@@ -135,7 +135,7 @@ After install, check the plugin loaded cleanly:
 ```sh
 sim plugin list                  # one row per installed plugin
 sim plugin doctor coolprop       # detailed validation
-sim plugin doctor --all --json   # machine-readable
+sim --json plugin doctor --all   # machine-readable
 ```
 
 `doctor` checks that the plugin's entry-points resolve, the driver

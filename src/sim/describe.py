@@ -116,16 +116,12 @@ _EXAMPLES: dict[str, list[dict[str, str]]] = {
          "summary": "List the closed enum of error codes."},
     ],
     "plugin list": [
-        {"cmd": "sim plugin list --json",
+        {"cmd": "sim --json plugin list",
          "summary": "List every registered plugin (built-in + external)."},
     ],
     "plugin catalog": [
-        {"cmd": "sim plugin catalog --json",
+        {"cmd": "sim --json plugin catalog",
          "summary": "List available plugins from the discovery catalogue."},
-    ],
-    "plugin search": [
-        {"cmd": "sim plugin search ltspice --json",
-         "summary": "Search the discovery catalogue for package and install guidance."},
     ],
     "plugin info": [
         {"cmd": "sim plugin info coolprop",
@@ -152,7 +148,7 @@ _EXAMPLES: dict[str, list[dict[str, str]]] = {
          "summary": "Materialize installed plugins' _skills into .claude/skills/."},
     ],
     "plugin doctor": [
-        {"cmd": "sim plugin doctor --all --json",
+        {"cmd": "sim --json plugin doctor --all",
          "summary": "Run doctor on every plugin; exits with the count of FAILs."},
     ],
 }
