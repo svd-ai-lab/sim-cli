@@ -70,6 +70,7 @@ server_port = 7600
 
 [[sim.plugins]]
 name = "coolprop"
+package = "sim-plugin-coolprop"
 version = ">=0.1.0"
 
 [[sim.plugins]]
@@ -93,13 +94,21 @@ def test_derive_source_from_git():
 
 
 def test_derive_source_from_pinned_version():
-    s = _cfg.derive_install_source({"name": "x", "version": "==1.2.3"})
-    assert s == "x@1.2.3"
+    s = _cfg.derive_install_source({
+        "name": "x",
+        "package": "sim-plugin-x",
+        "version": "==1.2.3",
+    })
+    assert s == "sim-plugin-x==1.2.3"
 
 
-def test_derive_source_from_range_falls_back_to_bare_name():
-    s = _cfg.derive_install_source({"name": "x", "version": ">=0.1"})
-    assert s == "x"
+def test_derive_source_from_range_uses_package_spec():
+    s = _cfg.derive_install_source({
+        "name": "x",
+        "package": "sim-plugin-x",
+        "version": ">=0.1",
+    })
+    assert s == "sim-plugin-x>=0.1"
 
 
 def test_derive_source_bare_name():
@@ -181,6 +190,7 @@ def test_cli_setup_dry_run_lists_what_would_install(runner: CliRunner, tmp_path:
 [sim]
 [[sim.plugins]]
 name = "coolprop"
+package = "sim-plugin-coolprop"
 version = "==0.1.0"
 """.strip(), encoding="utf-8")
     r = runner.invoke(main, ["--json", "setup", "--dry-run"])
@@ -189,5 +199,5 @@ version = "==0.1.0"
     assert data["ok"] is True
     assert len(data["plugins"]) == 1
     assert data["plugins"][0]["name"] == "coolprop"
-    assert data["plugins"][0]["source"] == "coolprop@0.1.0"
+    assert data["plugins"][0]["source"] == "sim-plugin-coolprop==0.1.0"
     assert data["plugins"][0]["action"] == "would-install"

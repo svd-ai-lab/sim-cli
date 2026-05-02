@@ -35,7 +35,8 @@ src/sim/
   driver.py          DriverProtocol + result dataclasses
   compat.py          Version-compat profiles + layered skill resolution
   plugins.py         Plugin discovery, listing, info
-  _plugin_install.py Install / uninstall / index resolution
+  plugin_catalog.py Catalogue/discovery fetch + normalization
+  _plugin_install.py Explicit install / uninstall sources
   drivers/
     __init__.py      Plugin registry — discovers external plugins
                      via the `sim.drivers` entry-point group at

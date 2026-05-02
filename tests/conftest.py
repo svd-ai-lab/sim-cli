@@ -105,8 +105,14 @@ def _inject_synthetic_coolprop(request):
 
     from sim import drivers as _drivers_pkg
 
+    # Make the synthetic driver importable by the same module path stored in
+    # the registry. Depending on pytest import mode this file may not already
+    # be visible as top-level ``conftest`` in sys.modules, and ``tests`` is not
+    # a package in this repo, so ``tests.conftest`` is not a portable spec.
+    sys.modules.setdefault("conftest", sys.modules[__name__])
+
     instance = _SyntheticPyDriver()
-    fake_spec = ("coolprop", "tests.conftest:_SyntheticPyDriver")
+    fake_spec = ("coolprop", "conftest:_SyntheticPyDriver")
 
     orig_builtin = list(_drivers_pkg._BUILTIN_REGISTRY)
     orig_registry = list(_drivers_pkg._REGISTRY)

@@ -135,30 +135,25 @@ sim --host <server-ip> disconnect
 
 ---
 
-## 📦 插件索引
+## 📦 插件来源
 
-`sim plugin install <name>` 按顺序查两个索引：
+`sim plugin install <source>` 只接受显式安装来源：
 
-1. **svd 维护的 wheel manifest**：`https://cdn.svdailab.com/manifest.json` —— 项目自己发布的预构建 wheel。匿名 GET，每次有新 wheel 就更新。
-2. **社区维护的 catalogue**：[`sim-plugin-index`](https://github.com/svd-ai-lab/sim-plugin-index) —— 更广的插件清单，由社区维护；条目可以是 OSS 也可以是第三方插件，指向 GitHub release 或 git+https。
+- 精确 package spec，例如 `sim-plugin-ltspice` 或 `sim-plugin-ltspice==0.2.3`
+- 精确包名加私有索引，例如 `sim-plugin-mechanical --extra-index-url https://example.com/simple/`
+- 直接 wheel/sdist URL，例如 `https://example.com/sim_plugin_ltspice-0.2.3-py3-none-any.whl`
+- git URL，例如 `git+https://github.com/<org>/sim-plugin-<name>`
+- 本地插件目录、wheel 或 sdist
 
-第一个命中的赢。多数用户感知不到这个分层 —— `sim plugin install ltspice` 直接就能装上。
+插件发现和安装分开：
 
-svd manifest 的 schema（社区 catalogue 是另一种 shape，看它仓库里的说明）：
-
-```json
-{
-  "updated": "<ISO date>",
-  "plugins": {
-    "<name>": {
-      "version": "<X.Y.Z>",
-      "wheel": "https://cdn.svdailab.com/wheels/<file>.whl"
-    }
-  }
-}
+```bash
+sim plugin catalog              # 查看 community catalogue 里的可用插件
+sim plugin search ltspice       # 查看包名和推荐的显式安装命令
+sim plugin list                 # 查看本机已安装/已注册插件
 ```
 
-如果想跳过 resolver 直接装某个 wheel，把 URL 直接给 `sim plugin install`：`sim plugin install https://cdn.svdailab.com/wheels/<file>.whl`。
+`ltspice` 这样的短别名是 catalogue 名称，不是安装来源。先用 `sim plugin search <name>` 发现包名，再执行它打印出来的显式安装命令。
 
 ---
 
@@ -173,7 +168,7 @@ svd manifest 的 schema（社区 catalogue 是另一种 shape，看它仓库里�
 ### 🔌 求解器无关
 - **一套协议** (`DriverProtocol`) —— 每个 driver 仅 ~200 行，注册到 `drivers/__init__.py` 即可
 - **持久 + 一次性**两种模式共用同一个 CLI
-- **开放注册表** —— 新求解器持续加入；CFD、多物理场、热、前处理、电池模型都在范围内
+- **插件发现 + 显式安装** —— `sim plugin catalog/search` 用来发现可用插件；`sim plugin install` 只执行精确包名、私有索引、URL、git 或本地 artifact
 - **配套 skills** 在 [`sim-skills`](https://github.com/svd-ai-lab/sim-skills) —— 让大模型立刻知道每个新后端的坑
 
 ### 🌐 远程友好
@@ -187,6 +182,8 @@ svd manifest 的 schema（社区 catalogue 是另一种 shape，看它仓库里�
 
 | 命令 | 功能 | 类比 |
 |---|---|---|
+| `sim plugin catalog / search` | 发现可用插件 | `npm search` |
+| `sim plugin list / install / uninstall` | 管理本机已安装插件 | `npm install` |
 | `sim check <solver>` | 检测安装版本并解析 profile | `docker info` |
 | `sim env install <profile>` | 启动 profile env（venv + 固定 SDK） | `pyenv install` |
 | `sim env list [--catalogue]` | 列出已启动的 env（或全部目录） | `pyenv versions` |

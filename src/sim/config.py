@@ -271,11 +271,12 @@ SIM_TOML_STUB = """\
 # workspace = "./workspace"
 
 # Each entry under [[sim.plugins]] declares one plugin to install.
-# Sources accepted: name (resolved via the public index), git+https://...,
+# Sources accepted: package = "sim-plugin-...", git+https://...,
 # wheel = "./path/to/file.whl", or version = "==X.Y.Z" / ">=X".
 #
 # [[sim.plugins]]
 # name = "coolprop"
+# package = "sim-plugin-coolprop"
 # version = ">=0.1.0"
 """
 
@@ -311,6 +312,7 @@ def validate_sim_toml(path: Path) -> list[str]:
 
         [[sim.plugins]]
         name    = <string>           # required
+        package = <string>?          # exact pip package name/spec
         version = <string>?
         git     = <string>?
         wheel   = <string>?          # local path
@@ -351,7 +353,7 @@ def validate_sim_toml(path: Path) -> list[str]:
             if "name" not in p or not isinstance(p["name"], str):
                 errors.append(f"[[sim.plugins]] entry #{i} missing required 'name'")
                 continue
-            for k in ("version", "git", "wheel"):
+            for k in ("package", "version", "git", "wheel"):
                 if k in p and not isinstance(p[k], str):
                     errors.append(f"[[sim.plugins]] {p['name']!r} field {k!r} must be a string")
 
@@ -362,19 +364,14 @@ def derive_install_source(plugin_entry: dict[str, Any]) -> str:
     """Translate one [[sim.plugins]] entry to an install-source string.
 
     Resolution priority: explicit ``wheel`` path > explicit ``git`` URL
-    > ``name@version`` if version set > bare ``name``.
+    > explicit ``package`` plus optional version > ``name``.
     """
     if "wheel" in plugin_entry:
         return plugin_entry["wheel"]
     if "git" in plugin_entry:
         return f"git+{plugin_entry['git']}"
-    name = plugin_entry["name"]
+    package = plugin_entry.get("package") or plugin_entry["name"]
     version = plugin_entry.get("version")
     if version:
-        # Strip leading == / >= so it composes with our @ form.
-        v = version.lstrip(">=<! ")
-        if version.startswith("=="):
-            return f"{name}@{v}"
-        # Range constraints: fall back to bare name and let pip resolve.
-        return name
-    return name
+        return f"{package}{version}"
+    return package

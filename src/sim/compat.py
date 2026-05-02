@@ -185,7 +185,7 @@ def load_compatibility_by_name(driver_name: str) -> "Compatibility | None":
         if not traversable.is_file():
             return None
         text = traversable.read_text(encoding="utf-8")
-    except (FileNotFoundError, ModuleNotFoundError, OSError):
+    except (FileNotFoundError, ModuleNotFoundError, OSError, TypeError):
         return None
     return _parse_compatibility_text(driver_name, text)
 
