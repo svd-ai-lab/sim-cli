@@ -206,7 +206,7 @@ Per-solver protocols, snippets, and demo workflows live in [`sim-skills`](https:
 ### 🔌 Solver-agnostic
 - **One protocol** (`DriverProtocol`) — every driver is ~200 LOC, shipped as its own `sim-plugin-<name>` package via Python entry points
 - **Persistent + one-shot** from the same CLI — no separate client per mode
-- **Plugin discovery + explicit installs** — `sim plugin catalog/search` discovers available plugins; `sim plugin install` accepts exact package specs, private indexes, direct URLs, git URLs, and local artifacts
+- **Plugin discovery + explicit installs** — `sim plugin catalog` discovers available plugins; `sim plugin install` accepts exact package specs, private indexes, direct URLs, git URLs, and local artifacts
 - **Companion skills** in [`sim-skills`](https://github.com/svd-ai-lab/sim-skills) so an LLM picks up each new backend without prior context
 
 ### 🌐 Remote-friendly
@@ -220,7 +220,7 @@ Per-solver protocols, snippets, and demo workflows live in [`sim-skills`](https:
 
 | Command | What it does | Analogy |
 |---|---|---|
-| `sim plugin catalog / search` | Discover available solver plugins | `npm search` |
+| `sim plugin catalog` | Discover available solver plugins | `npm search` |
 | `sim plugin list / install / uninstall` | Manage installed plugins from explicit install sources | `npm install` |
 | `sim check <solver>` | Detect installations + resolve a profile | `docker info` |
 | `sim env install <profile>` | Bootstrap a profile env (venv + pinned SDK) | `pyenv install` |

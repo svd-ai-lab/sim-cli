@@ -167,7 +167,7 @@ sim plugin list                 # 查看本机已安装/已注册插件
 ### 🔌 求解器无关
 - **一套协议** (`DriverProtocol`) —— 每个 driver 仅 ~200 行，注册到 `drivers/__init__.py` 即可
 - **持久 + 一次性**两种模式共用同一个 CLI
-- **插件发现 + 显式安装** —— `sim plugin catalog/search` 用来发现可用插件；`sim plugin install` 只执行精确包名、私有索引、URL、git 或本地 artifact
+- **插件发现 + 显式安装** —— `sim plugin catalog` 用来发现可用插件；`sim plugin install` 只执行精确包名、私有索引、URL、git 或本地 artifact
 - **配套 skills** 在 [`sim-skills`](https://github.com/svd-ai-lab/sim-skills) —— 让大模型立刻知道每个新后端的坑
 
 ### 🌐 远程友好
@@ -181,7 +181,7 @@ sim plugin list                 # 查看本机已安装/已注册插件
 
 | 命令 | 功能 | 类比 |
 |---|---|---|
-| `sim plugin catalog / search` | 发现可用插件 | `npm search` |
+| `sim plugin catalog` | 发现可用插件 | `npm search` |
 | `sim plugin list / install / uninstall` | 管理本机已安装插件 | `npm install` |
 | `sim check <solver>` | 检测安装版本并解析 profile | `docker info` |
 | `sim env install <profile>` | 启动 profile env（venv + 固定 SDK） | `pyenv install` |

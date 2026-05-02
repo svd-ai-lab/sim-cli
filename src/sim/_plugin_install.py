@@ -332,7 +332,7 @@ def bundle_plugins(names: list[str], output_dir: Path, *,
                 "name": name,
                 "error": (
                     "bundle no longer resolves catalogue names; use "
-                    "sim plugin catalog/search to discover plugins, then pass "
+                    "sim plugin catalog to discover plugins, then pass "
                     "explicit wheel URLs, local artifacts, git URLs, or exact "
                     "package specs"
                 ),
