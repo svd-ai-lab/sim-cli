@@ -13,9 +13,9 @@ def test_version():
     runner = CliRunner()
     result = runner.invoke(main, ["--version"])
     assert result.exit_code == 0
-    from importlib.metadata import version
+    from sim import __version__
 
-    assert version("sim-cli") in result.output
+    assert __version__ in result.output
 
 
 def test_help():
@@ -55,7 +55,7 @@ def test_python_m_sim_invocation():
     which exists so dev users can launch ``sim serve`` without holding a
     Windows file lock on ``Scripts/sim.exe`` during ``uv sync``.
     """
-    from importlib.metadata import version
+    from sim import __version__
 
     result = subprocess.run(
         [sys.executable, "-m", "sim", "--version"],
@@ -67,7 +67,7 @@ def test_python_m_sim_invocation():
     # Click reports prog_name as "python -m sim" here (sys.argv[0] is the
     # module path); accept either form alongside the actual version string.
     assert "version" in result.stdout
-    assert version("sim-cli-core") in result.stdout
+    assert __version__ in result.stdout
 
 
 def test_check_all_json_shape():

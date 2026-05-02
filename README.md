@@ -83,9 +83,8 @@ Prereq: [`uv`](https://docs.astral.sh/uv/) — install with `curl -LsSf https://
 #    — no driver choice yet:
 uv pip install sim-cli-core
 
-# 2. Install the plugin for the solver you actually want (browse the
-#    index with `sim plugin list`):
-sim plugin install <solver>     # e.g. ltspice
+# 2. Install the plugin for the solver you actually want:
+sim plugin install sim-plugin-ltspice
 
 # 3. Tell sim to look at this machine and pick the right SDK profile:
 sim check <solver>
@@ -113,9 +112,8 @@ sim --host <server-ip> disconnect
 #    — no driver choice yet:
 uv pip install sim-cli-core
 
-# 2. Install the plugin for the solver you actually want (browse the
-#    index with `sim plugin list`):
-sim plugin install <solver>     # e.g. ltspice
+# 2. Install the plugin for the solver you actually want:
+sim plugin install sim-plugin-ltspice
 
 # 3. Tell sim to look at this machine and pick the right SDK profile:
 sim check <solver>
@@ -146,30 +144,24 @@ That's the full loop: **detect → bootstrap → launch → drive → observe �
 
 ---
 
-## 📦 Plugin index
+## 📦 Plugin sources
 
-`sim plugin install <name>` resolves names against two indexes, in order:
+`sim plugin install <source>` accepts explicit install sources only:
 
-1. **svd-maintained wheel manifest** at `https://cdn.svdailab.com/manifest.json` — pre-built wheels published by the project. Anonymous GET, updated whenever a new wheel ships.
-2. **Community-maintained catalogue** at [`sim-plugin-index`](https://github.com/svd-ai-lab/sim-plugin-index) — broader plugin listing maintained by the community; entries can be OSS or third-party plugins, pointing at GitHub releases or git+https sources.
+- Exact package specs, such as `sim-plugin-ltspice` or `sim-plugin-ltspice==0.2.3`
+- Package specs plus private indexes, such as `sim-plugin-mechanical --extra-index-url https://example.com/simple/`
+- Direct wheel/sdist URLs, such as `https://example.com/sim_plugin_ltspice-0.2.3-py3-none-any.whl`
+- Git URLs, such as `git+https://github.com/<org>/sim-plugin-<name>`
+- Local plugin directories, wheels, and sdists
 
-The first hit wins. Most users never see this distinction — `sim plugin install ltspice` just works.
+Discovery is separate from installation:
 
-svd manifest schema (the community catalogue uses a different shape — see its repo):
-
-```json
-{
-  "updated": "<ISO date>",
-  "plugins": {
-    "<name>": {
-      "version": "<X.Y.Z>",
-      "wheel": "https://cdn.svdailab.com/wheels/<file>.whl"
-    }
-  }
-}
+```bash
+sim plugin catalog              # official plugins (display + copy-paste install string)
+sim plugin list                 # installed/registered plugins on this machine
 ```
 
-To install a wheel directly without going through the resolver, hand `sim plugin install` the URL — `sim plugin install https://cdn.svdailab.com/wheels/<file>.whl`.
+Short solver aliases such as `ltspice` are catalogue names, not install sources. Run `sim plugin catalog` to find the recommended install string for each plugin, then pass it to `sim plugin install`.
 
 ---
 
@@ -179,20 +171,24 @@ To install a wheel directly without going through the resolver, hand `sim plugin
 
 `sim` is most useful for **GUI-heavy solvers** — COMSOL, ANSYS Mechanical, ANSYS Fluent, MATLAB Simulink, Abaqus, Flotherm — where every agent iteration would otherwise mean clicking through dialog boxes.
 
-Install by name (the resolver chains the svd manifest then the community catalogue — see [Plugin index](#-plugin-index)):
+Install from a discovered package, then list what is installed locally:
 
 ```bash
-sim plugin list                  # show installed plugins
-sim plugin install <name>        # e.g. sim plugin install ltspice
+sim plugin catalog              # discover what's available + install strings
+sim plugin install sim-plugin-ltspice
+sim plugin list                 # show installed plugins
 ```
 
 Reference implementation to read for shape: [`sim-plugin-ltspice`](https://github.com/svd-ai-lab/sim-plugin-ltspice).
 
-**Private plugins** (vendor-IP-sensitive backends not in the public index) install directly by URL — same `sim plugin install` flow:
+**Private plugins** (vendor-IP-sensitive backends) install through explicit URLs, private repos, or private Python indexes — same `sim plugin install` flow:
 
 ```bash
 sim plugin install git+https://github.com/<org>/sim-plugin-<name>
 # (you need read-access to the repo; without it, git clone returns 401)
+
+sim plugin install sim-plugin-mechanical --extra-index-url https://example.com/simple/
+# standard PEP 503/private-index path for commercial wrappers
 ```
 
 Per-solver protocols, snippets, and demo workflows live in [`sim-skills`](https://github.com/svd-ai-lab/sim-skills) and the per-plugin repos.
@@ -210,7 +206,7 @@ Per-solver protocols, snippets, and demo workflows live in [`sim-skills`](https:
 ### 🔌 Solver-agnostic
 - **One protocol** (`DriverProtocol`) — every driver is ~200 LOC, shipped as its own `sim-plugin-<name>` package via Python entry points
 - **Persistent + one-shot** from the same CLI — no separate client per mode
-- **Plugin index** — `sim plugin install <name>` chains an [svd-maintained wheel manifest](https://cdn.svdailab.com/manifest.json) and a [community-maintained catalogue](https://github.com/svd-ai-lab/sim-plugin-index)
+- **Plugin discovery + explicit installs** — `sim plugin catalog/search` discovers available plugins; `sim plugin install` accepts exact package specs, private indexes, direct URLs, git URLs, and local artifacts
 - **Companion skills** in [`sim-skills`](https://github.com/svd-ai-lab/sim-skills) so an LLM picks up each new backend without prior context
 
 ### 🌐 Remote-friendly
@@ -224,7 +220,8 @@ Per-solver protocols, snippets, and demo workflows live in [`sim-skills`](https:
 
 | Command | What it does | Analogy |
 |---|---|---|
-| `sim plugin list / install / uninstall` | Manage solver plugins (resolver chains svd → community index) | `npm install` |
+| `sim plugin catalog / search` | Discover available solver plugins | `npm search` |
+| `sim plugin list / install / uninstall` | Manage installed plugins from explicit install sources | `npm install` |
 | `sim check <solver>` | Detect installations + resolve a profile | `docker info` |
 | `sim env install <profile>` | Bootstrap a profile env (venv + pinned SDK) | `pyenv install` |
 | `sim env list [--catalogue]` | Show bootstrapped envs (and the full catalogue) | `pyenv versions` |
@@ -300,7 +297,6 @@ That is the entire setup — same `sim-cli-core` package on both sides, same wir
 
 ## 🔗 Related projects
 
-- **[`sim-plugin-index`](https://github.com/svd-ai-lab/sim-plugin-index)** — community-maintained plugin catalogue; second of two sources `sim plugin install <name>` resolves against (the first is the svd-maintained manifest at `cdn.svdailab.com/manifest.json`)
 - **[`sim-skills`](https://github.com/svd-ai-lab/sim-skills)** — agent skills, snippets, and demo workflows for each supported solver
 - **[`sim-ltspice`](https://github.com/svd-ai-lab/sim-ltspice)** — standalone Python API for LTspice file formats (used by `sim-plugin-ltspice`)
 

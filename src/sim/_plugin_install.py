@@ -6,155 +6,25 @@ install pipeline.
 
 A `<source>` argument can be any of:
 
-* ``<name>`` — resolve via the index (HTTPS-only; no git, no gh).
-* ``<name>@<version>`` — pinned from the index.
+* ``sim-plugin-<name>`` / ``sim-plugin-<name>==<version>`` — exact pip
+  package spec.
 * ``https://...whl`` / ``https://...tar.gz`` — direct wheel/sdist URL.
 * ``./path/to/dir`` — local plugin source directory.
 * ``./path/to/wheel.whl`` / ``./path/to/sdist.tar.gz`` — local artifact.
 * ``git+https://...`` / ``git+ssh://...`` — git URL.
 
-The resolver classifies the source with no network calls so we know up
-front what kind of install we're attempting. Then a single ``pip install``
-invocation does the work.
+The resolver classifies the source with no network calls and no plugin
+registry lookup. Then a single ``pip install`` invocation does the work.
 """
 from __future__ import annotations
 
-import json
-import os
 import re
 import shutil
 import subprocess
 import sys
-import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-
-
-# ── Index ───────────────────────────────────────────────────────────────────
-
-# Curated wheels published by the project — primary index. Anonymous GET; updated
-# whenever a new wheel is published via tools/publish-wheel.sh.
-R2_MANIFEST_URL = "https://cdn.svdailab.com/manifest.json"
-
-# Community-maintained OSS plugin catalogue — fallback for entries the curated
-# manifest does not carry. Different schema (array of entries with git+homepage
-# fields), normalized at lookup time.
-DEFAULT_INDEX_URL = (
-    "https://raw.githubusercontent.com/svd-ai-lab/sim-plugin-index/main/index.json"
-)
-
-# How long an index is treated as fresh, before we re-fetch.
-INDEX_CACHE_TTL_SECONDS = 3600
-
-
-def _index_cache_dir() -> Path:
-    return Path.home() / ".sim" / "index-cache"
-
-
-def _index_cache_path() -> Path:
-    """Cache file for the GitHub OSS index (``DEFAULT_INDEX_URL``)."""
-    return _index_cache_dir() / "index.json"
-
-
-def _r2_cache_path() -> Path:
-    """Cache file for the curated R2 manifest (``R2_MANIFEST_URL``)."""
-    return _index_cache_dir() / "manifest-r2.json"
-
-
-def _cache_for(url: str) -> Path:
-    return _r2_cache_path() if url == R2_MANIFEST_URL else _index_cache_path()
-
-
-def fetch_index(url: str = DEFAULT_INDEX_URL, *, force: bool = False, offline: bool = False) -> dict[str, Any]:
-    """Fetch a plugin index by URL. Caches under ``~/.sim/index-cache/`` keyed by URL.
-
-    In ``--offline`` mode, only the local cache is consulted; an empty index
-    is returned if no cache exists.
-    """
-    cache = _cache_for(url)
-    if offline:
-        if cache.is_file():
-            try:
-                return json.loads(cache.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
-                return {"schema_version": 1, "plugins": []}
-        return {"schema_version": 1, "plugins": []}
-
-    if not force and cache.is_file():
-        try:
-            age = cache.stat().st_mtime
-        except OSError:
-            age = 0
-        import time
-        if time.time() - age < INDEX_CACHE_TTL_SECONDS:
-            try:
-                return json.loads(cache.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
-                pass
-
-    try:
-        with urllib.request.urlopen(url, timeout=10) as resp:
-            data = resp.read().decode("utf-8")
-    except Exception:  # noqa: BLE001 — degrade if no network
-        if cache.is_file():
-            try:
-                return json.loads(cache.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
-                pass
-        return {"schema_version": 1, "plugins": []}
-
-    parsed = json.loads(data)
-    cache.parent.mkdir(parents=True, exist_ok=True)
-    cache.write_text(data, encoding="utf-8")
-    return parsed
-
-
-def _normalize_r2_entry(name: str, info: dict[str, Any]) -> dict[str, Any]:
-    """Convert an R2 manifest entry to the GitHub-style entry shape that
-    ``resolve_source`` consumes (``latest_version`` + ``latest_wheel_url``)."""
-    return {
-        "name": name,
-        "latest_version": info.get("version"),
-        "latest_wheel_url": info.get("wheel"),
-    }
-
-
-def _r2_lookup(name: str, *, offline: bool = False) -> dict[str, Any] | None:
-    """Look up ``name`` in the R2 curated manifest, returning a normalized entry."""
-    manifest = fetch_index(url=R2_MANIFEST_URL, offline=offline)
-    plugins = manifest.get("plugins")
-    if not isinstance(plugins, dict):
-        return None
-    info = plugins.get(name)
-    if not isinstance(info, dict) or not info.get("wheel"):
-        return None
-    return _normalize_r2_entry(name, info)
-
-
-def index_entry(name: str, *, offline: bool = False, url: str = DEFAULT_INDEX_URL) -> dict[str, Any] | None:
-    """Look up one plugin by name in a single index URL.
-
-    For ``url == R2_MANIFEST_URL`` the entry is normalized to the GitHub-style
-    shape so callers get a consistent dict regardless of which index served it.
-    """
-    if url == R2_MANIFEST_URL:
-        return _r2_lookup(name, offline=offline)
-    idx = fetch_index(url=url, offline=offline)
-    for entry in idx.get("plugins", []):
-        if entry.get("name") == name:
-            return entry
-    return None
-
-
-def index_entry_chained(name: str, *, offline: bool = False) -> dict[str, Any] | None:
-    """Resolve ``name`` against the curated R2 manifest first, then fall back
-    to the community GitHub OSS index. Returns the first hit, or ``None`` if
-    neither has it."""
-    e = _r2_lookup(name, offline=offline)
-    if e is not None:
-        return e
-    return index_entry(name, offline=offline, url=DEFAULT_INDEX_URL)
 
 
 # ── Source resolution ──────────────────────────────────────────────────────
@@ -163,7 +33,7 @@ def index_entry_chained(name: str, *, offline: bool = False) -> dict[str, Any] |
 @dataclass(frozen=True)
 class ResolvedSource:
     """One install source classified into a canonical kind."""
-    kind: str           # "name" | "wheel-url" | "sdist-url" | "git-url" | "local-wheel" | "local-sdist" | "local-dir" | "name-version"
+    kind: str
     raw: str            # the original argument
     name: str | None = None
     version: str | None = None
@@ -171,26 +41,34 @@ class ResolvedSource:
     extras: dict[str, Any] = field(default_factory=dict)
 
 
-_NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
-_NAME_VERSION_RE = re.compile(r"^([A-Za-z][A-Za-z0-9_]*)@([A-Za-z0-9._\-+]+)$")
+_SHORT_NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
+_SIM_PLUGIN_PACKAGE_RE = re.compile(
+    r"^(sim-plugin-[A-Za-z0-9][A-Za-z0-9_.-]*)(?:\[[A-Za-z0-9_,.-]+\])?"
+    r"(?:\s*(?:==|!=|~=|>=|<=|>|<)\s*[A-Za-z0-9.*+!_.-]+)?$"
+)
+_VERSION_PIN_RE = re.compile(r"(?:==|!=|~=|>=|<=|>|<)\s*(.+)$")
+
+
+def _short_name_error(name: str) -> str:
+    return (
+        f"{name!r} is not an explicit plugin install source. "
+        "See 'sim plugin catalog' for the official plugin list, or pass an "
+        "explicit pip-installable source: a local wheel/sdist path, a direct "
+        "wheel/sdist URL, a git URL, or a package spec such as "
+        f"'sim-plugin-{name}'."
+    )
 
 
 def resolve_source(source: str, *, offline: bool = False,
                    index_url: str | None = None) -> ResolvedSource:
     """Classify a source argument and choose what to hand to pip.
 
-    For named installs, lookup chains the curated R2 manifest first and falls
-    back to the GitHub OSS index. Pass ``index_url`` to force a single source.
-    Prefers wheel-from-release URL when the index entry has one; falls back to
-    git+https. Raises ``ValueError`` if the name isn't in the index in offline
-    mode.
+    ``offline`` and ``index_url`` are accepted for API compatibility but no
+    longer affect resolution; this resolver never reads a plugin index or maps
+    short names to ``sim-plugin-*`` package names.
     """
     s = source.strip()
-
-    def _lookup(name: str) -> dict[str, Any] | None:
-        if index_url is None:
-            return index_entry_chained(name, offline=offline)
-        return index_entry(name, offline=offline, url=index_url)
+    _ = (offline, index_url)
 
     # Local files / dirs first (cheapest to check).
     p = Path(s)
@@ -201,7 +79,7 @@ def resolve_source(source: str, *, offline: bool = False,
                 return ResolvedSource(kind="local-wheel", raw=s, pip_target=str(target))
             if target.name.endswith(".tar.gz") or target.suffix == ".tar":
                 return ResolvedSource(kind="local-sdist", raw=s, pip_target=str(target))
-            raise ValueError(f"unsupported local file extension: {target.name}")
+            return ResolvedSource(kind="local-file", raw=s, pip_target=str(target))
         if target.is_dir():
             return ResolvedSource(kind="local-dir", raw=s, pip_target=str(target))
         # Path doesn't exist on disk and doesn't look obviously remote — error.
@@ -219,55 +97,20 @@ def resolve_source(source: str, *, offline: bool = False,
         # Generic URL: treat as wheel-url and let pip complain.
         return ResolvedSource(kind="wheel-url", raw=s, pip_target=s)
 
-    # name@version
-    m = _NAME_VERSION_RE.match(s)
-    if m:
-        name, version = m.group(1), m.group(2)
-        entry = _lookup(name)
-        if entry is None and offline:
-            raise ValueError(f"plugin {name!r} not in offline index")
-        if entry is None:
-            # Optimistic: try by-name install; pip will error if it's wrong.
-            return ResolvedSource(kind="name-version", raw=s, name=name, version=version,
-                                   pip_target=f"sim-plugin-{name}=={version}")
-        # Prefer the same wheel as latest if it matches; else fall back to git@version.
-        if entry.get("latest_version") == version and entry.get("latest_wheel_url"):
-            return ResolvedSource(kind="name-version", raw=s, name=name, version=version,
-                                   pip_target=str(entry["latest_wheel_url"]))
-        # If the entry came from the R2 manifest, all versioned wheels live at a
-        # predictable path — construct the pinned URL by filename convention so
-        # ``name@<old-version>`` resolves without needing every version listed
-        # in the manifest. (R2 keeps every published wheel; manifest only tracks
-        # latest.)
-        latest_url = str(entry.get("latest_wheel_url") or "")
-        if latest_url.startswith("https://cdn.svdailab.com/wheels/"):
-            return ResolvedSource(
-                kind="name-version", raw=s, name=name, version=version,
-                pip_target=(
-                    f"https://cdn.svdailab.com/wheels/"
-                    f"sim_plugin_{name}-{version}-py3-none-any.whl"
-                ),
-            )
-        git = entry.get("git")
-        if git:
-            return ResolvedSource(kind="name-version", raw=s, name=name, version=version,
-                                   pip_target=f"git+{git}@v{version}")
-        return ResolvedSource(kind="name-version", raw=s, name=name, version=version,
-                               pip_target=f"sim-plugin-{name}=={version}")
+    package_match = _SIM_PLUGIN_PACKAGE_RE.match(s)
+    if package_match:
+        version_match = _VERSION_PIN_RE.search(s)
+        version = version_match.group(1).strip() if version_match else None
+        return ResolvedSource(
+            kind="package-spec",
+            raw=s,
+            name=package_match.group(1),
+            version=version,
+            pip_target=s,
+        )
 
-    # bare name
-    if _NAME_RE.match(s):
-        entry = _lookup(s)
-        if entry is None and offline:
-            raise ValueError(f"plugin {s!r} not in offline index")
-        if entry is None:
-            # Optimistic: assume sim-plugin-<name> is published; pip will tell us.
-            return ResolvedSource(kind="name", raw=s, name=s, pip_target=f"sim-plugin-{s}")
-        if entry.get("latest_wheel_url"):
-            return ResolvedSource(kind="name", raw=s, name=s, pip_target=str(entry["latest_wheel_url"]))
-        if entry.get("git"):
-            return ResolvedSource(kind="name", raw=s, name=s, pip_target=f"git+{entry['git']}")
-        return ResolvedSource(kind="name", raw=s, name=s, pip_target=f"sim-plugin-{s}")
+    if _SHORT_NAME_RE.match(s):
+        raise ValueError(_short_name_error(s))
 
     raise ValueError(f"could not classify install source: {source!r}")
 
@@ -349,6 +192,7 @@ def install_plugin(
     sync_target: Path | None = None,
     skip_sync: bool = False,
     python: str | None = None,
+    extra_index_urls: list[str] | None = None,
 ) -> InstallReport:
     """High-level installer used by ``sim plugin install``.
 
@@ -369,9 +213,16 @@ def install_plugin(
             message=str(e),
         )
 
+    extra_args: list[str] = []
+    for extra_index_url in extra_index_urls or []:
+        extra_args.extend(["--extra-index-url", extra_index_url])
+
     proc = _pip_install(
         resolved.pip_target,
-        editable=editable, upgrade=upgrade, python=python,
+        editable=editable,
+        upgrade=upgrade,
+        python=python,
+        extra_args=extra_args or None,
     )
     ok = proc.returncode == 0
 
@@ -464,65 +315,36 @@ def uninstall_plugin(name: str, *, sync: bool = True,
 
 
 def bundle_plugins(names: list[str], output_dir: Path, *,
-                    index_url: str = DEFAULT_INDEX_URL) -> dict[str, Any]:
-    """Download wheels for the named plugins into ``output_dir`` for offline use.
+                    index_url: str | None = None) -> dict[str, Any]:
+    """The install-resolver-backed bundle flow was removed.
 
-    Produces ``<output_dir>/index.json`` filtered to just the bundled plugins,
-    rewritten with ``file://`` URLs so ``sim plugin install --offline
-    --from-dir <output_dir>`` works.
+    Use the discovery catalogue to find plugins, then download explicit wheel
+    URLs or install exact package specs. The catalogue itself is not an
+    install-time resolver.
     """
-    output_dir = output_dir.expanduser().resolve()
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    idx = fetch_index(url=index_url)
-    by_name = {e["name"]: e for e in idx.get("plugins", [])}
-
-    fetched: list[dict[str, Any]] = []
-    errors: list[dict[str, Any]] = []
-
-    for name in names:
-        entry = by_name.get(name)
-        if entry is None:
-            errors.append({"name": name, "error": "not in index"})
-            continue
-        wheel_url = entry.get("latest_wheel_url")
-        if not wheel_url:
-            errors.append({"name": name, "error": "index entry has no latest_wheel_url"})
-            continue
-        wheel_basename = Path(wheel_url.split("?")[0]).name
-        dest = output_dir / wheel_basename
-        try:
-            with urllib.request.urlopen(wheel_url, timeout=30) as resp, dest.open("wb") as f:
-                shutil.copyfileobj(resp, f)
-        except Exception as e:  # noqa: BLE001 — surface fetch errors
-            errors.append({"name": name, "error": f"download failed: {e}"})
-            continue
-
-        rewritten = dict(entry)
-        rewritten["latest_wheel_url"] = f"file://{dest}"
-        fetched.append(rewritten)
-
-    bundle_idx = {"schema_version": 1, "plugins": fetched}
-    (output_dir / "index.json").write_text(
-        json.dumps(bundle_idx, indent=2) + "\n", encoding="utf-8",
-    )
-
+    _ = (names, output_dir, index_url)
     return {
-        "ok": not errors,
+        "ok": False,
         "output": str(output_dir),
-        "fetched": [e["name"] for e in fetched],
-        "errors": errors,
+        "fetched": [],
+        "errors": [
+            {
+                "name": name,
+                "error": (
+                    "bundle no longer resolves catalogue names; use "
+                    "sim plugin catalog/search to discover plugins, then pass "
+                    "explicit wheel URLs, local artifacts, git URLs, or exact "
+                    "package specs"
+                ),
+            }
+            for name in names
+        ],
     }
 
 
 __all__ = [
-    "DEFAULT_INDEX_URL",
-    "R2_MANIFEST_URL",
     "ResolvedSource",
     "InstallReport",
-    "fetch_index",
-    "index_entry",
-    "index_entry_chained",
     "resolve_source",
     "install_plugin",
     "uninstall_plugin",

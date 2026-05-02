@@ -1,25 +1,19 @@
-"""Tests for sim._plugin_install — source resolution, bundle, and report shape.
+"""Tests for sim._plugin_install — source resolution and report shape.
 
-These cover the *classification* layer (no real pip calls) and the bundle
-flow against mocked HTTP. The actual install path is exercised against a
-fixture wheel in test_plugin_install_e2e — kept small and skipped when
-no fixture wheel exists yet.
+These cover the *classification* layer (no real pip calls). The actual
+install path is exercised against a fixture wheel in test_plugin_install_e2e
+— kept small and skipped when no fixture wheel exists yet.
 """
 from __future__ import annotations
 
-import json
-import textwrap
 from pathlib import Path
-from unittest import mock
 
 import pytest
 
 from sim._plugin_install import (
-    DEFAULT_INDEX_URL,
     InstallReport,
     bundle_plugins,
-    fetch_index,
-    index_entry,
+    install_plugin,
     resolve_source,
 )
 
@@ -55,16 +49,17 @@ def test_resolve_missing_local_path_errors(tmp_path: Path):
 
 
 def test_resolve_git_url():
-    url = "git+https://github.com/svd-ai-lab/sim-plugin-coolprop"
+    url = "git+https://github.com/svd-ai-lab/sim-plugin-ltspice"
     rs = resolve_source(url)
     assert rs.kind == "git-url"
     assert rs.pip_target == url
 
 
 def test_resolve_wheel_url():
-    url = "https://example.com/sim_plugin_x-0.1.0-py3-none-any.whl"
+    url = "https://example.com/sim_plugin_ltspice-0.2.3-py3-none-any.whl"
     rs = resolve_source(url)
     assert rs.kind == "wheel-url"
+    assert rs.pip_target == url
 
 
 def test_resolve_sdist_url():
@@ -73,49 +68,37 @@ def test_resolve_sdist_url():
     assert rs.kind == "sdist-url"
 
 
-def test_resolve_bare_name_offline_without_cache_errors(tmp_path: Path, monkeypatch):
-    # Force an empty cache dir.
-    monkeypatch.setattr("sim._plugin_install._index_cache_dir",
-                        lambda: tmp_path / "no-cache")
-    with pytest.raises(ValueError):
-        resolve_source("coolprop", offline=True)
+def test_resolve_exact_package_spec():
+    rs = resolve_source("sim-plugin-ltspice")
+    assert rs.kind == "package-spec"
+    assert rs.name == "sim-plugin-ltspice"
+    assert rs.pip_target == "sim-plugin-ltspice"
 
 
-def test_resolve_bare_name_with_index_uses_wheel_url(tmp_path: Path, monkeypatch):
-    cache_dir = tmp_path / "cache"
-    cache_dir.mkdir()
-    cache_idx = cache_dir / "index.json"
-    cache_idx.write_text(json.dumps({
-        "schema_version": 1,
-        "plugins": [{
-            "name": "coolprop",
-            "git": "https://github.com/svd-ai-lab/sim-plugin-coolprop",
-            "license_class": "oss",
-            "latest_wheel_url": "https://example.com/x.whl",
-        }],
-    }), encoding="utf-8")
-    monkeypatch.setattr("sim._plugin_install._index_cache_dir", lambda: cache_dir)
-    monkeypatch.setattr("sim._plugin_install._index_cache_path",
-                        lambda: cache_idx)
-    rs = resolve_source("coolprop", offline=True)
-    assert rs.kind == "name"
-    assert rs.pip_target == "https://example.com/x.whl"
+def test_resolve_exact_version_package_spec():
+    rs = resolve_source("sim-plugin-ltspice==0.2.3")
+    assert rs.kind == "package-spec"
+    assert rs.name == "sim-plugin-ltspice"
+    assert rs.version == "0.2.3"
+    assert rs.pip_target == "sim-plugin-ltspice==0.2.3"
 
 
-def test_resolve_name_at_version(tmp_path: Path, monkeypatch):
-    cache_dir = tmp_path / "cache"
-    cache_dir.mkdir()
-    (cache_dir / "index.json").write_text(json.dumps({
-        "schema_version": 1, "plugins": [],
-    }), encoding="utf-8")
-    monkeypatch.setattr("sim._plugin_install._index_cache_dir", lambda: cache_dir)
-    monkeypatch.setattr("sim._plugin_install._index_cache_path",
-                        lambda: cache_dir / "index.json")
-    rs = resolve_source("coolprop@0.2.1", offline=False)  # name not in index, falls to optimistic
-    assert rs.kind == "name-version"
-    assert rs.name == "coolprop"
-    assert rs.version == "0.2.1"
-    assert "coolprop" in rs.pip_target
+def test_resolve_exact_range_package_spec():
+    rs = resolve_source("sim-plugin-ltspice>=0.2")
+    assert rs.kind == "package-spec"
+    assert rs.name == "sim-plugin-ltspice"
+    assert rs.version == "0.2"
+    assert rs.pip_target == "sim-plugin-ltspice>=0.2"
+
+
+@pytest.mark.parametrize("name", ["mechanical", "ltspice"])
+def test_resolve_bare_short_name_rejected(name: str):
+    with pytest.raises(ValueError) as exc:
+        resolve_source(name)
+    msg = str(exc.value)
+    assert "explicit plugin install source" in msg
+    assert "sim plugin catalog" in msg
+    assert f"sim-plugin-{name}" in msg
 
 
 def test_resolve_garbage_raises():
@@ -123,249 +106,28 @@ def test_resolve_garbage_raises():
         resolve_source("???not-a-source???")
 
 
-# ── R2 manifest + chained lookup ────────────────────────────────────────────
-
-
-def _seed_caches(tmp_path: Path, monkeypatch,
-                 r2_plugins: dict | None = None,
-                 github_plugins: list | None = None):
-    """Set up isolated R2 + GitHub cache files and point fetch_index at them."""
-    cache_dir = tmp_path / "cache"
-    cache_dir.mkdir()
-    r2_cache = cache_dir / "manifest-r2.json"
-    github_cache = cache_dir / "index.json"
-    r2_cache.write_text(json.dumps({"plugins": r2_plugins or {}}), encoding="utf-8")
-    github_cache.write_text(
-        json.dumps({"schema_version": 1, "plugins": github_plugins or []}),
-        encoding="utf-8",
-    )
-    monkeypatch.setattr("sim._plugin_install._index_cache_dir", lambda: cache_dir)
-    monkeypatch.setattr("sim._plugin_install._index_cache_path", lambda: github_cache)
-    monkeypatch.setattr("sim._plugin_install._r2_cache_path", lambda: r2_cache)
-
-
-def test_r2_lookup_normalizes_to_github_shape(tmp_path: Path, monkeypatch):
-    from sim._plugin_install import _r2_lookup
-    _seed_caches(tmp_path, monkeypatch, r2_plugins={
-        "comsol": {"version": "0.1.0",
-                    "wheel": "https://cdn.svdailab.com/wheels/comsol.whl"},
-    })
-    e = _r2_lookup("comsol", offline=True)
-    assert e is not None
-    assert e["name"] == "comsol"
-    assert e["latest_version"] == "0.1.0"
-    assert e["latest_wheel_url"] == "https://cdn.svdailab.com/wheels/comsol.whl"
-
-    assert _r2_lookup("absent", offline=True) is None
-
-
-def test_r2_lookup_skips_entry_without_wheel(tmp_path: Path, monkeypatch):
-    """A malformed R2 entry (no wheel) must miss so we fall back."""
-    from sim._plugin_install import _r2_lookup
-    _seed_caches(tmp_path, monkeypatch, r2_plugins={
-        "comsol": {"version": "0.1.0"},  # missing wheel
-    })
-    assert _r2_lookup("comsol", offline=True) is None
-
-
-def test_index_entry_chained_prefers_r2(tmp_path: Path, monkeypatch):
-    from sim._plugin_install import index_entry_chained
-    _seed_caches(
-        tmp_path, monkeypatch,
-        r2_plugins={"ltspice": {"version": "0.2.1",
-                                  "wheel": "https://r2.example/ltspice.whl"}},
-        github_plugins=[{"name": "ltspice", "license_class": "oss",
-                          "latest_wheel_url": "https://gh.example/ltspice.whl"}],
-    )
-    e = index_entry_chained("ltspice", offline=True)
-    assert e["latest_wheel_url"] == "https://r2.example/ltspice.whl"
-
-
-def test_index_entry_chained_falls_back_to_github(tmp_path: Path, monkeypatch):
-    from sim._plugin_install import index_entry_chained
-    _seed_caches(
-        tmp_path, monkeypatch,
-        r2_plugins={},
-        github_plugins=[{"name": "pybamm", "license_class": "oss",
-                          "latest_wheel_url": "https://gh.example/pybamm.whl"}],
-    )
-    e = index_entry_chained("pybamm", offline=True)
-    assert e is not None
-    assert e["latest_wheel_url"] == "https://gh.example/pybamm.whl"
-
-
-def test_index_entry_chained_returns_none_when_neither_has_it(tmp_path: Path, monkeypatch):
-    from sim._plugin_install import index_entry_chained
-    _seed_caches(tmp_path, monkeypatch)
-    assert index_entry_chained("nope", offline=True) is None
-
-
-def test_resolve_bare_name_uses_r2_wheel(tmp_path: Path, monkeypatch):
-    """Default chain lookup: R2 hit wins."""
-    _seed_caches(
-        tmp_path, monkeypatch,
-        r2_plugins={"comsol": {"version": "0.1.0",
-                                 "wheel": "https://r2.example/comsol.whl"}},
-        github_plugins=[],
-    )
-    rs = resolve_source("comsol", offline=True)
-    assert rs.kind == "name"
-    assert rs.pip_target == "https://r2.example/comsol.whl"
-
-
-def test_resolve_bare_name_falls_back_to_github(tmp_path: Path, monkeypatch):
-    """Default chain lookup: R2 miss → GitHub wheel URL."""
-    _seed_caches(
-        tmp_path, monkeypatch,
-        r2_plugins={},
-        github_plugins=[{"name": "pybamm", "license_class": "oss",
-                          "latest_wheel_url": "https://gh.example/pybamm.whl"}],
-    )
-    rs = resolve_source("pybamm", offline=True)
-    assert rs.kind == "name"
-    assert rs.pip_target == "https://gh.example/pybamm.whl"
-
-
-def test_resolve_name_at_version_uses_r2_filename_convention(tmp_path: Path, monkeypatch):
-    """name@<old-version>: when entry is from R2 manifest, build URL by
-    filename convention so old wheels (kept on R2 but not in manifest) resolve."""
-    _seed_caches(
-        tmp_path, monkeypatch,
-        r2_plugins={"comsol": {"version": "0.1.1",
-                                  "wheel": "https://cdn.svdailab.com/wheels/sim_plugin_comsol-0.1.1-py3-none-any.whl"}},
-    )
-    rs = resolve_source("comsol@0.1.0", offline=True)
-    assert rs.kind == "name-version"
-    assert rs.version == "0.1.0"
-    assert rs.pip_target == (
-        "https://cdn.svdailab.com/wheels/sim_plugin_comsol-0.1.0-py3-none-any.whl"
-    )
-
-
-def test_resolve_name_at_version_github_entry_falls_back_to_git(tmp_path: Path, monkeypatch):
-    """name@<version> with a community-catalogue entry that has a git field
-    still uses git+@v<version> (R2 convention only fires for cdn.svdailab.com URLs)."""
-    _seed_caches(
-        tmp_path, monkeypatch,
-        r2_plugins={},
-        github_plugins=[{
-            "name": "ltspice",
-            "license_class": "oss",
-            "git": "https://github.com/svd-ai-lab/sim-plugin-ltspice",
-            "latest_version": "0.2.1",
-            "latest_wheel_url": "https://github.com/svd-ai-lab/sim-plugin-ltspice/releases/download/v0.2.1/sim_plugin_ltspice-0.2.1-py3-none-any.whl",
-        }],
-    )
-    rs = resolve_source("ltspice@0.1.0", offline=True)
-    assert rs.kind == "name-version"
-    assert rs.pip_target == "git+https://github.com/svd-ai-lab/sim-plugin-ltspice@v0.1.0"
-
-
-def test_resolve_explicit_index_url_skips_chain(tmp_path: Path, monkeypatch):
-    """Explicit index_url uses just that source — no R2 fallback."""
-    _seed_caches(
-        tmp_path, monkeypatch,
-        r2_plugins={"comsol": {"version": "0.1.0",
-                                 "wheel": "https://r2.example/comsol.whl"}},
-        github_plugins=[{"name": "comsol", "license_class": "oss",
-                          "latest_wheel_url": "https://gh.example/comsol.whl"}],
-    )
-    from sim._plugin_install import DEFAULT_INDEX_URL
-    rs = resolve_source("comsol", offline=True, index_url=DEFAULT_INDEX_URL)
-    assert rs.pip_target == "https://gh.example/comsol.whl"
-
-
-# ── Index fetch + cache ──────────────────────────────────────────────────────
-
-
-def test_fetch_index_offline_missing_cache_returns_empty(tmp_path: Path, monkeypatch):
-    monkeypatch.setattr("sim._plugin_install._index_cache_dir",
-                        lambda: tmp_path / "missing")
-    monkeypatch.setattr("sim._plugin_install._index_cache_path",
-                        lambda: tmp_path / "missing" / "index.json")
-    idx = fetch_index(offline=True)
-    assert idx == {"schema_version": 1, "plugins": []}
-
-
-def test_index_entry_lookup(tmp_path: Path, monkeypatch):
-    cache_dir = tmp_path / "cache"
-    cache_dir.mkdir()
-    (cache_dir / "index.json").write_text(json.dumps({
-        "schema_version": 1,
-        "plugins": [
-            {"name": "coolprop", "license_class": "oss"},
-            {"name": "simpy", "license_class": "oss"},
-        ],
-    }), encoding="utf-8")
-    monkeypatch.setattr("sim._plugin_install._index_cache_dir", lambda: cache_dir)
-    monkeypatch.setattr("sim._plugin_install._index_cache_path",
-                        lambda: cache_dir / "index.json")
-    e = index_entry("coolprop", offline=True)
-    assert e is not None and e["name"] == "coolprop"
-    assert index_entry("nope", offline=True) is None
-
-
-# ── Bundle ──────────────────────────────────────────────────────────────────
-
-
-def test_bundle_plugins_writes_filtered_index(tmp_path: Path, monkeypatch):
-    """Bundle should write an index.json with only the requested plugins."""
-    cache_dir = tmp_path / "cache"
-    cache_dir.mkdir()
-    monkeypatch.setattr("sim._plugin_install._index_cache_dir", lambda: cache_dir)
-    monkeypatch.setattr("sim._plugin_install._index_cache_path",
-                        lambda: cache_dir / "index.json")
-
-    full_index = {
-        "schema_version": 1,
-        "plugins": [
-            {"name": "coolprop",
-             "latest_wheel_url": "http://fake/coolprop.whl",
-             "license_class": "oss"},
-            {"name": "simpy",
-             "latest_wheel_url": "http://fake/simpy.whl",
-             "license_class": "oss"},
-        ],
-    }
-    (cache_dir / "index.json").write_text(json.dumps(full_index), encoding="utf-8")
-
-    # Real file-like; bundle uses shutil.copyfileobj which calls .read(size).
-    import io
-
-    class _FakeResp(io.BytesIO):
-        def __enter__(self):
-            return self
-        def __exit__(self, *a):
-            self.close()
-
-    def fake_open(url, timeout=30):
-        return _FakeResp(b"WHEEL")
-
+def test_bundle_plugins_is_disabled_without_index(tmp_path: Path):
     output = tmp_path / "out"
-    with mock.patch("sim._plugin_install.urllib.request.urlopen", fake_open):
-        result = bundle_plugins(["coolprop"], output)
-
-    assert result["ok"] is True
-    assert result["fetched"] == ["coolprop"]
-    written_idx = json.loads((output / "index.json").read_text(encoding="utf-8"))
-    assert len(written_idx["plugins"]) == 1
-    assert written_idx["plugins"][0]["name"] == "coolprop"
-    assert written_idx["plugins"][0]["latest_wheel_url"].startswith("file://")
-
-
-def test_bundle_plugins_unknown_returns_partial_failure(tmp_path: Path, monkeypatch):
-    cache_dir = tmp_path / "cache"
-    cache_dir.mkdir()
-    (cache_dir / "index.json").write_text(json.dumps({"plugins": []}), encoding="utf-8")
-    monkeypatch.setattr("sim._plugin_install._index_cache_dir", lambda: cache_dir)
-    monkeypatch.setattr("sim._plugin_install._index_cache_path",
-                        lambda: cache_dir / "index.json")
-
-    output = tmp_path / "out"
-    result = bundle_plugins(["nope"], output)
+    result = bundle_plugins(["ltspice"], output)
     assert result["ok"] is False
     assert result["fetched"] == []
-    assert result["errors"][0]["name"] == "nope"
+    assert result["errors"][0]["name"] == "ltspice"
+    assert "bundle no longer resolves catalogue names" in result["errors"][0]["error"]
+
+
+def test_install_bare_short_name_returns_helpful_error(monkeypatch):
+    from sim import _plugin_install
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("pip install should not be called")
+
+    monkeypatch.setattr(_plugin_install, "_pip_install", fail_if_called)
+
+    report = install_plugin("mechanical")
+    assert report.ok is False
+    assert report.source_kind == "invalid"
+    assert report.error_code == "PLUGIN_NOT_FOUND"
+    assert "sim-plugin-mechanical" in report.message
 
 
 # ── InstallReport shape ─────────────────────────────────────────────────────
@@ -457,3 +219,30 @@ def test_pip_install_defaults_to_sys_executable(monkeypatch):
     cmd = captured["cmd"]
     assert "--python" in cmd
     assert sys.executable in cmd
+
+
+def test_install_passes_extra_index_urls(monkeypatch):
+    from sim import _plugin_install
+
+    captured = {}
+
+    def fake_pip_install(target, **kwargs):
+        captured["target"] = target
+        captured["kwargs"] = kwargs
+        return _FakeProc()
+
+    monkeypatch.setattr(_plugin_install, "_pip_install", fake_pip_install)
+    monkeypatch.setattr(_plugin_install, "_default_skills_target", lambda: Path("/tmp/no-skills"))
+
+    report = install_plugin(
+        "sim-plugin-mechanical",
+        skip_sync=True,
+        extra_index_urls=["https://example.com/simple/"],
+    )
+
+    assert report.ok is True
+    assert captured["target"] == "sim-plugin-mechanical"
+    assert captured["kwargs"]["extra_args"] == [
+        "--extra-index-url",
+        "https://example.com/simple/",
+    ]

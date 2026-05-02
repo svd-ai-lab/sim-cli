@@ -31,6 +31,7 @@ SCHEMA_FIELDS = (
     "duration_ms",
     "error",
     "parsed_output",
+    "workspace_delta",
 )
 
 
@@ -63,6 +64,11 @@ def _normalize(record: dict[str, Any]) -> dict[str, Any]:
     # Parsed output is optional but commonly present for one-shot runs.
     if "parsed_output" in record:
         out["parsed_output"] = record["parsed_output"]
+    # Workspace delta is optional for older records, but new one-shot runs
+    # persist it so `sim logs <id> --field workspace` can drill into files
+    # written by solver processes.
+    if "workspace_delta" in record:
+        out["workspace_delta"] = record["workspace_delta"]
     # Preserve script path for one-shot runs so `sim logs` can show it.
     if "script" in record:
         out["script"] = record["script"]

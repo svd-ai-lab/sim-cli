@@ -341,7 +341,7 @@ def lint(ctx, script):
                 level="error",
                 message=(
                     f"No registered driver claims {script_path.name!r}. "
-                    "Install the matching plugin (e.g. `sim plugin install <solver>`) "
+                    "Install the matching plugin (e.g. `sim plugin install sim-plugin-<solver>`) "
                     "or pass `sim run` if you want to attempt execution anyway."
                 ),
             )],
@@ -921,7 +921,7 @@ def init(ctx, force):
 @click.option("--config", "config_path", type=click.Path(exists=True, dir_okay=False, path_type=Path),
               default=None, help="Override the sim.toml location.")
 @click.option("--offline", is_flag=True,
-              help="Resolve plugins from the cached index only (no network).")
+              help="Accepted for compatibility; plugin install no longer uses an index.")
 @click.option("--dry-run", is_flag=True,
               help="Print what would happen without installing anything.")
 @click.pass_context
@@ -999,8 +999,49 @@ def plugin():
 
     Plugins extend sim with additional solvers. Each plugin ships its
     driver + skill in one wheel; see docs/plugin-install.md for the install
-    flows (online by name, local wheel, air-gapped bundle, etc.).
+    flows (package spec, direct URL, local wheel, git URL, etc.).
     """
+
+
+@plugin.command("catalog")
+@click.option("--offline", is_flag=True,
+              help="Use the cached discovery catalogue only.")
+@click.option("--refresh", is_flag=True,
+              help="Refresh the cached discovery catalogue.")
+@click.option("--catalog-url", default=None,
+              help="Override the discovery catalogue URL.")
+@click.pass_context
+def plugin_catalog_cmd(ctx, offline, refresh, catalog_url):
+    """List available plugins from the discovery catalogue.
+
+    This is discovery only. Install commands remain explicit and pip-native;
+    the catalogue is not used to silently resolve short names during install.
+    """
+    from sim.plugin_catalog import DEFAULT_CATALOG_URL, list_catalog
+
+    rows = list_catalog(
+        url=catalog_url or DEFAULT_CATALOG_URL,
+        offline=offline,
+        force=refresh,
+    )
+    if ctx.obj["json"]:
+        click.echo(json_mod.dumps([r.to_dict() for r in rows], indent=2))
+        return
+
+    if not rows:
+        click.echo("[sim] plugin catalog: no available plugins found")
+        return
+
+    click.echo(f"[sim] {len(rows)} available plugin(s) in catalog:")
+    for r in rows:
+        ver = f" {r.version}" if r.version else ""
+        license_class = f" ({r.license_class})" if r.license_class else ""
+        dist = f" [{r.distribution}]" if r.distribution else ""
+        click.echo(f"  {r.id:20s} {r.name}{ver}{dist}{license_class}")
+        if r.summary:
+            click.echo(f"    {r.summary}")
+        if r.install:
+            click.echo(f"    install: sim plugin install {r.install}")
 
 
 @plugin.command("list")
@@ -1091,7 +1132,7 @@ def plugin_info_cmd(ctx, name):
                    "Default: enabled. Use --no-upgrade to keep an existing "
                    "install if one is already present.")
 @click.option("--offline", is_flag=True,
-              help="Use only the local cached index; no network calls.")
+              help="Accepted for compatibility; plugin install no longer uses an index.")
 @click.option("--no-sync", "no_sync", is_flag=True,
               help="Skip sync-skills after install.")
 @click.option("--target", "sync_target", type=click.Path(file_okay=False, path_type=Path),
@@ -1101,20 +1142,23 @@ def plugin_info_cmd(ctx, name):
               help="Pin the target Python interpreter for the install. "
                    "Defaults to the interpreter running sim — use this "
                    "when sim is on PATH but the desired venv isn't activated.")
+@click.option("--extra-index-url", "extra_index_urls", multiple=True,
+              help="Additional Python package index for private plugins. "
+                   "Passed through to pip/uv pip install.")
 @click.pass_context
 def plugin_install(ctx, source, editable, upgrade, offline, no_sync, sync_target,
-                    python_exe):
+                    python_exe, extra_index_urls):
     """Install a plugin from any supported source.
 
     \b
     Examples:
-      sim plugin install coolprop                          # by name (online index)
-      sim plugin install coolprop@0.1.0                    # pinned version
+      sim plugin install sim-plugin-coolprop               # exact package spec
+      sim plugin install sim-plugin-coolprop==0.1.0        # pinned package spec
       sim plugin install ./sim_plugin_coolprop-0.1.0-py3-none-any.whl
       sim plugin install ./sim-plugin-coolprop -e          # editable, for authors
       sim plugin install git+https://github.com/svd-ai-lab/sim-plugin-coolprop
-      sim plugin install --offline coolprop                # use cached index only
-      sim plugin install coolprop --python /path/to/venv/bin/python
+      sim plugin install sim-plugin-coolprop --python /path/to/venv/bin/python
+      sim plugin install sim-plugin-mechanical --extra-index-url https://example.com/simple/
     """
     from sim._plugin_install import install_plugin
 
@@ -1123,6 +1167,7 @@ def plugin_install(ctx, source, editable, upgrade, offline, no_sync, sync_target
         editable=editable, upgrade=upgrade, offline=offline,
         sync_target=sync_target, skip_sync=no_sync,
         python=python_exe,
+        extra_index_urls=list(extra_index_urls),
     )
 
     if ctx.obj["json"]:
@@ -1171,12 +1216,11 @@ def plugin_uninstall(ctx, name, python_exe):
               help="Output directory for wheels + filtered index.json.")
 @click.pass_context
 def plugin_bundle(ctx, names, output):
-    """Download wheels for the named plugins into a directory for offline install.
+    """Deprecated: index-backed plugin bundles are no longer supported.
 
     \b
     Examples:
-      sim plugin bundle coolprop simpy gmsh -o ./plugins-bundle/
-      sim plugin install --offline --from-dir ./plugins-bundle/ coolprop
+      sim plugin install ./vendor/sim_plugin_coolprop-0.1.0-py3-none-any.whl
     """
     from sim._plugin_install import bundle_plugins
 

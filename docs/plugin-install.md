@@ -8,20 +8,23 @@ covers every way to install one.
 
 | Situation | Command |
 |---|---|
-| Online, named plugin | `sim plugin install coolprop` |
+| Discover available plugins | `sim plugin catalog` |
+| PyPI package | `sim plugin install sim-plugin-coolprop` |
+| Pinned PyPI package | `sim plugin install sim-plugin-coolprop==0.1.0` |
+| Private package index | `sim plugin install sim-plugin-mechanical --extra-index-url https://example.com/simple/` |
+| Direct URL | `sim plugin install https://example.com/sim_plugin_coolprop-0.1.0-py3-none-any.whl` |
 | Online, plugin you cloned locally | `sim plugin install ./sim-plugin-coolprop` |
 | Offline (you have a wheel file) | `sim plugin install ./sim_plugin_coolprop-0.1.0-py3-none-any.whl` |
-| Air-gapped (you have a bundle dir) | `sim plugin install --offline --from-dir ./bundle/ --all` |
 | Editable (you author plugins) | `sim plugin install -e ./sim-plugin-coolprop` |
 
 ## How `sim plugin install <source>` resolves
 
 `<source>` accepts any of:
 
-1. `<name>` — looks up the plugin in the curated index. Tries the
-   `latest_wheel_url` first (HTTPS, no git or `gh` needed); falls back to
-   `git+https://...` if the wheel URL is unreachable.
-2. `<name>@<version>` — pinned version from the index.
+1. `sim-plugin-<name>` or `sim-plugin-<name>==<version>` — exact package
+   spec passed directly to pip/uv.
+2. `sim-plugin-<name> --extra-index-url https://.../simple/` — exact
+   package spec plus an additional private Python package index.
 3. `https://...whl` or `https://...tar.gz` — direct URL to a wheel or
    sdist. Plain pip + HTTPS, works behind corporate proxies.
 4. `./path/to/dir` — local plugin source directory. `pip install <dir>`.
@@ -29,27 +32,40 @@ covers every way to install one.
    `pip install <path>`.
 6. `git+https://...` or `git+ssh://...` — git URL (when git is available).
 
+Bare short names such as `coolprop` or `ltspice` are catalogue names, not
+install sources. Run `sim plugin catalog` to see the official plugin list
+with the recommended explicit install command for each, then pass that
+command's argument to `sim plugin install`.
+
 After the package installs, `sim plugin install` runs `sync-skills`
 automatically so the plugin's bundled `_skills/<solver>/` becomes
 discoverable to Claude Code (or any consumer of `.claude/skills/`).
 
-## Online (HTTPS-only)
+## Discovery catalogue
+
+Agents can discover available plugins without installing anything:
 
 ```sh
-sim plugin install coolprop
+sim plugin catalog
+sim plugin catalog --json
+```
+
+The catalogue is for discovery only. Each entry includes a copy-paste
+`install` string that callers pass to `sim plugin install`. The catalogue
+is advisory metadata; `sim plugin install <short-name>` does not silently
+resolve a catalogue name into a URL or package.
+
+## Online
+
+```sh
+sim plugin install sim-plugin-coolprop
 ```
 
 This is enough on a typical developer laptop. Requires:
 
 - `sim-cli-core` already installed.
-- HTTPS access to GitHub Releases (for wheel) or GitHub repo (for git fallback).
+- HTTPS access to the package index, direct URL, or git host you provide.
 - `pip` (it ships with Python).
-
-Does NOT require:
-
-- `git` CLI.
-- `gh` CLI.
-- A GitHub account or auth (for OSS plugins).
 
 ## Offline (single artifact)
 
@@ -63,40 +79,6 @@ sim plugin install ./sim_plugin_coolprop-0.1.0-py3-none-any.whl
 The skill ships *inside* the wheel under `_skills/<solver>/`, so this
 single command brings up both the driver and the skill. No network access
 is required.
-
-## Air-gapped (bundle)
-
-For lab/regulated environments without external network, the bundle flow:
-
-**On a connected machine:**
-
-```sh
-sim plugin bundle coolprop simpy gmsh --output ./plugins-bundle/
-```
-
-This produces:
-
-```
-plugins-bundle/
-  index.json                                         (filtered to bundled plugins,
-                                                       with file:// URLs)
-  sim_plugin_coolprop-0.1.0-py3-none-any.whl
-  sim_plugin_simpy-0.1.0-py3-none-any.whl
-  sim_plugin_gmsh-0.1.0-py3-none-any.whl
-```
-
-**Ship the directory** (USB, secure file transfer, etc.).
-
-**On the air-gapped machine:**
-
-```sh
-sim plugin install --offline --from-dir ./plugins-bundle/ coolprop simpy gmsh
-# or, install everything in the bundle:
-sim plugin install --offline --from-dir ./plugins-bundle/ --all
-```
-
-`--offline` forces the resolver to use the bundle's local `index.json` and
-refuse network calls.
 
 ## Editable (plugin authors)
 
@@ -113,6 +95,13 @@ development.
 ## Commercial plugins
 
 Commercial plugin availability depends on third-party license conditions.
+Private wrappers should be distributed through explicit private repos, direct
+wheel URLs, or a standard private Python package index:
+
+```sh
+sim plugin install sim-plugin-mechanical --extra-index-url https://example.com/simple/
+```
+
 Contact <contact@svd-ai-lab.com> to discuss commercial plugin access.
 
 ## Surviving `uv sync`
@@ -125,7 +114,7 @@ anything else. To keep installed plugins across `uv sync` invocations,
 
 ```toml
 [tool.sim.plugins]
-coolprop = { name = "coolprop", source = "index", version = ">=0.1.0" }
+coolprop = { package = "sim-plugin-coolprop", version = ">=0.1.0" }
 gmsh     = { git = "https://github.com/svd-ai-lab/sim-plugin-gmsh", rev = "v0.1.0" }
 local_plugin = { wheel = "./vendor/sim_plugin_local-1.2.0-py3-none-any.whl" }
 ```

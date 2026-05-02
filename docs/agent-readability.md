@@ -58,7 +58,7 @@ top-level keys (`stdout`, `stderr`); never inside `message`.
 | `LINT_FAILED` | `sim lint` produced at least one error-level diagnostic. |
 | `RUN_FAILED` | The solver returned non-zero or the driver detected an error in the output. |
 | `SESSION_NOT_FOUND` | `--session <id>` does not match any active session on the server. |
-| `PLUGIN_NOT_FOUND` | `sim plugin` could not resolve a plugin name (not in the index, no local file). |
+| `PLUGIN_NOT_FOUND` | `sim plugin install` received an invalid explicit source, or a plugin name is not installed. |
 | `PLUGIN_INSTALL_FAILED` | `pip install` for a plugin returned non-zero. |
 | `PROTOCOL_VIOLATION` | A driver returned a value that doesn't match `DriverProtocol`. |
 | `NONINTERACTIVE_INPUT_REQUIRED` | `--no-interactive` is set and the command would otherwise prompt. |

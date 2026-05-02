@@ -119,13 +119,21 @@ _EXAMPLES: dict[str, list[dict[str, str]]] = {
         {"cmd": "sim plugin list --json",
          "summary": "List every registered plugin (built-in + external)."},
     ],
+    "plugin catalog": [
+        {"cmd": "sim plugin catalog --json",
+         "summary": "List available plugins from the discovery catalogue."},
+    ],
+    "plugin search": [
+        {"cmd": "sim plugin search ltspice --json",
+         "summary": "Search the discovery catalogue for package and install guidance."},
+    ],
     "plugin info": [
         {"cmd": "sim plugin info coolprop",
          "summary": "Show one plugin's metadata and compatibility profiles."},
     ],
     "plugin install": [
-        {"cmd": "sim plugin install coolprop",
-         "summary": "Install a plugin by name (resolves via the index)."},
+        {"cmd": "sim plugin install sim-plugin-coolprop",
+         "summary": "Install from an exact package spec."},
         {"cmd": "sim plugin install ./sim_plugin_coolprop-0.1.0-py3-none-any.whl",
          "summary": "Install from a local wheel (offline-friendly)."},
         {"cmd": "sim plugin install ./sim-plugin-coolprop -e",
@@ -168,7 +176,7 @@ ERROR_CODES: dict[str, str] = {
     "SESSION_NOT_FOUND":
         "--session <id> does not match any active session on the server.",
     "PLUGIN_NOT_FOUND":
-        "sim plugin could not resolve a plugin name (not in the index, no local file).",
+        "sim plugin install received an invalid explicit source, or a plugin name is not installed.",
     "PLUGIN_INSTALL_FAILED":
         "pip install for a plugin returned non-zero.",
     "PROTOCOL_VIOLATION":
