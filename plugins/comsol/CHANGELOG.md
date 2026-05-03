@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.8 - 2026-05-03
+
+- Use `uvx --from sim-plugin-comsol sim-comsol-attach ...` as the documented COMSOL Desktop attach path so users and agents share the same invocation.
+- Fix CI setup for the repo-local pytest basetemp directory.
+
 ## 0.1.7 - 2026-05-03
 
 - Remove internal test-implementation wording from the public README/PyPI description.
