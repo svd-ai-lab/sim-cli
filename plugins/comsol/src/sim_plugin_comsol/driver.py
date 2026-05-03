@@ -65,14 +65,15 @@ class ComsolLifecycleError(RuntimeError):
 
 
 _COMSOL_UI_MODE_ALIASES = {
-    "": "server-graphics",
+    "": "no_gui",
+    "no_gui": "no_gui",
+    "no-gui": "no_gui",
+    "nogui": "no_gui",
     "gui": "server-graphics",
     "visible": "server-graphics",
     "graphics": "server-graphics",
     "server_graphics": "server-graphics",
     "server-graphics": "server-graphics",
-    "headless": "headless",
-    "none": "headless",
     "shared_desktop": "shared-desktop",
     "shared-desktop": "shared-desktop",
     "desktop": "server-graphics",
@@ -468,9 +469,9 @@ class ComsolDriver:
         # Sim dir for probe workdir (screenshots, workdir-diff baseline)
         self._sim_dir: Path = Path(os.environ.get("SIM_DIR") or (Path.cwd() / ".sim"))
         # InspectProbe list — baseline 9-channel (GUI off). launch() will
-        # flip GUI probes on if ui_mode='gui'/'desktop'.
+        # flip GUI probes on for server-graphics/shared-desktop modes.
         self.probes: list = _default_comsol_probes(enable_gui=False)
-        self._gui = None  # GuiController; set at launch() when ui_mode=gui
+        self._gui = None  # GuiController; set at launch() for visible modes.
 
     @property
     def name(self) -> str:
@@ -788,7 +789,7 @@ class ComsolDriver:
         return effective, note, visual
 
     def _ui_capabilities(self, effective_ui_mode: str | None = None) -> dict:
-        mode = effective_ui_mode or self._ui_mode or "headless"
+        mode = effective_ui_mode or self._ui_mode or "no_gui"
         server_graphics = mode == "server-graphics"
         shared_desktop = mode == "shared-desktop"
         return {
@@ -1087,7 +1088,7 @@ class ComsolDriver:
             return {
                 "ok": True,
                 "modes": {
-                    "headless": "COMSOL server API session without intentional visible UI.",
+                    "no_gui": "COMSOL server API session without intentional visible UI.",
                     "server-graphics": (
                         "COMSOL server API session with server-side graphics; "
                         "plot windows may be visible, but Model Builder is not "
@@ -1131,7 +1132,7 @@ class ComsolDriver:
     def launch(
         self,
         mode: str = "solver",
-        ui_mode: str = "gui",
+        ui_mode: str = "no_gui",
         processors: int = 2,
         comsol_root: str | None = None,
         user: str | None = None,
@@ -1358,7 +1359,7 @@ class ComsolDriver:
         self._last_health = self.health()
 
         # Flip probes to GUI-aware variant + construct gui actuation facade
-        # when visible COMSOL windows may appear. Headless launches skip both.
+        # when visible COMSOL windows may appear. no_gui launches skip both.
         gui_mode = effective_ui_mode in {"server-graphics", "shared-desktop"}
         if gui_mode:
             self.probes = _default_comsol_probes(enable_gui=True)

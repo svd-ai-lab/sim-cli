@@ -153,6 +153,14 @@ class TestRunFile:
 
 
 class TestLifecycleDiagnostics:
+    def test_cli_no_gui_mode_is_canonical_no_gui(self):
+        driver = ComsolDriver()
+
+        effective, note = driver._normalize_ui_mode("no_gui")
+
+        assert effective == "no_gui"
+        assert note is None
+
     def test_legacy_gui_mode_is_server_graphics_alias(self):
         driver = ComsolDriver()
 
@@ -296,10 +304,10 @@ class TestLifecycleDiagnostics:
         driver._attach_only = True
         driver._active_model_tag = "Model1"
         driver._port = 65000
-        driver._ui_mode = "headless"
+        driver._ui_mode = "no_gui"
         driver._launch_options = {
             "requested_ui_mode": "no_gui",
-            "ui_mode": "headless",
+            "ui_mode": "no_gui",
             "attach_only": True,
             "server_owner": "external",
             "server_host": "localhost",
@@ -346,8 +354,10 @@ class TestLifecycleDiagnostics:
         modes = driver.query("ui.modes")
 
         assert modes["ok"] is True
+        assert "no_gui" in modes["modes"]
         assert "server-graphics" in modes["modes"]
         assert "shared-desktop" in modes["modes"]
+        assert modes["aliases"]["no_gui"] == "no_gui"
         assert modes["aliases"]["gui"] == "server-graphics"
 
 

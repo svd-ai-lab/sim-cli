@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.10 - 2026-05-03
+
+- Accept the sim-cli default `ui_mode=no_gui` as the canonical COMSOL no-visible-UI mode.
+
 ## 0.1.9 - 2026-05-03
 
 - Tighten Desktop attach target discovery so browser pages mentioning `sim-plugin-comsol` are not mistaken for COMSOL Desktop.

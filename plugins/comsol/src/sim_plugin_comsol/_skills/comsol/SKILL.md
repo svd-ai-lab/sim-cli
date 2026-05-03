@@ -230,7 +230,7 @@ visible model coherent after every step.
      COMSOL Desktop, wants realtime-visible model edits, may intervene
      manually, or wants to avoid the `mphclient` server login dialog.
    - Use `sim connect --solver comsol` only when you need `sim inspect`,
-     JPype session state, driver-managed artifacts, headless/server
+     JPype session state, driver-managed artifacts, no-GUI/server
      execution, or compatibility with existing sim runtime workflows.
 2. For Desktop attach, run `sim-comsol-attach open --json --timeout 120` or
    `sim-comsol-attach health --json`, then confirm the Java Shell channel is
@@ -260,8 +260,8 @@ COMSOL has several visual surfaces. Do not collapse them into one
 
 | Mode | What it means | Live with agent edits? |
 |---|---|---|
-| `headless` | `comsolmphserver` API session with no intentional visible windows. | Yes, API session only. |
-| `server-graphics` | `comsolmphserver -graphics`; plot windows may appear when a result plot is run. This is the current default effective mode. Legacy `ui_mode=gui` is an alias for this. | Yes for the server-side model, but there is no Model Builder tree. |
+| `no_gui` | `comsolmphserver` API session with no intentional visible windows. This is the canonical sim-cli default. | Yes, API session only. |
+| `server-graphics` | `comsolmphserver -graphics`; plot windows may appear when a result plot is run. `ui_mode=gui` is an alias for this. | Yes for the server-side model, but there is no Model Builder tree. |
 | `desktop-inspection` | Save a `.mph` artifact, then open it in full COMSOL Desktop / Model Builder. | No. It is an inspection copy unless explicitly reloaded. |
 | `shared-desktop` | Full COMSOL Desktop attached to the same server, with the agent binding to the Desktop's active model tag. Request from sim-cli with `--driver-option visual_mode=shared-desktop`. | Yes, when `model_builder_live: true`. |
 | `desktop-attach` | Ordinary COMSOL Desktop, controlled through the Java Shell UIA channel via `sim-comsol-attach`. No `mphclient`, no shared server login dialog. | Yes, in the visible Desktop model, but without `sim inspect`/JPype session introspection. |
