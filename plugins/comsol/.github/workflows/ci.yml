@@ -16,4 +16,6 @@ jobs:
           python-version: "3.12"
 
       - name: Run tests
-        run: uv run --extra test pytest --basetemp .pytest_basetemp/ci -q
+        run: |
+          mkdir -p .pytest_basetemp
+          uv run --extra test pytest --basetemp .pytest_basetemp/ci -q

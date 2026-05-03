@@ -261,12 +261,16 @@ refresh a separately opened COMSOL Desktop window.
 ### Ordinary Desktop attach helper
 
 For interactive Windows work, the normal user-facing default is the
-standalone helper:
+standalone helper. Agents and humans must use the same command path:
+prefer `uvx --from sim-plugin-comsol sim-comsol-attach ...` over relying
+on a PATH-installed `sim-comsol-attach.exe`. This keeps development,
+documentation, and user reproduction aligned even when Python user
+Scripts directories are not on PATH.
 
 ```powershell
-sim-comsol-attach open --json --timeout 120
-sim-comsol-attach health --json
-sim-comsol-attach exec --file step.java --json
+uvx --from sim-plugin-comsol sim-comsol-attach open --json --timeout 120
+uvx --from sim-plugin-comsol sim-comsol-attach health --json
+uvx --from sim-plugin-comsol sim-comsol-attach exec --file step.java --json
 ```
 
 `open` launches normal `comsol.exe` if no suitable Desktop exists,
