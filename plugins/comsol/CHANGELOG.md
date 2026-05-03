@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.9 - 2026-05-03
+
+- Tighten Desktop attach target discovery so browser pages mentioning `sim-plugin-comsol` are not mistaken for COMSOL Desktop.
+
 ## 0.1.8 - 2026-05-03
 
 - Use `uvx --from sim-plugin-comsol sim-comsol-attach ...` as the documented COMSOL Desktop attach path so users and agents share the same invocation.

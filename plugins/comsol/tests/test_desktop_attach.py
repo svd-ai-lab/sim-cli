@@ -49,6 +49,21 @@ def test_find_desktops_filters_comsol_and_dialogs():
     assert targets[0].to_dict()["control_channel"] == "comsol.java-shell-uia"
 
 
+def test_find_desktops_ignores_browser_pages_about_comsol():
+    def provider():
+        return [
+            {
+                "hwnd": 5,
+                "pid": 50,
+                "proc": "chrome.exe",
+                "title": "sim-plugin-comsol: Driver plugin for sim-cli - Google Chrome",
+                "rect": [0, 0, 100, 100],
+            }
+        ]
+
+    assert find_desktops(windows_provider=provider) == []
+
+
 def test_resolve_target_rejects_ambiguous():
     def provider():
         return _windows() + [
