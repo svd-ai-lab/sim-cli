@@ -912,7 +912,7 @@ wheels = [
 
 [[package]]
 name = "sim-plugin-comsol"
-version = "0.1.7"
+version = "0.1.8"
 source = { editable = "." }
 dependencies = [
     { name = "mph" },
