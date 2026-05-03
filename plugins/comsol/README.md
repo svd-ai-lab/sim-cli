@@ -59,8 +59,6 @@ uv sync
 uv run pytest
 ```
 
-Most tests run without COMSOL installed (they exercise the driver protocol surface against fixtures and use in-memory ZIP archives for the MPH-file probe). The end-to-end tests require a real COMSOL license and are skipped otherwise.
-
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE) and [LICENSE-NOTICE.md](LICENSE-NOTICE.md).
