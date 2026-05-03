@@ -49,6 +49,23 @@ def test_find_desktops_filters_comsol_and_dialogs():
     assert targets[0].to_dict()["control_channel"] == "comsol.java-shell-uia"
 
 
+def test_find_desktops_accepts_saved_model_title_suffix():
+    def provider():
+        return [
+            {
+                "hwnd": 6,
+                "pid": 60,
+                "proc": "ComsolUI.exe",
+                "title": "Untitled.mph - COMSOL Multiphysics",
+                "rect": [0, 0, 100, 100],
+            }
+        ]
+
+    targets = find_desktops(windows_provider=provider)
+    assert len(targets) == 1
+    assert targets[0].desktop_pid == 60
+
+
 def test_find_desktops_ignores_browser_pages_about_comsol():
     def provider():
         return [

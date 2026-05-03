@@ -7,7 +7,7 @@ the `com.comsol.help.*` Eclipse-help plugins that COMSOL ships on disk.
 ## Install
 
 ```bash
-cd sim-skills/comsol/doc-search
+cd src/sim_plugin_comsol/_skills/comsol/doc-search
 uv sync
 ```
 

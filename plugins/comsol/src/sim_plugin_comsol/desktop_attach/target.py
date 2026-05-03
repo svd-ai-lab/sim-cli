@@ -86,7 +86,7 @@ def _looks_like_comsol_desktop(row: dict) -> bool:
     title = str(row.get("title") or "")
     lowered_title = title.lower()
     proc_is_comsol = "comsol" in proc
-    title_is_desktop = lowered_title.startswith("comsol multiphysics")
+    title_is_desktop = "comsol multiphysics" in lowered_title
     if not proc_is_comsol and not title_is_desktop:
         return False
     if "server" in lowered_title and "connect" in lowered_title:
