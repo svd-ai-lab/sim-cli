@@ -181,8 +181,22 @@ def _run_submit_subprocess(
                 y = rect.top + max(int(rect.height() / 2), 1)
                 mouse.click(button="left", coords=(x, y))
             elif key in {"ctrl_enter", "ctrl+enter"}:
+                try:
+                    target.click_input()
+                except Exception:
+                    try:
+                        target.set_focus()
+                    except Exception:
+                        pass
                 send_keys("^{ENTER}")
             elif key == "enter":
+                try:
+                    target.click_input()
+                except Exception:
+                    try:
+                        target.set_focus()
+                    except Exception:
+                        pass
                 send_keys("{ENTER}")
             else:
                 emit({"ok": False, "status": "submit_failed", "error": f"unknown submit_key={key!r}"})
