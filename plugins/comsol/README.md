@@ -7,7 +7,7 @@ The COMSOL solver and its `mph` Python binding are not bundled — you supply th
 ## Install
 
 ```bash
-pip install git+https://github.com/svd-ai-lab/sim-plugin-comsol@main
+pip install sim-plugin-comsol
 ```
 
 After install, sim-cli auto-discovers the driver:
@@ -17,9 +17,23 @@ sim drivers | grep comsol
 sim run --solver comsol path/to/script.py
 ```
 
+You can also install through sim-cli's plugin command:
+
+```bash
+sim plugin install sim-plugin-comsol
+```
+
+For realtime-visible COMSOL Desktop collaboration on Windows, use the
+standalone attach helper:
+
+```powershell
+sim-comsol-attach open --json --timeout 120
+sim-comsol-attach exec --file step.java --json
+```
+
 ## How it works
 
-The plugin registers via two entry-point groups:
+The plugin registers via three entry-point groups:
 
 ```toml
 [project.entry-points."sim.drivers"]
@@ -27,9 +41,14 @@ comsol = "sim_plugin_comsol:ComsolDriver"
 
 [project.entry-points."sim.skills"]
 comsol = "sim_plugin_comsol:skills_dir"
+
+[project.entry-points."sim.plugins"]
+comsol = "sim_plugin_comsol:plugin_info"
 ```
 
-`sim.drivers` exposes the driver class; `sim.skills` exposes a directory of skill files bundled inside the wheel.
+`sim.drivers` exposes the driver class; `sim.skills` exposes a directory
+of skill files bundled inside the wheel; `sim.plugins` exposes plugin
+metadata for discovery.
 
 ## Develop
 
