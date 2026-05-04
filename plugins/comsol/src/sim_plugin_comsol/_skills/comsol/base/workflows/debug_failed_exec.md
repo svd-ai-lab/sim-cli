@@ -8,6 +8,7 @@ failure and the live model state, then retry with the smallest patch.
 1. Inspect the structured result:
 
    ```bash
+   sim inspect comsol.model.identity
    sim inspect last.result
    ```
 
@@ -69,6 +70,8 @@ except Exception as exc:
 ## Good repair behavior
 
 - Keep the current session unless it is corrupted.
+- If identity is missing or not checkpoint-ready, save or load a durable
+  `.mph` before further risky edits.
 - Save a `.mph` checkpoint before risky rebuilds.
 - Prefer checking parent tags over guessing child tags.
 - Prefer inspecting a node over trying alternate property names.

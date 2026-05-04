@@ -87,8 +87,10 @@ Use the bundled COMSOL skill in this repository. If the user wants reliable
 visible co-editing, use the sim runtime with visual_mode=shared-desktop first
 and verify session.health live_model_binding.ok. Use Java Shell Desktop attach
 only for already-open ordinary Desktop sessions, small edits, or
-human-in-the-loop fallback work. Build and solve the requested model one
-bounded step at a time.
+human-in-the-loop fallback work. For non-trivial modeling, establish the
+target model identity and working folder first: load the given .mph, or set a
+descriptive model tag/title and save an early checkpoint .mph under a case
+workdir. Build and solve the requested model one bounded step at a time.
 ```
 
 ## How it works

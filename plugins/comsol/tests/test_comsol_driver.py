@@ -29,9 +29,37 @@ class FakeProcess:
 class FakeComsolModel:
     def __init__(self, tag):
         self._tag = tag
+        self._title = "Checkpoint Model"
+        self._label = "Checkpoint Model"
+        self._file_path = r"C:\work\checkpoint_model\model\checkpoint_model.mph"
+        self._location = self._file_path
+        self._location_uri = None
+        self._model_path = r"C:\work\checkpoint_model\input;C:\work\checkpoint_model\model"
+        self._read_only = False
 
     def tag(self):
         return self._tag
+
+    def title(self):
+        return self._title
+
+    def label(self):
+        return self._label
+
+    def getFilePath(self):
+        return self._file_path
+
+    def location(self):
+        return self._location
+
+    def locationUri(self):
+        return self._location_uri
+
+    def modelPath(self):
+        return self._model_path
+
+    def isReadOnly(self):
+        return self._read_only
 
 
 class FakeModelUtil:
@@ -47,6 +75,9 @@ class FakeModelUtil:
     def create(self, tag):
         self.models[tag] = FakeComsolModel(tag)
         return self.models[tag]
+
+    def modelsUsedByOtherClients(self):
+        return []
 
 
 def _shared_desktop_driver(tmp_path, monkeypatch):
@@ -415,6 +446,28 @@ class TestLifecycleDiagnostics:
         assert health["ok"] is False
         assert health["connected"] is False
         assert health["code"] == "comsol.session.disconnected"
+
+    def test_query_model_identity_disconnected(self):
+        driver = ComsolDriver()
+
+        identity = driver.query("comsol.model.identity")
+
+        assert identity["ok"] is False
+        assert identity["connected"] is False
+        assert identity["code"] == "comsol.session.disconnected"
+
+    def test_query_model_identity_connected(self, tmp_path, monkeypatch):
+        driver, _model_util = _shared_desktop_driver(tmp_path, monkeypatch)
+
+        identity = driver.query("comsol.model.identity")
+
+        assert identity["ok"] is True
+        assert identity["active_model_tag"] == "Model1"
+        assert identity["bound_model_tag"] == "Model1"
+        assert identity["title"] == "Checkpoint Model"
+        assert identity["has_saved_location"] is True
+        assert identity["has_model_path"] is True
+        assert identity["checkpoint_ready"] is True
 
     def test_query_ui_modes(self):
         driver = ComsolDriver()

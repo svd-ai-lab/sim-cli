@@ -12,6 +12,7 @@ model edit:
 
 ```bash
 sim inspect session.health
+sim inspect comsol.model.identity
 sim inspect last.result
 sim inspect comsol.model.describe_text
 sim inspect comsol.model.describe
@@ -23,6 +24,7 @@ Target meanings:
 | Target | Use |
 |---|---|
 | `session.health` | Check solver process, UI mode, COMSOL version, PIDs, logs, and whether a visible desktop is live. |
+| `comsol.model.identity` | Check active/bound model tag, title/label, saved file path or database location, model path, read-only state, and whether the session has enough durable identity to resume. |
 | `last.result` | Check the last `sim exec` result, artifacts, probes, diagnostics, and exceptions. |
 | `comsol.model.describe_text` | Human-readable summary of components, physics, features, properties, and warnings. |
 | `comsol.model.describe` | Structured summary for programmatic comparison. |
@@ -52,6 +54,7 @@ Inspect after each layer:
 
 | Layer | Check |
 |---|---|
+| Identity | Active model tag, bound model tag, model title/label, saved `.mph` or database location, model path, and intended working folder. |
 | Geometry | Component, geometry sequence, named selections, domain/boundary counts where available. |
 | Materials | Material tags, material selections, key material property groups. |
 | Physics | Physics interface tags, feature tags, feature types, non-empty selections. |

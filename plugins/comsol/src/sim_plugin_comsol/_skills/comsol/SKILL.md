@@ -225,6 +225,60 @@ These hard constraints apply to every COMSOL task through this plugin.
 
 ---
 
+## Model identity, workdir, and checkpoints
+
+For non-trivial COMSOL work, establish a durable model identity and working
+folder before building geometry, materials, physics, mesh, or studies.
+COMSOL permits untitled `Model1` scratch models, but agents need a clear
+artifact to resume from after chat compaction, process restart, server reload,
+or human handoff.
+
+Use this policy:
+
+- If the user provided an `.mph`, load that exact file and bind the session to
+  a clear model tag derived from the case name.
+- If starting from scratch in the sim runtime, pass a descriptive
+  `model_tag=<case_slug>` when connecting if the current driver supports it.
+- If starting from scratch in shared Desktop or Desktop attach mode, bind to
+  the active Desktop model first, then set a visible title/label and save it
+  early to an absolute `.mph` path.
+- Keep all related files under one working folder, for example:
+
+```text
+<workdir>/
+  model/<case_slug>.mph
+  input/
+  output/
+  scripts/
+  logs/
+```
+
+- Set `model.modelPath(...)` to the relevant `input` and `model` folders
+  when the workflow uses external files, tables, meshes, or CAD.
+- Prefer absolute paths for save/export/log targets. Do not rely on COMSOL's
+  launch directory or the Java process current directory.
+- After every major layer, save a checkpoint `.mph` or save the main `.mph`
+  after confirming the live state. Use names such as
+  `<case_slug>_01_geometry.mph`, `<case_slug>_02_materials.mph`, and
+  `<case_slug>_03_solved.mph` when intermediate files help review or resume.
+- Before resuming a partially completed task, inspect identity first:
+
+```bash
+sim inspect session.health
+sim inspect comsol.model.identity
+sim inspect comsol.model.describe_text
+```
+
+Treat `comsol.model.identity.checkpoint_ready=false`, missing
+`file_path`/`location`, or a bound tag that does not match `active_model_tag`
+as a pause-and-repair condition before doing new modeling work.
+
+Scratch probes and one-off API experiments may stay as `Model1` or
+`Untitled.mph`, but label them as disposable in the agent's status and do not
+mix them with user-facing engineering artifacts.
+
+---
+
 ## Required protocol
 
 Treat COMSOL as a live engineering state, not as a one-shot code generator.
@@ -250,15 +304,21 @@ visible model coherent after every step.
    ready.
 3. For sim runtime, run `sim check comsol`, connect if needed, and read
    `session.versions` plus `sim inspect session.health`.
-4. Inspect the baseline state. In Desktop attach, use the visible Model
+4. Establish or verify model identity, working folder, and checkpoint target.
+   For sim runtime, inspect `comsol.model.identity` when available. For
+   Desktop attach, probe the visible model title/file path through Java Shell
+   or the Desktop UI before mutating serious work.
+5. Inspect the baseline state. In Desktop attach, use the visible Model
    Builder, Graphics view, tables, and Java Shell output. In sim runtime, use
    `sim inspect comsol.model.describe_text` when available.
-5. Execute one bounded modeling step.
-6. Inspect the result before continuing: visible Desktop state for attach;
+6. Execute one bounded modeling step.
+7. Inspect the result before continuing: visible Desktop state for attach;
    `sim inspect last.result`, `comsol.model.describe_text`, and
    `comsol.node.properties:<tag-or-dot-path>` for sim runtime.
-7. Continue only after the live model matches the intended geometry,
-   materials, physics, mesh, study, and result state.
+8. Save or update the relevant checkpoint after each passed major layer.
+9. Continue only after the live model matches the intended geometry,
+   materials, physics, mesh, study, and result state and the checkpoint can be
+   used to resume.
 
 For simple known-good smoke coverage, use the numbered snippets under
 `base/workflows/`. For realistic engineering examples, use project-local

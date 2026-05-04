@@ -1226,9 +1226,95 @@ class ComsolDriver:
         self._last_health = health
         return health
 
+    def _model_identity(self) -> dict:
+        """Return human/workflow identity for the bound COMSOL model.
+
+        This target is intentionally separate from session health. Health says
+        whether the server/session is alive; identity says what engineering
+        artifact the agent is currently mutating and whether it has a durable
+        save location.
+        """
+        current_model_tag = self._current_model_tag()
+        if self._model is None:
+            health = self.health()
+            return {
+                "ok": False,
+                "connected": False,
+                "code": health.get("code", "comsol.session.disconnected"),
+                "message": health.get("message", "COMSOL session is not connected"),
+                "active_model_tag": self._active_model_tag,
+                "bound_model_tag": current_model_tag,
+            }
+
+        def _call(method_name: str):
+            method = getattr(self._model, method_name, None)
+            if not callable(method):
+                return None
+            try:
+                return method()
+            except Exception as exc:  # noqa: BLE001 - Java exceptions vary by version
+                return {"error": type(exc).__name__, "message": str(exc)}
+
+        def _has_value(value: object) -> bool:
+            return value is not None and not isinstance(value, dict) and bool(str(value))
+
+        model_tags: list[str] | None = None
+        models_used_by_other_clients: list[str] | None = None
+        if self._model_util is not None:
+            try:
+                model_tags = [str(tag) for tag in list(self._model_util.tags())]
+            except Exception:  # noqa: BLE001 - best-effort identity target
+                model_tags = None
+            used_method = getattr(self._model_util, "modelsUsedByOtherClients", None)
+            if callable(used_method):
+                try:
+                    models_used_by_other_clients = [
+                        str(tag) for tag in list(used_method())
+                    ]
+                except Exception:  # noqa: BLE001 - best-effort identity target
+                    models_used_by_other_clients = None
+
+        workdir = getattr(self, "_workdir", None)
+        sim_dir = getattr(self, "_sim_dir", None)
+        identity = {
+            "ok": True,
+            "connected": True,
+            "active_model_tag": self._active_model_tag,
+            "bound_model_tag": current_model_tag,
+            "model_tags": model_tags,
+            "models_used_by_other_clients": models_used_by_other_clients,
+            "title": _call("title"),
+            "label": _call("label"),
+            "file_path": _call("getFilePath"),
+            "location": _call("location"),
+            "location_uri": _call("locationUri"),
+            "model_path": _call("modelPath"),
+            "read_only": _call("isReadOnly"),
+            "workdir": str(workdir) if workdir else None,
+            "sim_dir": str(sim_dir) if sim_dir else None,
+        }
+        identity["has_saved_location"] = bool(
+            _has_value(identity.get("file_path"))
+            or _has_value(identity.get("location"))
+        )
+        identity["has_model_path"] = _has_value(identity.get("model_path"))
+        identity["checkpoint_ready"] = bool(
+            identity["active_model_tag"]
+            and identity["bound_model_tag"]
+            and identity["active_model_tag"] == identity["bound_model_tag"]
+            and identity["has_saved_location"]
+        )
+        return identity
+
     def query(self, name: str) -> dict:
         if name in {"health", "session.health"}:
             return self.health()
+        if name in {
+            "model.identity",
+            "comsol.model.identity",
+            "session.model_identity",
+        }:
+            return self._model_identity()
         if name in {"ui.modes", "session.ui_modes"}:
             return {
                 "ok": True,

@@ -6,20 +6,24 @@ or physics mistake created many steps earlier.
 
 ## Loop
 
+0. Establish or verify model identity, workdir, and checkpoint target.
 1. Execute one bounded modeling step.
 2. Inspect `sim inspect last.result`.
-3. Inspect the live model with `sim inspect comsol.model.describe_text`
+3. Inspect `sim inspect comsol.model.identity` when available.
+4. Inspect the live model with `sim inspect comsol.model.describe_text`
    when available.
-4. Inspect suspicious nodes with
+5. Inspect suspicious nodes with
    `sim inspect comsol.node.properties:<tag-or-dot-path>` or a raw Java
    fallback snippet.
-5. Compare the live model to the intended state below.
-6. Continue only after the checkpoint passes.
+6. Compare the live model to the intended state below.
+7. Save or update the checkpoint `.mph` after each passed major layer.
+8. Continue only after the checkpoint passes.
 
 ## Checkpoints
 
 | Layer | Expected evidence |
 |---|---|
+| Identity | Active model tag and bound model tag are known; model has a title/label; serious work has a saved `.mph` or database location; `model.modelPath(...)` includes needed input/model folders; the working folder contains related inputs, scripts, outputs, and logs. |
 | Geometry | Expected component exists; geometry sequence has expected features; named selections exist for later physics; saved `.mph` artifact opens if Desktop review is needed. |
 | Materials | Material tags exist; each material has a non-empty domain selection; critical property groups are present. |
 | Physics | Physics interfaces exist; required domain and boundary features exist; feature selections are non-empty and match the intended entity dimension. |
