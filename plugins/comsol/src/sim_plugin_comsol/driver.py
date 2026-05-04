@@ -29,6 +29,7 @@ from typing import Callable, TextIO
 
 from sim.driver import ConnectionInfo, Diagnostic, LintResult, SolverInstall
 from sim.inspect import (
+    Diagnostic as RuntimeDiagnostic,
     GuiDialogProbe,
     InspectCtx,
     ScreenshotProbe,
@@ -801,6 +802,144 @@ class ComsolDriver:
             "screenshot_source": "codex-desktop-or-sim-remote",
         }
 
+    def _current_model_tag(self) -> str | None:
+        if self._model is None:
+            return None
+        try:
+            return str(self._model.tag())
+        except Exception:
+            return None
+
+    def _live_model_binding_summary(
+        self,
+        *,
+        model_tags: list[str] | None,
+        current_model_tag: str | None,
+    ) -> dict:
+        caps = self._ui_capabilities()
+        model_builder_live = bool(caps.get("model_builder_live"))
+        active_tag = self._active_model_tag
+        tags = model_tags or []
+        sidecar_tags = [tag for tag in tags if tag != active_tag]
+
+        ok = (
+            model_builder_live
+            and active_tag is not None
+            and current_model_tag == active_tag
+            and (not tags or active_tag in tags)
+        )
+        if ok:
+            message = (
+                f"Driver model handle is bound to live Desktop model "
+                f"{active_tag!r}."
+            )
+        elif not model_builder_live:
+            message = (
+                "No live Model Builder binding for this UI mode; use "
+                "visual_mode='shared-desktop' for live Desktop collaboration."
+            )
+        elif active_tag is None:
+            message = "Shared Desktop is active, but no Desktop model tag is bound."
+        elif current_model_tag != active_tag:
+            message = (
+                f"Driver model handle is {current_model_tag!r}, but the live "
+                f"Desktop active model tag is {active_tag!r}."
+            )
+        else:
+            message = (
+                f"Live Desktop active model tag {active_tag!r} was not found "
+                "in ModelUtil.tags()."
+            )
+
+        return {
+            "ok": ok,
+            "bound_model_tag": current_model_tag,
+            "model_builder_live": model_builder_live,
+            "sidecar_model_tags": sidecar_tags,
+            "message": message,
+        }
+
+    def _shared_desktop_sidecar_diagnostics(
+        self,
+        code: str,
+        *,
+        observed_model_tags: list[str] | None = None,
+    ) -> list[RuntimeDiagnostic]:
+        if self._ui_mode != "shared-desktop":
+            return []
+        if not code.strip():
+            return []
+
+        try:
+            tree = ast.parse(code)
+        except SyntaxError:
+            return []
+
+        diagnostics: list[RuntimeDiagnostic] = []
+        seen: set[tuple[str, str | None]] = set()
+        active_tag = self._active_model_tag
+        sidecar_tags = [
+            tag for tag in (observed_model_tags or [])
+            if tag != active_tag
+        ]
+
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            if not isinstance(func, ast.Attribute):
+                continue
+            if not isinstance(func.value, ast.Name) or func.value.id != "ModelUtil":
+                continue
+            if func.attr not in {"create", "model"}:
+                continue
+
+            target_tag = None
+            if node.args and isinstance(node.args[0], ast.Constant):
+                value = node.args[0].value
+                if isinstance(value, str):
+                    target_tag = value
+
+            if func.attr == "model" and (
+                target_tag is None or target_tag == active_tag
+            ):
+                continue
+
+            key = (func.attr, target_tag)
+            if key in seen:
+                continue
+            seen.add(key)
+
+            if func.attr == "create":
+                message = (
+                    "In shared-desktop mode, ModelUtil.create(...) can create "
+                    "a server-side model that the visible COMSOL Desktop is "
+                    "not displaying. Prefer mutating the provided `model` "
+                    "handle unless a sidecar model is intentional."
+                )
+            else:
+                message = (
+                    f"In shared-desktop mode, ModelUtil.model({target_tag!r}) "
+                    f"does not match the live Desktop active model tag "
+                    f"{active_tag!r}; GUI updates may appear out of sync."
+                )
+
+            diagnostics.append(RuntimeDiagnostic(
+                severity="warning",
+                message=message,
+                source="comsol:shared-desktop",
+                code="comsol.shared_desktop.sidecar_model_risk",
+                extra={
+                    "call": f"ModelUtil.{func.attr}",
+                    "requested_tag": target_tag,
+                    "active_model_tag": active_tag,
+                    "observed_model_tags": list(observed_model_tags or []),
+                    "sidecar_model_tags": sidecar_tags,
+                },
+            ))
+
+        return diagnostics
+
     def _windows_process_rows(self) -> list[dict]:
         if os.name != "nt":
             return []
@@ -1032,6 +1171,8 @@ class ComsolDriver:
                 code = self._classify_comsol_error(str(exc))
                 message = f"ModelUtil health check failed: {exc}"
 
+        current_model_tag = self._current_model_tag()
+
         if self._model is None:
             code = "comsol.session.disconnected"
             message = "No active COMSOL model is attached"
@@ -1074,6 +1215,10 @@ class ComsolDriver:
             "modelutil_connected": modelutil_connected,
             "model_tags": model_tags,
             "active_model_tag": self._active_model_tag,
+            "live_model_binding": self._live_model_binding_summary(
+                model_tags=model_tags,
+                current_model_tag=current_model_tag,
+            ),
             "windows": self._visible_windows(),
             "last_disconnect_reason": self._last_disconnect_reason,
             "launch_options": self._launch_options,
@@ -1506,6 +1651,15 @@ class ComsolDriver:
         if namespace.get("model") is not self._model and namespace.get("model") is not None:
             self._model = namespace["model"]
 
+        observed_model_tags: list[str] | None = None
+        if self._model_util is not None:
+            try:
+                observed_model_tags = [
+                    str(tag) for tag in list(self._model_util.tags())
+                ]
+            except Exception:
+                observed_model_tags = None
+
         record = {
             "run_id": str(uuid.uuid4()),
             "ok": ok,
@@ -1544,6 +1698,10 @@ class ComsolDriver:
             extras=extras,
         )
         diags, arts = collect_diagnostics(self.probes, ctx)
+        diags.extend(self._shared_desktop_sidecar_diagnostics(
+            code,
+            observed_model_tags=observed_model_tags,
+        ))
         record["diagnostics"] = [d.to_dict() for d in diags]
         record["artifacts"] = [a.to_dict() for a in arts]
         record["health"] = self._last_health if not ok else preflight_health

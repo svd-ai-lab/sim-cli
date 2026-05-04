@@ -26,6 +26,53 @@ class FakeProcess:
         return self.returncode
 
 
+class FakeComsolModel:
+    def __init__(self, tag):
+        self._tag = tag
+
+    def tag(self):
+        return self._tag
+
+
+class FakeModelUtil:
+    def __init__(self):
+        self.models = {"Model1": FakeComsolModel("Model1")}
+
+    def tags(self):
+        return list(self.models)
+
+    def model(self, tag):
+        return self.models[tag]
+
+    def create(self, tag):
+        self.models[tag] = FakeComsolModel(tag)
+        return self.models[tag]
+
+
+def _shared_desktop_driver(tmp_path, monkeypatch):
+    model_util = FakeModelUtil()
+    driver = ComsolDriver()
+    driver._session_id = "s-test"
+    driver._model_util = model_util
+    driver._model = model_util.model("Model1")
+    driver._active_model_tag = "Model1"
+    driver._server_proc = FakeProcess(pid=2468, returncode=None)
+    driver._client_proc = FakeProcess(pid=1357, returncode=0)
+    driver._desktop_pid = 9753
+    driver._port = 65000
+    driver._ui_mode = "shared-desktop"
+    driver._launch_options = {
+        "requested_ui_mode": "gui",
+        "ui_mode": "shared-desktop",
+        "visual_mode": "shared-desktop",
+    }
+    driver._sim_dir = tmp_path / ".sim"
+    driver.probes = []
+    monkeypatch.setattr(driver, "_check_port", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(driver, "_visible_windows", lambda: [])
+    return driver, model_util
+
+
 class TestDetect:
     def setup_method(self):
         self.driver = ComsolDriver()
@@ -263,7 +310,7 @@ class TestLifecycleDiagnostics:
     def test_health_reports_shared_desktop_metadata(self, monkeypatch):
         driver = ComsolDriver()
         driver._session_id = "s-test"
-        driver._model = object()
+        driver._model = FakeComsolModel("Model1")
         driver._server_proc = FakeProcess(pid=2468, returncode=None)
         driver._client_proc = FakeProcess(pid=1357, returncode=0)
         driver._desktop_pid = 9753
@@ -293,7 +340,28 @@ class TestLifecycleDiagnostics:
         assert health["ui_capabilities"]["model_builder_live"] is True
         assert health["desktop_pid"] == 9753
         assert health["active_model_tag"] == "Model1"
+        assert health["live_model_binding"]["ok"] is True
+        assert health["live_model_binding"]["bound_model_tag"] == "Model1"
         assert health["windows"][0]["role"] == "desktop"
+
+    def test_health_reports_shared_desktop_sidecar_tags(self, monkeypatch):
+        driver = ComsolDriver()
+        model_util = FakeModelUtil()
+        model_util.create("SharedProbe")
+        driver._session_id = "s-test"
+        driver._model = model_util.model("Model1")
+        driver._model_util = model_util
+        driver._server_proc = FakeProcess(pid=2468, returncode=None)
+        driver._active_model_tag = "Model1"
+        driver._port = 65000
+        driver._ui_mode = "shared-desktop"
+        monkeypatch.setattr(driver, "_check_port", lambda *_args, **_kwargs: True)
+        monkeypatch.setattr(driver, "_visible_windows", lambda: [])
+
+        health = driver.health()
+
+        assert health["live_model_binding"]["ok"] is True
+        assert health["live_model_binding"]["sidecar_model_tags"] == ["SharedProbe"]
 
     def test_health_reports_attach_only_external_server(self, monkeypatch):
         driver = ComsolDriver()
@@ -359,6 +427,52 @@ class TestLifecycleDiagnostics:
         assert "shared-desktop" in modes["modes"]
         assert modes["aliases"]["no_gui"] == "no_gui"
         assert modes["aliases"]["gui"] == "server-graphics"
+
+    def test_shared_desktop_model_handle_exec_has_no_sidecar_warning(
+        self, tmp_path, monkeypatch
+    ):
+        driver, _model_util = _shared_desktop_driver(tmp_path, monkeypatch)
+
+        result = driver.run("_result = model.tag()")
+
+        assert result["ok"] is True
+        codes = [diag["code"] for diag in result["diagnostics"]]
+        assert "comsol.shared_desktop.sidecar_model_risk" not in codes
+
+    def test_shared_desktop_modelutil_create_warns_without_failing(
+        self, tmp_path, monkeypatch
+    ):
+        driver, _model_util = _shared_desktop_driver(tmp_path, monkeypatch)
+
+        result = driver.run('model = ModelUtil.create("SharedProbe")')
+
+        assert result["ok"] is True
+        warning = next(
+            diag for diag in result["diagnostics"]
+            if diag["code"] == "comsol.shared_desktop.sidecar_model_risk"
+        )
+        assert warning["severity"] == "warning"
+        assert warning["extra"]["requested_tag"] == "SharedProbe"
+
+        health = driver.health()
+        assert health["live_model_binding"]["ok"] is False
+        assert health["live_model_binding"]["bound_model_tag"] == "SharedProbe"
+
+    def test_shared_desktop_modelutil_model_non_active_warns_without_failing(
+        self, tmp_path, monkeypatch
+    ):
+        driver, model_util = _shared_desktop_driver(tmp_path, monkeypatch)
+        model_util.create("SharedProbe")
+
+        result = driver.run('model = ModelUtil.model("SharedProbe")')
+
+        assert result["ok"] is True
+        warning = next(
+            diag for diag in result["diagnostics"]
+            if diag["code"] == "comsol.shared_desktop.sidecar_model_risk"
+        )
+        assert warning["extra"]["call"] == "ModelUtil.model"
+        assert warning["extra"]["requested_tag"] == "SharedProbe"
 
 
 def _make_import_blocker(blocked: str):

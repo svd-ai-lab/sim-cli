@@ -13,7 +13,25 @@ pip install sim-plugin-comsol
 ```
 
 After install, agents can drive an already-open COMSOL Desktop through the
-standalone attach helper:
+server-backed driver. Use this path first when the user wants to watch the
+same live model that the agent is building, inspecting, or solving:
+
+```powershell
+sim connect --solver comsol --ui-mode gui --driver-option visual_mode=shared-desktop
+sim inspect session.health
+sim exec --file step.py
+```
+
+`shared-desktop` starts `comsolmphserver`, attaches a full COMSOL Desktop
+client to that server, and binds agent snippets to the Desktop active model
+tag. `session.health` should report `model_builder_live: true` and a
+`live_model_binding.ok` value of `true` before relying on the GUI as a live
+view of agent edits.
+
+The standalone Java Shell attach helper remains available as a fallback for
+ordinary COMSOL Desktop windows that are already open, when switching to an
+`mphclient` session is undesirable, or when the task is a small
+human-in-the-loop edit:
 
 ```powershell
 sim-comsol-attach open --json --timeout 120
@@ -21,8 +39,9 @@ sim-comsol-attach health --json
 sim-comsol-attach exec --file step.java --json
 ```
 
-Use this path first when the user has COMSOL Desktop open, wants to watch the
-model update, or may intervene manually during the session.
+Use this fallback for bounded visible edits and quick checks. Prefer
+`shared-desktop` for reliable multi-step model building, solving, structured
+inspection, and repeatable agent workflows.
 
 sim-cli also auto-discovers the server-backed driver:
 
@@ -64,11 +83,12 @@ src/sim_plugin_comsol/_skills/comsol/SKILL.md
 Use it as the first agent instruction for COMSOL tasks, for example:
 
 ```text
-Use the bundled COMSOL skill in this repository. If COMSOL Desktop is already
-open or the user wants visible co-editing, use Desktop attach first. Use the
-sim runtime only when structured inspect, driver-managed artifacts, or
-server-backed state are needed. Build and solve the requested model one bounded
-step at a time.
+Use the bundled COMSOL skill in this repository. If the user wants reliable
+visible co-editing, use the sim runtime with visual_mode=shared-desktop first
+and verify session.health live_model_binding.ok. Use Java Shell Desktop attach
+only for already-open ordinary Desktop sessions, small edits, or
+human-in-the-loop fallback work. Build and solve the requested model one
+bounded step at a time.
 ```
 
 ## How it works
