@@ -1,6 +1,6 @@
 [project]
 name = "sim-cli-core"
-version = "0.3.3"
+version = "0.3.4"
 description = "Make every engineering tool agent-native — a CLI runtime that lets LLM agents launch, drive, and observe CAD/CAE software"
 readme = "README.md"
 license = "Apache-2.0"
@@ -38,6 +38,7 @@ dependencies = [
     "Pillow>=10", # sim screenshot endpoint uses PIL.ImageGrab
     "lxml>=5.0", # XSD validation for FloSCRIPT lint
     "tomli>=2.0; python_version<'3.11'", # TOML parser for config.py; stdlib tomllib is 3.11+
+    "psutil>=5.9; sys_platform == 'win32'", # Windows GUI inspect probes map top-level window PIDs back to process names.
     "pywinauto>=0.6.8; sys_platform == 'win32'", # GUI automation backend for solvers driven through their UI rather than a batch API. Spawned in a subprocess via sys.executable, so must live in the same venv as sim-server.
 ]
 
