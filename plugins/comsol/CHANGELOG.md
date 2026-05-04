@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.12 - 2026-05-04
+
+- Add `comsol.model.identity` inspection for active/bound model tags, saved model location, model path, and checkpoint readiness.
+- Update the bundled COMSOL skill to require durable model identity, case workdirs, and checkpoint `.mph` artifacts for non-trivial agent workflows.
+- Add identity checks to the COMSOL model review and failed-exec debug loops.
+
 ## 0.1.11 - 2026-05-04
 
 - Prefer COMSOL `shared-desktop` mode for reliable live GUI collaboration.
