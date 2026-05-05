@@ -4,14 +4,16 @@ build-backend = "hatchling.build"
 
 [project]
 name = "sim-plugin-abaqus"
-version = "0.1.3"
+version = "0.1.4"
 description = "Dassault Systemes SIMULIA Abaqus driver for sim-cli, distributed as an out-of-tree plugin"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
 authors = [{ name = "Weiqi Ji", email = "jiweiqi10@gmail.com" }]
+keywords = ["abaqus", "cae", "fea", "simulation", "sim-cli", "plugin"]
 classifiers = [
     "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering",
     "Programming Language :: Python :: 3",
@@ -43,7 +45,9 @@ abaqus = "sim_plugin_abaqus:plugin_info"
 
 [project.urls]
 Homepage = "https://github.com/svd-ai-lab/sim-plugin-abaqus"
+Repository = "https://github.com/svd-ai-lab/sim-plugin-abaqus"
 Issues = "https://github.com/svd-ai-lab/sim-plugin-abaqus/issues"
+Changelog = "https://github.com/svd-ai-lab/sim-plugin-abaqus/blob/main/CHANGELOG.md"
 
 
 [tool.hatch.build.targets.wheel]

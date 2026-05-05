@@ -19,3 +19,7 @@ this driver invokes via `abaqus cae noGUI=<file>` for `.py` scripts and
 If you do not have a valid Abaqus license, the driver's `connect()` may
 still report `ok` based on installation detection, but `run_file()` will
 fail when Abaqus itself rejects the unlicensed start.
+
+This project is not affiliated with, endorsed by, or sponsored by Dassault
+Systemes or SIMULIA. Users are responsible for complying with their own
+Abaqus license terms.

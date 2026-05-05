@@ -32,7 +32,7 @@
     "tip_deflection_in_range": true,
     "expected_range": "1e-7 to 1e-4 m",
     "actual": "5.75e-6 m",
-    "note": "Coarse 4-element CPS4 mesh gives stiffer response than beam theory (5.75e-6 vs 2e-5) — expected for low-order plane stress elements"
+    "note": "Coarse 4-element CPS4 mesh gives stiffer response than beam theory (5.75e-6 vs 2e-5), which is expected for low-order plane stress elements"
   },
 
   "runs": {

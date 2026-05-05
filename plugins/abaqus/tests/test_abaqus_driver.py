@@ -275,6 +275,27 @@ class TestAuthoringSession:
         assert summary["workspace"] == str(tmp_path)
         assert summary["cae_path"].endswith("session.cae")
 
+    def test_session_health_has_public_diagnostics_shape(self, monkeypatch, tmp_path):
+        driver = AbaqusDriver()
+        monkeypatch.setattr(driver, "detect_installed", lambda: [self._install()])
+
+        driver.launch(workspace=str(tmp_path))
+        health = driver.query("session.health")
+
+        assert health["ok"] is True
+        assert health["connected"] is True
+        assert health["code"] == "abaqus.session.connected"
+        assert health["message"] == "Abaqus CAE session is connected"
+        assert health["solver_version"] == "2026"
+        assert health["mode"] == "cae"
+        assert health["ui_mode"] == "no_gui"
+        assert health["backend"] == "file"
+        assert health["persistence"] == "file-backed-cae"
+        assert health["workspace"] == str(tmp_path)
+        assert health["last_ok"] is None
+        assert health["ui_capabilities"]["effective_ui_mode"] == "no_gui"
+        assert health["ui_capabilities"]["model_builder_live"] is False
+
     def test_launch_accepts_snippet_timeout(self, monkeypatch, tmp_path):
         driver = AbaqusDriver()
         monkeypatch.setattr(driver, "detect_installed", lambda: [self._install()])
@@ -343,6 +364,7 @@ class TestAuthoringSession:
         result = driver.run("_sim_result = {'created': 'beam'}", label="build")
         model_summary = driver.query("cae.model_summary")
         files = driver.query("workdir.files")
+        latest = driver.query("job.latest")
 
         assert result["ok"] is True
         assert result["result"] == {"created": "beam"}
@@ -350,6 +372,10 @@ class TestAuthoringSession:
         assert model_summary["model_summary"]["models"]["Model-1"]["parts"] == ["Beam"]
         assert any(f["kind"] == "cae" for f in files["files"])
         assert [d["message"] for d in result["diagnostics"]] == ["***WARNING: new warning"]
+        assert latest["last_ok"] is True
+        assert latest["run_count"] == 1
+        assert any(a["kind"] == "cae" for a in latest["artifacts"])
+        assert [d["message"] for d in latest["diagnostics"]] == ["***WARNING: new warning"]
 
     def test_generated_wrapper_compiles(self, monkeypatch, tmp_path):
         driver = AbaqusDriver()

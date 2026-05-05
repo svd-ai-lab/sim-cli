@@ -269,6 +269,7 @@ class AbaqusDriver:
         self._session_mode: str = "cae"
         self._session_backend: str = "file"
         self._abaqus_bat: str | None = None
+        self._solver_version: str | None = None
         self._run_count = 0
         self._last_result: dict | None = None
         self._last_run_started_at: float | None = None
@@ -282,6 +283,70 @@ class AbaqusDriver:
         self._bridge_stderr_handle = None
         self._bridge_stdout_path: Path | None = None
         self._bridge_stderr_path: Path | None = None
+
+    def _persistence(self) -> str:
+        return "live-bridge" if self._session_backend == "bridge" else "file-backed-cae"
+
+    def _bridge_running(self) -> bool:
+        return self._bridge_proc is not None and self._bridge_proc.poll() is None
+
+    def _ui_capabilities(self) -> dict:
+        visible = self._session_ui_mode in {"gui", "desktop", "visible"}
+        return {
+            "requested_ui_mode": self._session_ui_mode,
+            "effective_ui_mode": "gui" if visible else "no_gui",
+            "screenshot_expected": False,
+            "desktop_inspection": "transient-script" if visible else "unavailable",
+            "model_builder_live": False,
+            "notes": (
+                "Abaqus CAE script mode may create a transient visible window, "
+                "but this plugin does not maintain a persistent Desktop session."
+                if visible
+                else "Abaqus runs through noGUI subprocess or bridge execution."
+            ),
+        }
+
+    def health(self) -> dict:
+        """Best-effort authoring-session health for public inspect output."""
+        session_exists = self._session_id is not None
+        bridge_running = self._bridge_running()
+        if not session_exists:
+            connected = False
+            code = "abaqus.session.disconnected"
+            message = "Abaqus CAE session is not connected"
+        elif self._session_backend == "bridge" and not bridge_running:
+            connected = False
+            code = "abaqus.bridge.not_running"
+            message = "Abaqus bridge backend is not running"
+        else:
+            connected = True
+            code = "abaqus.session.connected"
+            message = "Abaqus CAE session is connected"
+
+        return {
+            "ok": connected,
+            "connected": connected,
+            "code": code,
+            "message": message,
+            "session_id": self._session_id,
+            "solver_version": self._solver_version,
+            "mode": self._session_mode,
+            "ui_mode": self._session_ui_mode,
+            "backend": self._session_backend,
+            "persistence": self._persistence() if session_exists else None,
+            "workspace": str(self._session_workspace) if self._session_workspace else None,
+            "cae_path": str(self._session_cae) if self._session_cae else None,
+            "run_count": self._run_count,
+            "last_ok": None if self._last_result is None else self._last_result.get("ok"),
+            "snippet_timeout_s": self._snippet_timeout_s,
+            "ui_capabilities": self._ui_capabilities(),
+            "bridge": {
+                "running": bridge_running,
+                "host": self._bridge_host,
+                "port": self._bridge_port,
+                "pid": None if self._bridge_proc is None else self._bridge_proc.pid,
+            } if self._session_backend == "bridge" else None,
+        }
 
     @property
     def name(self) -> str:
@@ -591,6 +656,7 @@ class AbaqusDriver:
         if self._session_backend == "bridge" and self._session_ui_mode not in {"no_gui", "nogui", "no-gui"}:
             raise ValueError("Abaqus bridge backend currently supports no_gui sessions only")
         self._abaqus_bat = installs[0].extra.get("bat", "abaqus")
+        self._solver_version = installs[0].version
         if snippet_timeout is not None:
             self._snippet_timeout_s = float(snippet_timeout)
         else:
@@ -617,10 +683,11 @@ class AbaqusDriver:
             "ui_mode": self._session_ui_mode,
             "workspace": str(root),
             "cae_path": str(self._session_cae),
-            "persistence": "live-bridge" if self._session_backend == "bridge" else "file-backed-cae",
+            "persistence": self._persistence(),
             "backend": self._session_backend,
             "snippet_timeout_s": self._snippet_timeout_s,
             "launch_timeout_s": self._launch_timeout_s,
+            "health": self.health(),
             "bridge": {
                 "host": self._bridge_host,
                 "port": self._bridge_port,
@@ -1152,24 +1219,7 @@ print("__SIM_RESULT__" + json.dumps(payload, default=str, sort_keys=True))
     def query(self, name: str) -> dict:
         """Driver-specific inspect targets for Abaqus authoring sessions."""
         if name in {"session.summary", "health", "session.health"}:
-            return {
-                "connected": self._session_id is not None,
-                "session_id": self._session_id,
-                "mode": self._session_mode,
-                "ui_mode": self._session_ui_mode,
-                "backend": self._session_backend,
-                "workspace": str(self._session_workspace) if self._session_workspace else None,
-                "cae_path": str(self._session_cae) if self._session_cae else None,
-                "run_count": self._run_count,
-                "last_ok": None if self._last_result is None else self._last_result.get("ok"),
-                "snippet_timeout_s": self._snippet_timeout_s,
-                "bridge": {
-                    "running": self._bridge_proc is not None and self._bridge_proc.poll() is None,
-                    "host": self._bridge_host,
-                    "port": self._bridge_port,
-                    "pid": None if self._bridge_proc is None else self._bridge_proc.pid,
-                } if self._session_backend == "bridge" else None,
-            }
+            return self.health()
         if name in {"cae.model_summary", "model.summary"}:
             summary = (self._last_result or {}).get("model_summary")
             if summary is None and self._session_backend == "bridge":
@@ -1193,14 +1243,18 @@ print("__SIM_RESULT__" + json.dumps(payload, default=str, sort_keys=True))
             }
         if name in {"job.latest", "job.diagnostics"}:
             if self._session_workspace is None:
-                return {"connected": False, "diagnostics": []}
+                return {"connected": False, "diagnostics": [], "artifacts": []}
             diagnostics = self._scan_diagnostics(
                 self._session_workspace,
                 modified_since=self._last_run_started_at,
             )
             return {
                 "connected": True,
+                "ok": None if self._last_result is None else self._last_result.get("ok"),
+                "last_ok": None if self._last_result is None else self._last_result.get("ok"),
+                "run_count": self._run_count,
                 "diagnostics": diagnostics,
+                "artifacts": self._collect_artifacts(self._session_workspace),
                 "errors": [d["message"] for d in diagnostics if d.get("level") == "error"],
             }
         return {"ok": False, "error": f"unknown query: {name}"}
@@ -1214,6 +1268,7 @@ print("__SIM_RESULT__" + json.dumps(payload, default=str, sort_keys=True))
         self._session_cae = None
         self._session_backend = "file"
         self._abaqus_bat = None
+        self._solver_version = None
         self._last_result = None
         self._last_run_started_at = None
         self._run_count = 0

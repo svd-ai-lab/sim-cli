@@ -1,12 +1,12 @@
-# Known Issues — Abaqus Driver
+# Known Issues - Abaqus Driver
 
 ## Coarse mesh stiffness
 
 **Discovered**: 2026-04-13
 **Status**: Expected behavior (not a bug)
 **Description**: The 4-element CPS4 cantilever beam E2E test gives tip
-deflection of ~5.75e-6 m vs analytical ~2e-5 m. This is expected for a
-coarse linear quad mesh — FEM solutions are stiffer than analytical when
+deflection of about 5.75e-6 m vs analytical about 2e-5 m. This is expected for a
+coarse linear quad mesh; FEM solutions are stiffer than analytical when
 under-meshed. Refining to 40 elements gives ~1.9e-5 m (within 5% of
 analytical).
 **Impact**: Physics acceptance range must be wide enough to accommodate
@@ -18,8 +18,7 @@ mesh density variations.
 **Status**: Workaround documented
 **Description**: On Chinese/Japanese/Korean Windows, Abaqus may have
 issues with non-ASCII characters in job directory paths. The `.dat`
-output file header shows garbled date strings (e.g., "4月" renders as
-"4��").
+output file header may show garbled localized date strings.
 **Workaround**: Use ASCII-only paths for Abaqus working directories.
 Result parsing uses `errors="replace"` to handle encoding issues.
 
