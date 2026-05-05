@@ -7,3 +7,5 @@ dist/
 .pytest_cache/
 .ruff_cache/
 .uv/
+.sim/
+.pytest_basetemp/

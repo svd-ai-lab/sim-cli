@@ -64,24 +64,127 @@ The Workbench side should have a project checkpoint and a refreshed Model cell.
 The Mechanical side should confirm the expected analysis tree before adding
 loads, supports, mesh controls, solve settings, or result objects.
 
+## Prerequisites
+
+Install these before asking an agent to use this plugin:
+
+- Python 3.10 or newer.
+- [uv](https://docs.astral.sh/uv/) for Python environment and package installs.
+- [git](https://git-scm.com/) when installing from GitHub source refs.
+- sim-cli or a project environment where sim-cli can be installed.
+- A local Ansys Workbench installation compatible with PyWorkbench or RunWB2.
+
+The plugin does not include Workbench or vendor SDK binaries. It installs the
+Python adapter and its Python dependencies only.
+
 ## Install
 
-```bash
-pip install sim-plugin-workbench
+For most users and agents, install the latest published PyPI version:
+
+```powershell
+uv pip install sim-plugin-workbench
 ```
 
-You can also install through sim-cli:
+PyPI releases are intentionally infrequent. For quick testing of the current
+source branch, install from GitHub:
 
-```bash
-sim plugin install sim-plugin-workbench
+```powershell
+uv pip install "git+https://github.com/svd-ai-lab/sim-plugin-workbench.git@main"
 ```
 
-After installation, sim-cli auto-discovers the driver and bundled skill:
+For a reproducible agent run, pin a commit SHA:
 
-```bash
+```powershell
+uv pip install "git+https://github.com/svd-ai-lab/sim-plugin-workbench.git@<commit-sha>"
+```
+
+If your environment uses SSH authentication:
+
+```powershell
+uv pip install "git+ssh://git@github.com/svd-ai-lab/sim-plugin-workbench.git@<commit-sha>"
+```
+
+## Verify Install
+
+After installation, sim-cli should auto-discover the driver and bundled skill:
+
+```powershell
 sim check workbench
+```
+
+If `sim check workbench` reports that Workbench itself is unavailable, first
+confirm the Python package installed correctly, then fix the local Workbench or
+SDK prerequisites.
+
+## Connect And Inspect Health
+
+Use a visible Workbench session when an agent needs human-visible project state:
+
+```powershell
+sim connect --solver workbench --ui-mode gui
+sim inspect session.health
+sim inspect workbench.project.identity
+sim inspect workbench.systems.summary
+```
+
+Use one-shot RunWB2 execution only for bounded journals:
+
+```powershell
 sim run --solver workbench path/to/journal.wbjn
 ```
+
+## Common Agent Workflow
+
+1. Choose persistent SDK session, RunWB2 one-shot, or handoff workflow.
+2. Inspect `session.health`.
+3. Run one bounded journal step.
+4. Inspect `last.result` and `workbench.systems.summary`.
+5. Save or checkpoint the project before risky edits or solver handoff.
+6. Stop if a parsed journal result reports `ok=false`; inspect the diagnostic
+   before retrying a larger journal.
+
+## Workbench-To-Mechanical Handoff
+
+Workbench owns Engineering Data, Geometry, and Model cells. Mechanical owns
+setup, solve, and results. Before handoff:
+
+```powershell
+sim inspect workbench.project.identity
+sim inspect workbench.systems.summary
+```
+
+Continue only when the expected Workbench system exists, the Model cell is
+available, and the project has a checkpoint suitable for downstream solver
+work.
+
+## Update Or Uninstall
+
+Update to the latest published PyPI version:
+
+```powershell
+uv pip install --upgrade sim-plugin-workbench
+```
+
+Update from the latest GitHub `main` branch:
+
+```powershell
+uv pip install --upgrade "git+https://github.com/svd-ai-lab/sim-plugin-workbench.git@main"
+```
+
+Uninstall:
+
+```powershell
+uv pip uninstall sim-plugin-workbench
+```
+
+## Troubleshooting
+
+- `sim` command not found: install sim-cli in the same Python environment.
+- Driver not discovered: reinstall the plugin and run `sim check workbench`.
+- Workbench launch fails: inspect `session.health` and confirm local Workbench
+  prerequisites outside sim-cli.
+- A journal appears to run but no system is created: inspect `last.result`; a
+  parsed `ok=false` result is treated as a failed step.
 
 ## Agent quickstart
 
