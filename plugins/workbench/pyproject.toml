@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "sim-plugin-workbench"
-version = "0.1.1"
+version = "0.1.2"
 description = "Ansys Workbench (PyWorkbench) driver for sim-cli, distributed as an out-of-tree plugin"
 readme = "README.md"
 license = "Apache-2.0"

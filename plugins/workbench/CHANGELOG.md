@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.2 - 2026-05-05
+
+- Add live Workbench template discovery and intent-based template resolution.
+- Require dynamic template probing in the bundled Workbench skill before creating systems.
+- Document screenshot-based observation for long-running Workbench updates and interrupted runs.
+
 ## 0.1.1 - 2026-05-05
 
 - Add runtime health, UI mode, project identity, and systems summary inspect targets.
