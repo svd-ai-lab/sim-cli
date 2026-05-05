@@ -25,6 +25,18 @@ solution = first.Solution
 results  = solution.Children               # Total Deformation, Equivalent Stress, ...
 ```
 
+Before using a less familiar workflow, query the live surface instead of
+guessing:
+
+```bash
+sim inspect mechanical.capabilities
+sim inspect mechanical.capabilities:analysis:0
+```
+
+Use the returned `model_add_analysis_methods`, `analysis.add_methods`, and
+`solution.add_result_methods` to choose APIs that exist in the running
+Mechanical version.
+
 ### Bodies and geometry
 
 ```python
@@ -69,7 +81,7 @@ press.Magnitude.Output.DiscreteValues = [Quantity("1 [MPa]"), Quantity("1 [MPa]"
 
 ```python
 static = Model.Analyses[0]
-static.Solve(True)    # True = wait for solve to finish
+static.Solution.Solve(True)    # True = wait for solve to finish
 # Check state
 print(static.Solution.Status)   # Done, Failed, ...
 ```
@@ -99,6 +111,9 @@ print(str(max_def))            # e.g. "0.00123 m"
 6. **IronPython 2.7**: no f-strings, no `print()` as a function in all
    cases — use `print(x)` which works in IronPython's CPython-compat mode
    but never `print(f"{x}")`.
+7. **`AnalysisType` labels are not enough to identify physics.** Verify the
+   required methods on the live object (`analysis.Add...`, `solution.Add...`)
+   before adding setup or result objects.
 
 ## Structured output pattern
 

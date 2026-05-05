@@ -160,6 +160,24 @@ class _FakeClient:
                 '"named_selection_count": 0, "geometry_body_count": 1, '
                 '"mesh": {"nodes": 10, "elements": 2}}'
             )
+        if "model_add_analysis_methods" in code:
+            return (
+                '{"ok": true, "connected": true, "target": "active", '
+                '"analysis_index": 0, "analysis_count": 1, '
+                '"model_add_analysis_methods": ["AddStaticStructuralAnalysis"], '
+                '"named_selections": [{"index": 0, "entity_count": 3}], '
+                '"geometry_body_count": 1, "mesh": {"nodes": 10, "elements": 2}, '
+                '"analysis": {"type": "Static", "child_count": 2, '
+                '"add_methods": ["AddFixedSupport", "AddForce"], '
+                '"add_boundary_condition_methods": ["AddFixedSupport", "AddForce"]}, '
+                '"solution": {"status": "Done", "result_count": 1, '
+                '"add_result_methods": ["AddTotalDeformation"]}}'
+            )
+        if "ExtAPI.Application.Messages" in code:
+            return (
+                '{"ok": true, "connected": true, "count": 1, '
+                '"messages": [{"severity": "Warning", "text": "check setup"}]}'
+            )
         if "analysis_count" in code:
             return '{"ok": true, "connected": true, "project_directory_known": true, "analysis_count": 1, "analysis_types": ["Static"], "active_analysis_index": 0, "geometry_body_count": 1, "mesh_nodes": 10, "mesh_elements": 2, "result_file_available": false, "checkpoint_ready": true}'
         if '"target": "mesh"' in code:
@@ -320,6 +338,8 @@ class TestLaunchKwargs:
         identity = d.query("mechanical.project.identity")
         summary = d.query("mechanical.model.summary")
         props = d.query("mechanical.object.properties:mesh")
+        caps = d.query("mechanical.capabilities")
+        messages = d.query("mechanical.messages")
 
         assert identity["ok"] is True
         assert identity["analysis_count"] == 1
@@ -331,6 +351,9 @@ class TestLaunchKwargs:
         assert summary["analyses"][0]["solution_result_count"] == 1
         assert summary["mesh"]["nodes"] == 10
         assert props["nodes"] == 10
+        assert caps["analysis"]["add_boundary_condition_methods"] == ["AddFixedSupport", "AddForce"]
+        assert caps["solution"]["add_result_methods"] == ["AddTotalDeformation"]
+        assert messages["messages"][0]["severity"] == "Warning"
 
     def test_solve_guard_marks_solve_required_as_failure(self):
         d = MechanicalDriver()

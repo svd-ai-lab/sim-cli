@@ -1195,6 +1195,153 @@ json.dumps(data)
             "target": _safe_text(target),
         }
 
+    def capabilities(self, target: str = "active") -> dict:
+        """Return live scripting capabilities for the current Mechanical state.
+
+        The query intentionally exposes method surfaces and counts, not
+        physics-specific decisions. Agents can use it to discover whether the
+        live model supports a workflow before writing setup code.
+        """
+        target_json = json.dumps(target.strip() or "active")
+        code = rf'''
+import json
+
+target = {target_json}
+
+def method_names(obj, prefix=None):
+    names = []
+    try:
+        raw = dir(obj)
+    except:
+        raw = []
+    for name in raw:
+        try:
+            text = str(name)
+        except:
+            continue
+        if prefix is None or text.startswith(prefix):
+            names.append(text)
+    names = sorted(set(names))
+    return names
+
+def safe_count(fn):
+    try:
+        return fn()
+    except:
+        return None
+
+def selection_summary():
+    out = []
+    try:
+        children = list(Model.NamedSelections.Children)
+    except:
+        return out
+    for i, ns in enumerate(children):
+        item = {{"index": i}}
+        try:
+            item["entity_count"] = int(ns.Location.Ids.Count)
+        except:
+            try:
+                item["entity_count"] = len(list(ns.Location.Ids))
+            except:
+                item["entity_count"] = None
+        try:
+            item["location_type"] = str(type(ns.Location))
+        except:
+            item["location_type"] = None
+        out.append(item)
+    return out
+
+analysis = None
+solution = None
+analysis_index = None
+if target.startswith("analysis:"):
+    try:
+        analysis_index = int(target.split(":", 1)[1])
+    except:
+        analysis_index = None
+elif len(Model.Analyses):
+    analysis_index = 0
+
+if analysis_index is not None:
+    try:
+        analysis = Model.Analyses[analysis_index]
+        solution = analysis.Solution
+    except:
+        analysis = None
+        solution = None
+
+data = {{
+    "ok": True,
+    "connected": True,
+    "target": target,
+    "analysis_index": analysis_index,
+    "analysis_count": len(Model.Analyses),
+    "model_add_analysis_methods": [
+        n for n in method_names(Model, "Add") if n.endswith("Analysis")
+    ],
+    "named_selections": selection_summary(),
+    "geometry_body_count": safe_count(
+        lambda: len(Model.Geometry.GetChildren(DataModelObjectCategory.Body, True))
+    ),
+    "mesh": {{
+        "nodes": safe_count(lambda: int(Model.Mesh.Nodes)),
+        "elements": safe_count(lambda: int(Model.Mesh.Elements)),
+    }},
+}}
+
+if analysis is not None:
+    add_methods = method_names(analysis, "Add")
+    data["analysis"] = {{
+        "type": safe_count(lambda: str(analysis.AnalysisType)),
+        "child_count": safe_count(lambda: len(analysis.Children)),
+        "add_methods": add_methods,
+        "add_boundary_condition_methods": [
+            n for n in add_methods
+            if n not in ("AddComment", "AddFigure", "AddImage")
+        ],
+    }}
+if solution is not None:
+    data["solution"] = {{
+        "status": safe_count(lambda: str(solution.Status)),
+        "result_count": safe_count(lambda: len(solution.Children)),
+        "add_result_methods": method_names(solution, "Add"),
+    }}
+
+json.dumps(data)
+'''
+        return self._run_json_query(code)
+
+    def messages(self, limit: int = 20) -> dict:
+        """Return recent Mechanical application messages for debugging."""
+        code = rf'''
+import json
+
+def clean(value, limit=300):
+    try:
+        text = str(value)
+    except:
+        text = ""
+    out = []
+    for ch in text:
+        o = ord(ch)
+        out.append(ch if 32 <= o < 127 else "?")
+    return "".join(out)[:limit]
+
+items = []
+try:
+    messages = list(ExtAPI.Application.Messages)
+except:
+    messages = []
+for m in messages[-{int(limit)}:]:
+    items.append({{
+        "severity": clean(getattr(m, "Severity", "")),
+        "text": clean(getattr(m, "DisplayString", "")),
+    }})
+json.dumps({{"ok": True, "connected": True, "count": len(items), "messages": items}})
+'''
+        return self._run_json_query(code)
+
     def query(self, name: str) -> dict:
         """Session-level queries.
 
@@ -1221,6 +1368,12 @@ json.dumps(data)
             return self.model_summary()
         if name.startswith("mechanical.object.properties:"):
             return self.object_properties(name.split(":", 1)[1])
+        if name in {"mechanical.capabilities", "capabilities"}:
+            return self.capabilities()
+        if name.startswith("mechanical.capabilities:"):
+            return self.capabilities(name.split(":", 1)[1])
+        if name in {"mechanical.messages", "messages"}:
+            return self.messages()
         if name == "session.summary":
             return {
                 "session_id": self._session_id,

@@ -86,7 +86,35 @@ sim inspect last.result
 to query model state** — it's structured, it's cached, and it round-trips
 through the SDK so you know the session is alive.
 
-### Pattern C: verify via product_info
+### Pattern C: long-running solve/update monitor
+
+For any operation expected to take more than a few seconds, set up an
+out-of-band observation loop before kicking it off:
+
+```bash
+sim screenshot -o before_solve.png
+
+# Terminal A: blocking operation
+sim exec "Model.Analyses[0].Solution.Solve(True)"
+
+# Terminal B: independent observations while Terminal A is blocked
+sim screenshot -o progress_001.png
+sim inspect session.health
+sim inspect mechanical.messages
+sim inspect mechanical.files
+```
+
+Use screenshots to catch progress bars, modal dialogs, license prompts, and
+post-processing popups. Use `mechanical.messages` and solver files for
+structured evidence. If a screenshot shows a blocking popup, handle that
+state explicitly before sending more model-mutating scripts.
+
+If the user interrupts a long run, assume the external solver process may still
+be alive. Before retrying, inspect running Ansys processes, check whether the
+Mechanical window is still open, and clean up only the processes created by the
+current run.
+
+### Pattern D: verify via product_info
 
 `session.summary` does not call the SDK. If you need to prove the gRPC
 channel is still alive **without** running a snippet, use the driver's
@@ -99,7 +127,8 @@ Mechanical).
 1. **During a long solve**. `Solve(True)` blocks until done. While it
    runs, the GUI updates a progress bar but `exec` is also blocked.
    `screenshot` still works (it goes through a separate HTTP handler,
-   not the gRPC channel).
+   not the gRPC channel). Treat screenshots as the primary live signal
+   while the SDK call is blocked.
 
 2. **After a crash**. If Mechanical segfaults, the gRPC channel dies but
    `session.summary` still says `connected: true` (because it's local

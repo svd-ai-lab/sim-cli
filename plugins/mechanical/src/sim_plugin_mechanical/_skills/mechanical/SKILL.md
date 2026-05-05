@@ -64,8 +64,9 @@ files.
 |---|---|
 | `base/reference/pymechanical_api.md` | PyMechanical SDK surface: `launch_mechanical`, `run_python_script`, `download_project`, file transfer. **Read first.** |
 | `base/reference/scripting_tree.md` | Mechanical's IronPython scripting tree: `ExtAPI`, `DataModel`, `Model`, `Tree`, common traversal patterns. |
+| `base/reference/capability_discovery.md` | Generic method/feature discovery before adding analyses, BCs, results, or solve logic. Use this when the workflow differs from known snippets. |
 | `base/reference/bc_scoping.md` | Boundary condition scoping: creating `Selection` objects, `NamedSelection`, face IDs, `ISelectionInfo`. This is the #1 source of errors. |
-| `base/reference/solve_control.md` | Triggering solve (`analysis.Solve(True)`), monitoring state, reading solve messages. |
+| `base/reference/solve_control.md` | Triggering solve (`analysis.Solution.Solve(True)`), monitoring state, reading solve messages. |
 | `base/reference/result_extraction.md` | Traversing `analysis.Solution` to pull deformation/stress values, exporting to CSV, using `.rst` files. |
 | `base/reference/observation_commands.md` | **How sim's observation commands couple with Mechanical.** Read this before using `sim inspect` / `sim screenshot` against a Mechanical session. |
 | `base/snippets/` | Numbered snippets (01_smoke through 06_extract_results). Each ends with a `json.dumps(...)` literal for structured output. |
@@ -100,6 +101,14 @@ files.
    import or material definition, hand back to workbench-sim.
 5. **Never trust raw names or paths as public evidence.** Return counts,
    booleans, self-created ASCII tags, or sanitized strings from snippets.
+6. **Discover live capabilities before coding a new workflow.** Use
+   `mechanical.capabilities`, `mechanical.object.properties:*`, and official
+   PyMechanical scripting docs to confirm available analysis, BC, result, and
+   solve APIs. Do not infer physics support from `AnalysisType` strings alone.
+7. **Observe long-running work out-of-band.** During solves, updates, imports,
+   or hangs, use screenshots and file/message polling while the SDK call is
+   blocked. Read `base/reference/observation_commands.md` before starting any
+   expected long-running operation.
 
 ## Required protocol
 
@@ -111,11 +120,18 @@ Before every Mechanical script:
 1. Read `base/workflows/model_review_loop.md` and inspect
    `session.health`, `mechanical.project.identity`, and
    `mechanical.model.summary`.
-2. Check `base/known_issues.md` for the operation you are about to do.
-3. If this is a Workbench handoff, read `base/workflows/workbench_handoff.md`
+2. For any workflow not already proven by a local snippet, read
+   `base/reference/capability_discovery.md` and inspect
+   `mechanical.capabilities` before adding setup objects.
+3. Check `base/known_issues.md` for the operation you are about to do.
+4. If this is a Workbench handoff, read `base/workflows/workbench_handoff.md`
    and confirm Mechanical sees the expected analysis and non-empty geometry.
-4. Run one bounded snippet, ending with `json.dumps(...)`.
-5. Inspect `last.result` and `mechanical.model.summary`. In GUI mode, use a
+5. For long-running solve/update/import steps, capture a screenshot before the
+   call, then monitor with screenshots and available solver files/messages
+   until it completes or clearly fails.
+6. Run one bounded snippet, ending with `json.dumps(...)`.
+7. Inspect `last.result`, `mechanical.model.summary`, and
+   `mechanical.messages` after solve/result failures. In GUI mode, use a
    screenshot as visual confirmation after significant tree changes.
-6. If execution fails, switch to `base/workflows/debug_failed_exec.md` before
+8. If execution fails, switch to `base/workflows/debug_failed_exec.md` before
    trying another full script.

@@ -20,6 +20,10 @@ rf  = sol.AddForceReaction()
 sol.EvaluateAllResults()   # compute everything
 ```
 
+Before adding an unfamiliar result type, inspect
+`mechanical.capabilities:analysis:<index>` and confirm the corresponding
+`solution.Add...` method exists in `add_result_methods`.
+
 If the solve is already done, `EvaluateAllResults()` is cheap — it
 reads from the `.rst` and interpolates. Adding a new result after solve
 triggers a re-read but NOT a re-solve.
