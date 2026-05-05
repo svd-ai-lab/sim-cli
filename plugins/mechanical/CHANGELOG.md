@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.6 - 2026-05-05
+
+- Add live Mechanical capability and message inspection queries.
+- Add generic capability-discovery guidance for unfamiliar Mechanical workflows.
+- Document screenshot, message, and solver-file monitoring for long-running Mechanical operations.
+
 ## 0.1.5 - 2026-05-05
 
 - Add runtime health, UI mode, project identity, model summary, and scoped object-property inspect targets.
