@@ -115,16 +115,15 @@ or the DPF pipeline.
 **Cause**: `version` param is `int`, not str. MechanicalDriver converts
 `"24.1"` → `241` via `_version_code`. Do not pass "24.1" through directly.
 
-## 8. License contention on repeated launch/exit cycles
+## 8. Launch contention on repeated launch/exit cycles
 
-**Symptom**: Second `launch_mechanical` hangs at "Waiting for license".
+**Symptom**: Second `launch_mechanical` hangs during startup.
 
-**Cause**: Previous instance did not fully release the seat within the
-license server's grace window.
+**Cause**: Previous instance did not fully shut down before the next launch.
 
 **Workaround**: `cleanup_on_exit=False` on launch keeps the driver in
-control of shutdown; `mech.exit()` blocks until the seat is released.
-If you hit this anyway, wait ~30 s and retry.
+control of shutdown; `mech.exit()` blocks until shutdown completes. If you
+hit this anyway, wait briefly and retry.
 
 ## 9. "Script Error" dialog blocks geometry import in GUI mode
 

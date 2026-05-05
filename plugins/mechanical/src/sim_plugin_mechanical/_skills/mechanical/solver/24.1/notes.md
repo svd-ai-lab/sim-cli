@@ -1,8 +1,9 @@
-# Ansys Mechanical 24.1 — solver layer notes
+# Ansys Mechanical solver layer notes
 
-## Scripting namespace (verified 24.1)
+## Scripting namespace
 
-These globals exist inside `run_python_script` on a stock 24.1 install:
+These globals are expected inside `run_python_script` for supported
+Mechanical sessions:
 
 | Global | Kind | Notes |
 |---|---|---|
@@ -15,7 +16,7 @@ These globals exist inside `run_python_script` on a stock 24.1 install:
 | `DataModelObjectCategory` | enum | Used with `GetChildren(category, recursive)`. |
 | `SelectionTypeEnum` | enum | For `CreateSelectionInfo`. |
 
-## 24.1-specific quirks
+## Solver quirks
 
 - **`Model.Mesh.Nodes` returns an `int`** — not iterable. Same for
   `Elements`. Use `Model.Mesh.ElementIds` to iterate.
@@ -26,7 +27,7 @@ These globals exist inside `run_python_script` on a stock 24.1 install:
 - **`ResultFileName`** on an analysis returns the full path to the
   `.rst` file *after* solve. Before solve, it returns an empty string.
 
-## File layout on 24.1
+## File layout
 
 ```
 %TEMP%/AnsysMech<pid>/
@@ -40,9 +41,8 @@ These globals exist inside `run_python_script` on a stock 24.1 install:
 Use `client.list_files()` to discover the actual working directory
 (it changes every launch).
 
-## Licenses consumed
+## Solver availability
 
-- `ansys` or `mechanical_solver`: the solver engine (needed for `Solve()`).
-- `struct_solver`: advanced features (nonlinear contact, etc.).
-
-A minimal structural solve needs one `ansys` feature.
+If `Solve()` hangs or returns without producing result state, inspect
+`session.health`, `mechanical.project.identity`, `mechanical.model.summary`,
+and solver output artifacts before retrying a larger script.

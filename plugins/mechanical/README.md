@@ -1,28 +1,123 @@
 # sim-plugin-mechanical
 
-[Ansys Mechanical](https://www.ansys.com/products/structures/ansys-mechanical) (PyMechanical) driver for [sim-cli](https://github.com/svd-ai-lab/sim-cli), distributed as an out-of-tree plugin via Python `entry_points`.
+Use Codex, Claude Code, or another AI agent to work with
+[Ansys Mechanical](https://www.ansys.com/products/structures/ansys-mechanical)
+models through [sim-cli](https://github.com/svd-ai-lab/sim-cli).
+
+`sim-plugin-mechanical` gives an agent practical Mechanical control paths:
+drive a live Mechanical GUI through PyMechanical, inspect runtime health, add
+loads/supports/solution objects, solve, summarize the model tree, and extract
+or describe result artifacts.
+
+The Mechanical application and SDK are not bundled. Bring your own Mechanical
+installation. See [LICENSE-NOTICE.md](LICENSE-NOTICE.md).
+
+This plugin is for Ansys Mechanical, not Dassault SIMULIA Abaqus. Use the
+Abaqus plugin for Abaqus decks and Abaqus/CAE scripts.
+
+## What an agent can do with Mechanical
+
+- Mutate a live Mechanical model through Mechanical's IronPython API.
+- Keep GUI-visible work synchronized with SDK state in `gui` mode.
+- Inspect `session.health`, `mechanical.project.identity`, and
+  `mechanical.model.summary` before each bounded setup or solve step.
+- Add and inspect supports, loads, mesh state, solution objects, and result
+  objects.
+- Detect solver/result artifacts such as result files, solver output, error
+  files, and exported CSV data.
+- Continue a Workbench Static Structural handoff once the Model cell is ready.
+
+## Choose the right Mechanical workflow
+
+### 1. Live GUI session
+
+Use this when the user wants to watch or review the Mechanical tree while the
+agent works:
+
+```powershell
+sim connect --solver mechanical --ui-mode gui
+sim inspect session.health
+sim exec --file setup_step.py
+sim inspect mechanical.model.summary
+```
+
+In GUI mode, Mechanical's visible window and PyMechanical client mutate the
+same in-memory model. Use screenshots for visual review, but use structured
+inspect targets for acceptance decisions.
+
+### 2. Headless smoke or batch-style checks
+
+Use `--ui-mode no_gui` only when visual confirmation is not needed:
+
+```powershell
+sim connect --solver mechanical --ui-mode no_gui
+```
+
+Headless mode is faster but screenshot confirmation is unavailable. Inspect
+`session.health.ui_capabilities` before relying on GUI observations.
+
+### 3. Workbench handoff
+
+Workbench owns Engineering Data, Geometry, and Model. Mechanical owns setup,
+solve, and results. Before applying Mechanical loads or supports, inspect:
+
+```powershell
+sim inspect mechanical.project.identity
+sim inspect mechanical.model.summary
+```
+
+Continue only when the expected analysis exists and the geometry/body state is
+non-empty.
 
 ## Install
 
 ```bash
-pip install git+https://github.com/svd-ai-lab/sim-plugin-mechanical@main
+pip install sim-plugin-mechanical
 ```
 
-You also need a working Ansys Mechanical installation on the same host (the `ansys-mechanical-core` SDK launches the local `AnsysWBU.exe`). See [LICENSE-NOTICE.md](LICENSE-NOTICE.md).
-
-This plugin is for **Ansys Mechanical**, not Dassault SIMULIA Abaqus.
-Use `sim-plugin-abaqus` for Abaqus `.inp` decks and Abaqus/CAE scripts.
-
-After install, sim-cli auto-discovers the driver:
+You can also install through sim-cli:
 
 ```bash
-sim drivers | grep mechanical
-sim connect --solver mechanical --mode mechanical --ui-mode gui
+sim plugin install sim-plugin-mechanical
 ```
 
-## How it works
+After installation, sim-cli auto-discovers the driver and bundled skill:
 
-The plugin registers via two entry-point groups:
+```bash
+sim check mechanical
+sim connect --solver mechanical --ui-mode gui
+```
+
+## Agent quickstart
+
+Give an agent this instruction when the task is about Mechanical:
+
+```text
+Use the bundled Mechanical skill from sim-plugin-mechanical. Connect with
+`sim connect --solver mechanical --ui-mode gui` unless the user explicitly
+wants headless mode. Before every setup, solve, or result step, inspect
+`session.health`, `mechanical.project.identity`, and
+`mechanical.model.summary`. Run one bounded IronPython snippet at a time,
+return JSON from the last expression, inspect `last.result`, and use screenshots
+only as visual confirmation. If the model came from Workbench, confirm the
+handoff before applying loads or supports.
+```
+
+The bundled skill entry point is:
+
+```text
+src/sim_plugin_mechanical/_skills/mechanical/SKILL.md
+```
+
+## How it relates to sim-cli
+
+`sim-plugin-mechanical` extends sim-cli with the Mechanical-specific driver and
+bundled Mechanical skill. sim-cli supplies the common runtime surface
+(`connect`, `exec`, `inspect`, `run`, `screenshot`), while this plugin supplies
+Mechanical detection, PyMechanical launch, IronPython execution, health checks,
+model summaries, and result artifact diagnostics.
+
+The plugin registers three entry-point groups:
 
 ```toml
 [project.entry-points."sim.drivers"]
@@ -30,19 +125,25 @@ mechanical = "sim_plugin_mechanical:MechanicalDriver"
 
 [project.entry-points."sim.skills"]
 mechanical = "sim_plugin_mechanical:skills_dir"
+
+[project.entry-points."sim.plugins"]
+mechanical = "sim_plugin_mechanical:plugin_info"
 ```
 
-`sim.drivers` exposes the driver class; `sim.skills` exposes a directory of skill files bundled inside the wheel.
+## Troubleshooting
 
-The driver launches Mechanical with a **visible GUI window** (`batch=False`) so sim's observation commands (`sim screenshot`, `sim inspect`) can capture the live window. Snippets execute inside Mechanical's IronPython interpreter via `run_python_script`, where `ExtAPI`, `DataModel`, `Model` are all available globals.
+### Secure transport launch failures
 
-`inspect session.summary` includes `ui_mode` and `batch`; for GUI-coupled
-workflows agents should confirm `ui_mode == "gui"` and `batch == false`
-before trusting screenshots to reflect SDK mutations.
+Some solver builds require insecure loopback transport for PyMechanical. Set
+`SIM_MECHANICAL_INSECURE_TRANSPORT=1` before starting the sim session if the
+driver reports a secure-transport launch failure.
 
-## Supported versions
+### Screenshot captures no Mechanical window
 
-See [`src/sim_plugin_mechanical/compatibility.yaml`](src/sim_plugin_mechanical/compatibility.yaml) for the SDK / solver compatibility matrix. Current profiles cover Mechanical 24.1 / 24.2 / 25.1 / 25.2 against `ansys-mechanical-core` 0.11.x and 0.12.x.
+Use `sim inspect session.health`. If `ui_capabilities.screenshot_expected` is
+false, the session is headless. If screenshot support is expected but no
+matching window is found, reconnect in GUI mode and inspect the health payload
+before mutating more state.
 
 ## Develop
 
@@ -50,32 +151,11 @@ See [`src/sim_plugin_mechanical/compatibility.yaml`](src/sim_plugin_mechanical/c
 git clone https://github.com/svd-ai-lab/sim-plugin-mechanical
 cd sim-plugin-mechanical
 uv sync
-uv run pytest
+uv run pytest tests -m "not integration"
 ```
 
-End-to-end tests require a real Mechanical install; they're gated and skipped when those preconditions are missing.
-
-## Troubleshooting
-
-### `connect` or `run` fails with `does not support secure transport modes`
-
-Mechanical < 24.2 has no secure-gRPC support, and 25.2 RTM also lacks it without SP03+. The driver auto-forces insecure transport for < 24.2; for 25.2 RTM (and any future release where you need to opt out of TLS), set:
-
-```bash
-export SIM_MECHANICAL_INSECURE_TRANSPORT=1
-```
-
-before starting `sim serve` or running `sim connect` / `sim run mechanical`. The env var applies to **both** persistent sessions and one-shot script runs. Loopback gRPC traffic stays on the local host, so disabling TLS is benign in the standard sim-cli single-host topology.
-
-When the launch fails without the env var set, the driver re-raises with an actionable hint pointing at this section.
-
-### `--ui-mode no_gui` (headless launch)
-
-`sim connect mechanical --ui-mode no_gui` launches Mechanical without a visible window. This is faster (no GUI to render) but `sim screenshot` and other GUI-observation probes will not capture anything. Use `--ui-mode gui` (the default) for any agentic workflow that depends on visual confirmation. For backward compatibility the driver also accepts `ui_mode="batch"`.
-
-### Screenshot probe captures the wrong window
-
-The driver pins the screenshot and dialog probes to the launched `AnsysWBU.exe` PID after each successful `launch()`, so probes target the exact spawned process even when another window is foreground. Pinning is best-effort — if PID discovery fails (locked-down sandbox, unusual AnsysWBU launch path, etc.), probes fall back to substring matching against process names. Requires a sim-cli build that exposes `target_pid` on the GUI probes; older builds silently ignore the pin and use substring matching only.
+End-to-end tests require a local Mechanical installation and are skipped unless
+their prerequisites are available.
 
 ## License
 

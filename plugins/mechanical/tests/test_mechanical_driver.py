@@ -118,11 +118,59 @@ def _fake_install(version: str = "25.2"):
 
 
 class _FakeClient:
+    def __init__(self, solution_status: str = "Done"):
+        self.solution_status = solution_status
+
+    def verify_valid_connection(self):
+        return True
+
     def wait_till_mechanical_is_ready(self, wait_time=0):
         return None
 
+    def run_python_script(self, code):
+        if (
+            '"solution_status"' in code
+            and '"solution_result_count"' in code
+            and "result_file_available" in code
+        ):
+            return (
+                '{"ok": true, "analyses": [{"index": 0, "type": "Static", '
+                f'"solution_status": "{self.solution_status}", '
+                '"solution_result_count": 1, "result_file_available": true}], '
+                '"analysis_count": 1}'
+            )
+        if "solution_statuses" in code:
+            return (
+                '{"ok": true, "connected": true, '
+                '"project_directory_known": true, "analysis_count": 1, '
+                '"analysis_types": ["Static"], "active_analysis_index": 0, '
+                f'"solution_statuses": ["{self.solution_status}"], '
+                '"solution_result_counts": [1], '
+                '"geometry_body_count": 1, "mesh_nodes": 10, '
+                '"mesh_elements": 2, "result_file_available": false, '
+                '"checkpoint_ready": true}'
+            )
+        if '"analyses"' in code:
+            return (
+                '{"ok": true, "connected": true, '
+                '"analyses": [{"index": 0, "type": "Static", '
+                '"child_count": 2, "solution_child_count": 1, '
+                f'"solution_status": "{self.solution_status}", '
+                '"solution_result_count": 1}], "analysis_count": 1, '
+                '"named_selection_count": 0, "geometry_body_count": 1, '
+                '"mesh": {"nodes": 10, "elements": 2}}'
+            )
+        if "analysis_count" in code:
+            return '{"ok": true, "connected": true, "project_directory_known": true, "analysis_count": 1, "analysis_types": ["Static"], "active_analysis_index": 0, "geometry_body_count": 1, "mesh_nodes": 10, "mesh_elements": 2, "result_file_available": false, "checkpoint_ready": true}'
+        if '"target": "mesh"' in code:
+            return '{"ok": true, "target": "mesh", "nodes": 10, "elements": 2}'
+        return "1"
+
     def run_python_script_from_file(self, path):
         return ""
+
+    def get_product_info(self):
+        return "Ansys Mechanical\nProduct Version:252\n"
 
     def exit(self):
         return None
@@ -237,6 +285,157 @@ class TestLaunchKwargs:
         assert summary["ui_mode"] == "gui"
         assert summary["batch"] is False
         assert summary["connected"] is True
+
+    def test_session_health_connected_is_sanitized(self, monkeypatch):
+        captured: list[dict] = []
+        d = MechanicalDriver()
+        monkeypatch.setattr(d, "detect_installed", lambda: [_fake_install("25.2")])
+        _install_fake_pm(monkeypatch, captured)
+        monkeypatch.setenv("SIM_MECHANICAL_INSECURE_TRANSPORT", "1")
+
+        d.launch(ui_mode="gui")
+        health = d.query("session.health")
+
+        assert health["ok"] is True
+        assert health["connected"] is True
+        assert health["product_version"] == "252"
+        assert "Enterprise" not in str(health)
+        assert "license" not in str(health).lower()
+
+    def test_ui_modes(self):
+        d = MechanicalDriver()
+        modes = d.query("ui.modes")
+        assert modes["ok"] is True
+        assert "gui" in modes["modes"]
+        assert "no_gui" in modes["modes"]
+        assert "batch" in modes["modes"]
+
+    def test_project_identity_and_model_summary(self, monkeypatch):
+        d = MechanicalDriver()
+        d._client = _FakeClient()
+        d._session_id = "s-test"
+        d._ui_mode = "gui"
+        d._batch = False
+
+        identity = d.query("mechanical.project.identity")
+        summary = d.query("mechanical.model.summary")
+        props = d.query("mechanical.object.properties:mesh")
+
+        assert identity["ok"] is True
+        assert identity["analysis_count"] == 1
+        assert identity["checkpoint_ready"] is True
+        assert identity["solution_statuses"] == ["Done"]
+        assert identity["solution_result_counts"] == [1]
+        assert summary["analysis_count"] == 1
+        assert summary["analyses"][0]["solution_status"] == "Done"
+        assert summary["analyses"][0]["solution_result_count"] == 1
+        assert summary["mesh"]["nodes"] == 10
+        assert props["nodes"] == 10
+
+    def test_solve_guard_marks_solve_required_as_failure(self):
+        d = MechanicalDriver()
+        d._client = _FakeClient(solution_status="SolveRequired")
+        d._ui_mode = "no_gui"
+        d._batch = True
+        d.probes = []
+
+        result = d.run("analysis.Solution.Solve(True)", label="solve")
+
+        assert result["ok"] is False
+        assert "SolveRequired" in result["error"]
+        assert any(
+            diag["code"] == "mechanical.solve.not_completed"
+            for diag in result["diagnostics"]
+        )
+
+    def test_solve_guard_allows_done_status(self):
+        d = MechanicalDriver()
+        d._client = _FakeClient(solution_status="Done")
+        d._ui_mode = "no_gui"
+        d._batch = True
+        d.probes = []
+
+        result = d.run("analysis.Solution.Solve(True)", label="solve")
+
+        assert result["ok"] is True
+        assert not any(
+            diag["code"] == "mechanical.solve.not_completed"
+            for diag in result["diagnostics"]
+        )
+
+    def test_solve_guard_does_not_mark_setup_step(self):
+        d = MechanicalDriver()
+        d._client = _FakeClient(solution_status="SolveRequired")
+        d._ui_mode = "no_gui"
+        d._batch = True
+        d.probes = []
+
+        result = d.run("Model.AddStaticStructuralAnalysis()", label="setup")
+
+        assert result["ok"] is True
+        assert not any(
+            diag["code"] == "mechanical.solve.not_completed"
+            for diag in result["diagnostics"]
+        )
+
+    def test_health_degrades_when_verify_fails(self):
+        class BadClient(_FakeClient):
+            def verify_valid_connection(self):
+                raise RuntimeError("connection failed")
+
+        d = MechanicalDriver()
+        d._client = BadClient()
+        d._ui_mode = "gui"
+        d._batch = False
+
+        health = d.query("session.health")
+
+        assert health["ok"] is False
+        assert health["code"] == "mechanical.sdk.health_failed"
+
+    def test_run_timeout_returns_structured_failure(self, monkeypatch):
+        import time
+
+        d = MechanicalDriver()
+        d._client = _FakeClient()
+        d._ui_mode = "gui"
+        d._batch = False
+        monkeypatch.setattr(d, "_dispatch", lambda code, label: time.sleep(0.2))
+
+        result = d.run("slow()", timeout_s=0.01)
+
+        assert result["ok"] is False
+        assert "timeout_s" in result["error"]
+        assert any(
+            diag["code"] == "sim.runtime.snippet_timeout"
+            for diag in result["diagnostics"]
+        )
+
+    def test_artifact_probe_detects_solver_files(self, tmp_path):
+        from sim.inspect import InspectCtx
+        from sim_plugin_mechanical.driver import MechanicalArtifactProbe
+
+        (tmp_path / "file.rst").write_bytes(b"rst")
+        (tmp_path / "file.err").write_text("solver warning", encoding="utf-8")
+        (tmp_path / "solve.out").write_text("done", encoding="utf-8")
+
+        probe = MechanicalArtifactProbe(only_new=True)
+        ctx = InspectCtx(
+            stdout="",
+            stderr="",
+            workdir=str(tmp_path),
+            wall_time_s=0,
+            exit_code=0,
+            driver_name="mechanical",
+            session_ns={},
+            workdir_before=[],
+        )
+
+        result = probe.probe(ctx)
+        codes = {d.code for d in result.diagnostics}
+        assert "mechanical.result.rst_detected" in codes
+        assert "mechanical.solve.err_detected" in codes
+        assert "mechanical.solve.output_detected" in codes
 
     def test_launch_translates_secure_transport_error(self, monkeypatch):
         captured: list[dict] = []

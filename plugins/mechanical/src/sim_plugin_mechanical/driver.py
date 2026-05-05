@@ -41,6 +41,7 @@ import os
 import re
 import shutil
 import time
+import traceback
 import uuid
 from pathlib import Path
 from typing import Any
@@ -79,6 +80,126 @@ _AWP_ROOT_RE = re.compile(r"^AWP_ROOT(\d{3})$")
 _VERSION_DIR_RE = re.compile(r"v(\d{2})(\d)$")
 
 
+def _safe_text(value: object, *, limit: int = 200) -> str | None:
+    """Return a short ASCII-safe string for public diagnostics."""
+    if value is None:
+        return None
+    text = str(value)
+    text = "".join(ch if 32 <= ord(ch) < 127 else "?" for ch in text)
+    return text[:limit]
+
+
+def _safe_name(value: object) -> str | None:
+    text = _safe_text(value)
+    if not text:
+        return None
+    return Path(text.replace("\\", "/")).name or text
+
+
+def _mechanical_ui_capabilities(ui_mode: str | None, batch: bool | None) -> dict:
+    visible = not bool(batch) and ui_mode not in {"no_gui", "batch"}
+    return {
+        "visible_window_expected": visible,
+        "screenshot_expected": visible,
+        "sdk_gui_coupled": visible,
+        "headless": bool(batch),
+    }
+
+
+class MechanicalArtifactProbe:
+    """Describe new Mechanical solver/result artifacts in the sim workdir."""
+
+    name = "mechanical-artifacts"
+
+    def __init__(self, *, only_new: bool = True, max_files: int = 8) -> None:
+        self.only_new = only_new
+        self.max_files = max_files
+
+    def applies(self, ctx) -> bool:
+        if self.only_new and ctx.workdir_before is None:
+            return False
+        try:
+            return Path(ctx.workdir).is_dir()
+        except Exception:
+            return False
+
+    def probe(self, ctx):
+        from sim.inspect import Diagnostic as RuntimeDiagnostic  # noqa: PLC0415
+        from sim.inspect import ProbeResult  # noqa: PLC0415
+
+        root = Path(ctx.workdir)
+        before = set(ctx.workdir_before or [])
+        candidates: list[Path] = []
+        for path in root.rglob("*"):
+            if not path.is_file():
+                continue
+            rel = str(path.relative_to(root)).replace("\\", "/")
+            if self.only_new and rel in before:
+                continue
+            low = path.name.lower()
+            if (
+                low.endswith(".rst")
+                or low.endswith(".err")
+                or low == "solve.out"
+                or low.endswith(".csv")
+            ):
+                candidates.append(path)
+        diagnostics = []
+        for path in candidates[:self.max_files]:
+            name = _safe_name(path.name)
+            size = path.stat().st_size
+            low = path.name.lower()
+            extra = {"file_name": name, "size": size}
+            if low.endswith(".rst"):
+                diagnostics.append(RuntimeDiagnostic(
+                    severity="info",
+                    source="mechanical:artifact",
+                    code="mechanical.result.rst_detected",
+                    message="Mechanical result file detected",
+                    extra=extra,
+                ))
+            elif low.endswith(".err"):
+                tail = ""
+                try:
+                    tail = path.read_text(
+                        encoding="utf-8", errors="replace"
+                    )[-500:]
+                except OSError:
+                    tail = ""
+                diagnostics.append(RuntimeDiagnostic(
+                    severity="warning" if size else "info",
+                    source="mechanical:artifact",
+                    code="mechanical.solve.err_detected",
+                    message="Mechanical solver error file detected",
+                    extra={**extra, "tail": _safe_text(tail, limit=300)},
+                ))
+            elif low == "solve.out":
+                diagnostics.append(RuntimeDiagnostic(
+                    severity="info",
+                    source="mechanical:artifact",
+                    code="mechanical.solve.output_detected",
+                    message="Mechanical solver output detected",
+                    extra=extra,
+                ))
+            elif low.endswith(".csv"):
+                diagnostics.append(RuntimeDiagnostic(
+                    severity="info",
+                    source="mechanical:artifact",
+                    code="mechanical.result.csv_detected",
+                    message="Mechanical exported data detected",
+                    extra=extra,
+                ))
+        if len(candidates) > self.max_files:
+            diagnostics.append(RuntimeDiagnostic(
+                severity="warning",
+                source="mechanical:artifact",
+                code="mechanical.artifacts.truncated",
+                message="Mechanical artifact diagnostics were truncated",
+                extra={"reported": self.max_files, "total": len(candidates)},
+            ))
+        return ProbeResult(diagnostics=diagnostics)
+
+
 def _default_mechanical_probes(enable_gui: bool = True) -> list:
     """Mechanical probe list — generic_probes() + optional GUI observation.
 
@@ -93,6 +214,7 @@ def _default_mechanical_probes(enable_gui: bool = True) -> list:
         GuiDialogProbe, ScreenshotProbe, generic_probes,
     )
     probes: list = list(generic_probes())
+    probes.append(MechanicalArtifactProbe(only_new=True))
     if enable_gui:
         probes.append(GuiDialogProbe(
             process_name_substrings=("AnsysWBU", "Mechanical", "ANSYS"),
@@ -222,6 +344,10 @@ class MechanicalDriver:
         self._run_count: int = 0
         self._version: str | None = None
         self._launched_at: float | None = None
+        self._target_pid: int | None = None
+        self._last_run: dict | None = None
+        self._last_error: str | None = None
+        self._last_health: dict | None = None
         self._sim_dir: Path = Path(os.environ.get("SIM_DIR") or (Path.cwd() / ".sim"))
         self.probes: list = _default_mechanical_probes(enable_gui=True)
 
@@ -299,7 +425,7 @@ class MechanicalDriver:
                 version=top.version,
                 status="error",
                 message=(
-                    f"Ansys Mechanical {top.version} found at {top.path}, "
+                    f"Ansys Mechanical {top.version} was found, "
                     "but ansys-mechanical-core SDK is not installed. "
                     "Install with: uv pip install ansys-mechanical-core"
                 ),
@@ -310,7 +436,7 @@ class MechanicalDriver:
             version=top.version,
             status="ok",
             message=(
-                f"Ansys Mechanical {top.version} at {top.path} "
+                f"Ansys Mechanical {top.version} "
                 f"(PyMechanical {pm.__version__})"
             ),
             solver_version=top.version,
@@ -490,6 +616,135 @@ class MechanicalDriver:
     def is_connected(self) -> bool:
         return self._client is not None
 
+    def _visible_window_summary(self) -> dict:
+        if self._batch:
+            return {"available": False, "match_count": 0, "processes": []}
+        try:
+            from sim.gui import GuiController  # noqa: PLC0415
+            gui = GuiController(
+                process_name_substrings=("AnsysWBU", "Mechanical", "ANSYS"),
+                workdir=str(self._sim_dir),
+            )
+            if not gui.available:
+                return {"available": False, "match_count": 0, "processes": []}
+            data = gui.list_windows()
+        except Exception as exc:  # noqa: BLE001 - GUI support is optional
+            return {
+                "available": False,
+                "match_count": 0,
+                "processes": [],
+                "error": type(exc).__name__,
+            }
+        if not data.get("ok"):
+            return {
+                "available": True,
+                "match_count": 0,
+                "processes": [],
+                "error": _safe_text(data.get("error")),
+            }
+        windows = data.get("windows", []) or []
+        if self._target_pid is not None:
+            windows = [
+                w for w in windows
+                if int(w.get("pid", -1)) == int(self._target_pid)
+            ]
+        processes = sorted({
+            _safe_text(w.get("proc"), limit=80) or ""
+            for w in windows if w.get("proc")
+        })
+        return {
+            "available": True,
+            "match_count": len(windows),
+            "processes": [p for p in processes if p],
+            "has_visible_window": bool(windows),
+            "target_pid_known": self._target_pid is not None,
+        }
+
+    def _client_health_roundtrip(self) -> tuple[bool | None, str | None]:
+        if self._client is None:
+            return False, "not connected"
+        verify = getattr(self._client, "verify_valid_connection", None)
+        if callable(verify):
+            try:
+                value = verify()
+                return True if value is None else bool(value), None
+            except Exception as exc:  # noqa: BLE001 - SDK exceptions vary
+                return False, f"{type(exc).__name__}: {exc}"
+        try:
+            value = self._client.run_python_script("1")
+            return str(value).strip() in {"1", "1.0"} or value is not None, None
+        except Exception as exc:  # noqa: BLE001 - SDK exceptions vary
+            return False, f"{type(exc).__name__}: {exc}"
+
+    def _product_version(self) -> str | None:
+        if self._client is None:
+            return None
+        try:
+            info = str(self._client.get_product_info())
+        except Exception:
+            return None
+        match = re.search(r"Product Version:\s*([0-9.]+)", info)
+        return match.group(1) if match else None
+
+    def _gui_coupling_diagnostics(self) -> list:
+        from sim.inspect import Diagnostic as RuntimeDiagnostic  # noqa: PLC0415
+
+        diagnostics = []
+        if self._batch:
+            diagnostics.append(RuntimeDiagnostic(
+                severity="warning",
+                source="mechanical:gui",
+                code="mechanical.gui.batch_no_screenshot",
+                message="Mechanical is running without a visible GUI; screenshot confirmation is unavailable",
+                extra={"ui_mode": self._ui_mode, "batch": self._batch},
+            ))
+            return diagnostics
+        windows = self._visible_window_summary()
+        if self._ui_mode == "gui" and windows.get("available") and not windows.get("has_visible_window"):
+            diagnostics.append(RuntimeDiagnostic(
+                severity="warning",
+                source="mechanical:gui",
+                code="mechanical.gui.window_not_found",
+                message="No visible Mechanical window matched the live session",
+                extra={"target_pid_known": self._target_pid is not None},
+            ))
+        return diagnostics
+
+    def health(self) -> dict:
+        """Best-effort live-session health without raw product or entitlement text."""
+        alive, error = self._client_health_roundtrip()
+        connected = self.is_connected and alive is not False
+        if not self.is_connected:
+            code = "mechanical.session.disconnected"
+            message = "Mechanical session is not connected"
+        elif alive is False:
+            code = "mechanical.sdk.health_failed"
+            message = "Mechanical SDK health check failed"
+        else:
+            code = "mechanical.session.connected"
+            message = "Mechanical session is connected"
+        diagnostics = [d.to_dict() for d in self._gui_coupling_diagnostics()]
+        health = {
+            "ok": connected,
+            "connected": connected,
+            "code": code,
+            "message": message,
+            "session_id": self._session_id,
+            "backend": "pymechanical" if self._client is not None else None,
+            "run_count": self._run_count,
+            "ui_mode": self._ui_mode,
+            "batch": self._batch,
+            "ui_capabilities": _mechanical_ui_capabilities(self._ui_mode, self._batch),
+            "last_error": _safe_text(self._last_error or error),
+            "version": self._version,
+            "product_version": self._product_version(),
+            "target_pid_known": self._target_pid is not None,
+            "windows": self._visible_window_summary(),
+            "diagnostics": diagnostics,
+        }
+        self._last_health = health
+        return health
+
     def launch(
         self,
         mode: str = "mechanical",
@@ -525,6 +780,7 @@ class MechanicalDriver:
         top = installs[0]
 
         batch = ui_mode in ("batch", "no_gui")
+        self.probes = _default_mechanical_probes(enable_gui=not batch)
         launch_kwargs = _build_launch_kwargs(top, batch=batch, port=port)
 
         log.info(
@@ -544,9 +800,11 @@ class MechanicalDriver:
             for p in self.probes:
                 if hasattr(p, "target_pid"):
                     p.target_pid = target_pid
+            self._target_pid = target_pid
             log.info("Pinned GUI probes to AnsysWBU pid=%s (port=%s)",
                      target_pid, client_port)
         else:
+            self._target_pid = None
             log.info("Could not discover AnsysWBU pid; "
                      "probes will use substring matching")
 
@@ -557,6 +815,9 @@ class MechanicalDriver:
         self._run_count = 0
         self._version = top.version
         self._launched_at = time.time()
+        self._last_run = None
+        self._last_error = None
+        self._last_health = self.health()
 
         return {
             "ok": True,
@@ -566,6 +827,8 @@ class MechanicalDriver:
             "version": top.version,
             "backend": "pymechanical",
             "batch": batch,
+            "ui_capabilities": _mechanical_ui_capabilities(ui_mode, batch),
+            "health": self._last_health,
         }
 
     def _dispatch(self, code: str, label: str = "snippet") -> dict:
@@ -596,9 +859,66 @@ class MechanicalDriver:
             "elapsed_s": round(time.time() - started, 4),
         }
 
-    def run(self, code: str, label: str = "snippet") -> dict:
+    @staticmethod
+    def _looks_like_solve_attempt(code: str, label: str) -> bool:
+        text = f"{label}\n{code}".lower()
+        return "solve" in text or ".solve(" in text
+
+    @staticmethod
+    def _solve_incomplete_statuses(state: dict) -> list[str]:
+        statuses: list[str] = []
+        for analysis in state.get("analyses", []) or []:
+            status = _safe_text(analysis.get("solution_status") or "")
+            normalized = status.lower().replace(" ", "")
+            if normalized in {"solverequired", "notsolved", "failed", "error"}:
+                statuses.append(status or "unknown")
+        return statuses
+
+    def _solve_state(self) -> dict:
+        code = r'''
+import json
+
+def safe(obj):
+    try:
+        s = str(obj)
+        return "".join(c if ord(c) < 128 else "?" for c in s)
+    except:
+        return "unknown"
+
+analyses = []
+for i, a in enumerate(Model.Analyses):
+    item = {"index": i}
+    try:
+        item["type"] = safe(a.AnalysisType)
+    except:
+        item["type"] = "unknown"
+    try:
+        item["solution_status"] = safe(a.Solution.Status)
+    except:
+        item["solution_status"] = "unknown"
+    try:
+        item["solution_result_count"] = len(a.Solution.Children)
+    except:
+        item["solution_result_count"] = None
+    try:
+        item["result_file_available"] = bool(a.ResultFileName)
+    except:
+        item["result_file_available"] = False
+    analyses.append(item)
+
+json.dumps({"ok": True, "analyses": analyses, "analysis_count": len(analyses)})
+'''
+        return self._run_json_query(code)
+
+    def run(
+        self,
+        code: str,
+        label: str = "snippet",
+        timeout_s: float | None = None,
+    ) -> dict:
         """Execute a snippet and attach inspect diagnostics."""
         from sim.inspect import InspectCtx, collect_diagnostics       # noqa: PLC0415
+        from sim._timeout import DEFAULT_TIMEOUT_S, call_with_timeout  # noqa: PLC0415
 
         wd = self._sim_dir
         try:
@@ -611,8 +931,83 @@ class MechanicalDriver:
             before = []
 
         t0 = time.monotonic()
-        result = self._dispatch(code, label)
+        timeout_budget = DEFAULT_TIMEOUT_S if timeout_s is None else timeout_s
+        t_result = call_with_timeout(
+            lambda: self._dispatch(code, label),
+            timeout_s=timeout_budget,
+        )
         wall = time.monotonic() - t0
+        extras: dict[str, Any] = {}
+
+        if t_result.hung:
+            self._last_error = (
+                f"snippet exceeded timeout_s={timeout_budget}; "
+                "disconnect and re-launch the Mechanical session"
+            )
+            self._last_health = {
+                **self.health(),
+                "ok": False,
+                "connected": False,
+                "code": "mechanical.runtime.timeout_session_degraded",
+                "message": "Mechanical snippet timed out",
+            }
+            result = {
+                "ok": False,
+                "label": label,
+                "stdout": "",
+                "stderr": "",
+                "error": self._last_error,
+                "result": None,
+                "elapsed_s": round(wall, 4),
+            }
+            extras.update({
+                "timeout_hit": True,
+                "timeout_s": timeout_budget,
+                "timeout_elapsed_s": wall,
+            })
+        elif t_result.exception is not None:
+            exc = t_result.exception
+            self._last_error = f"{type(exc).__name__}: {exc}"
+            result = {
+                "ok": False,
+                "label": label,
+                "stdout": "",
+                "stderr": "",
+                "error": "".join(
+                    traceback.format_exception(type(exc), exc, exc.__traceback__)
+                ),
+                "result": None,
+                "elapsed_s": round(wall, 4),
+            }
+        else:
+            result = t_result.value
+
+        guard_diagnostics: list[dict] = []
+        if (
+            result.get("ok")
+            and self._looks_like_solve_attempt(code, label)
+            and self._client is not None
+        ):
+            solve_state = self._solve_state()
+            result["solve_state"] = solve_state
+            incomplete = self._solve_incomplete_statuses(solve_state)
+            if incomplete:
+                status_text = ", ".join(incomplete)
+                result["ok"] = False
+                result["error"] = (
+                    "Mechanical solve did not complete; "
+                    f"solution_status={status_text}"
+                )
+                guard_diagnostics.append({
+                    "severity": "error",
+                    "source": "mechanical:solve",
+                    "code": "mechanical.solve.not_completed",
+                    "message": (
+                        "Mechanical returned from the solve call, but at least "
+                        "one analysis still requires solve or failed."
+                    ),
+                    "extra": {"statuses": incomplete},
+                })
 
         ctx = InspectCtx(
             stdout=result.get("stdout", ""),
@@ -623,11 +1018,182 @@ class MechanicalDriver:
             driver_name=self.name,
             session_ns={"_result": result.get("result")},
             workdir_before=before,
+            extras=extras,
         )
         diags, arts = collect_diagnostics(self.probes, ctx)
-        result["diagnostics"] = [d.to_dict() for d in diags]
+        diags.extend(self._gui_coupling_diagnostics())
+        result["diagnostics"] = [d.to_dict() for d in diags] + guard_diagnostics
         result["artifacts"] = [a.to_dict() for a in arts]
+        if not result.get("ok") and result.get("error"):
+            self._last_error = _safe_text(result.get("error"))
+        self._last_run = result
         return result
+
+    def _run_json_query(self, code: str) -> dict:
+        if self._client is None:
+            return {
+                "ok": False,
+                "connected": False,
+                "code": "mechanical.session.disconnected",
+                "message": "Mechanical session is not connected",
+            }
+        try:
+            out = self._client.run_python_script(code)
+            text = out if isinstance(out, str) else str(out or "")
+            parsed = self.parse_output(text)
+            return parsed or {"ok": False, "code": "mechanical.query.empty"}
+        except Exception as exc:  # noqa: BLE001 - SDK exceptions vary
+            return {
+                "ok": False,
+                "connected": self.is_connected,
+                "code": "mechanical.query.failed",
+                "message": _safe_text(f"{type(exc).__name__}: {exc}"),
+            }
+
+    def project_identity(self) -> dict:
+        code = r'''
+import json
+def safe_count(fn):
+    try:
+        return fn()
+    except:
+        return None
+analysis_types = []
+result_files = []
+solution_statuses = []
+solution_result_counts = []
+for a in Model.Analyses:
+    try:
+        analysis_types.append(str(a.AnalysisType))
+    except:
+        analysis_types.append("unknown")
+    try:
+        result_files.append(bool(a.ResultFileName))
+    except:
+        result_files.append(False)
+    try:
+        solution_statuses.append(str(a.Solution.Status))
+    except:
+        solution_statuses.append("unknown")
+    try:
+        solution_result_counts.append(len(a.Solution.Children))
+    except:
+        solution_result_counts.append(None)
+body_count = safe_count(lambda: len(Model.Geometry.GetChildren(DataModelObjectCategory.Body, True)))
+mesh_nodes = safe_count(lambda: int(Model.Mesh.Nodes))
+mesh_elements = safe_count(lambda: int(Model.Mesh.Elements))
+project_directory_known = safe_count(lambda: bool(ExtAPI.DataModel.Project.ProjectDirectory))
+data = {
+    "ok": True,
+    "connected": True,
+    "project_directory_known": bool(project_directory_known),
+    "analysis_count": len(Model.Analyses),
+    "analysis_types": analysis_types,
+    "active_analysis_index": 0 if len(Model.Analyses) else None,
+    "solution_statuses": solution_statuses,
+    "solution_result_counts": solution_result_counts,
+    "geometry_body_count": body_count,
+    "mesh_nodes": mesh_nodes,
+    "mesh_elements": mesh_elements,
+    "result_file_available": any(result_files),
+    "checkpoint_ready": bool(project_directory_known) and len(Model.Analyses) > 0
+}
+json.dumps(data)
+'''
+        return self._run_json_query(code)
+
+    def model_summary(self) -> dict:
+        code = r'''
+import json
+def safe_count(fn):
+    try:
+        return fn()
+    except:
+        return None
+analyses = []
+for i, a in enumerate(Model.Analyses):
+    item = {"index": i}
+    try:
+        item["type"] = str(a.AnalysisType)
+    except:
+        item["type"] = "unknown"
+    try:
+        item["child_count"] = len(a.Children)
+    except:
+        item["child_count"] = None
+    try:
+        item["solution_child_count"] = len(a.Solution.Children)
+    except:
+        item["solution_child_count"] = None
+    try:
+        item["solution_status"] = str(a.Solution.Status)
+    except:
+        item["solution_status"] = "unknown"
+    try:
+        item["solution_result_count"] = len(a.Solution.Children)
+    except:
+        item["solution_result_count"] = None
+    analyses.append(item)
+data = {
+    "ok": True,
+    "connected": True,
+    "analyses": analyses,
+    "analysis_count": len(analyses),
+    "named_selection_count": safe_count(lambda: len(Model.NamedSelections.Children)),
+    "geometry_body_count": safe_count(lambda: len(Model.Geometry.GetChildren(DataModelObjectCategory.Body, True))),
+    "mesh": {
+        "nodes": safe_count(lambda: int(Model.Mesh.Nodes)),
+        "elements": safe_count(lambda: int(Model.Mesh.Elements))
+    }
+}
+json.dumps(data)
+'''
+        return self._run_json_query(code)
+
+    def object_properties(self, target: str) -> dict:
+        target = target.strip()
+        if target == "mesh":
+            return self._run_json_query(
+                'import json\n'
+                'json.dumps({"ok": True, "target": "mesh", '
+                '"nodes": int(Model.Mesh.Nodes), "elements": int(Model.Mesh.Elements)})'
+            )
+        if target == "geometry":
+            return self._run_json_query(
+                'import json\n'
+                'count = len(Model.Geometry.GetChildren(DataModelObjectCategory.Body, True))\n'
+                'json.dumps({"ok": True, "target": "geometry", "body_count": count})'
+            )
+        match = re.match(r"^(analysis|solution):(\d+)$", target)
+        if match:
+            kind, index_text = match.groups()
+            index = int(index_text)
+            if kind == "analysis":
+                code = (
+                    "import json\n"
+                    f"i = {index}\n"
+                    "a = Model.Analyses[i]\n"
+                    "json.dumps({\"ok\": True, \"target\": \"analysis:%d\" % i, "
+                    "\"type\": str(a.AnalysisType), \"child_count\": len(a.Children)})"
+                )
+            else:
+                code = (
+                    "import json\n"
+                    f"i = {index}\n"
+                    "s = Model.Analyses[i].Solution\n"
+                    "json.dumps({\"ok\": True, \"target\": \"solution:%d\" % i, "
+                    "\"result_count\": len(s.Children)})"
+                )
+            return self._run_json_query(code)
+        return {
+            "ok": False,
+            "code": "mechanical.object.unsupported_target",
+            "message": (
+                "supported targets are mesh, geometry, analysis:<index>, "
+                "and solution:<index>"
+            ),
+            "target": _safe_text(target),
+        }
 
     def query(self, name: str) -> dict:
         """Session-level queries.
@@ -636,6 +1202,25 @@ class MechanicalDriver:
         ``mechanical.project_directory`` / ``mechanical.files`` /
         ``mechanical.product_info`` round-trip to the live session.
         """
+        if name in {"health", "session.health"}:
+            return self.health()
+        if name in {"ui.modes", "session.ui_modes"}:
+            return {
+                "ok": True,
+                "modes": {
+                    "gui": "Visible Mechanical GUI coupled to PyMechanical SDK mutations.",
+                    "no_gui": "Headless Mechanical session without screenshot confirmation.",
+                    "batch": "Backward-compatible alias for no_gui.",
+                },
+                "aliases": {"gui": "gui", "visible": "gui", "no-gui": "no_gui", "no_gui": "no_gui", "batch": "batch"},
+                "capabilities": _mechanical_ui_capabilities(self._ui_mode, self._batch),
+            }
+        if name in {"mechanical.project.identity", "project.identity"}:
+            return self.project_identity()
+        if name in {"mechanical.model.summary", "model.summary"}:
+            return self.model_summary()
+        if name.startswith("mechanical.object.properties:"):
+            return self.object_properties(name.split(":", 1)[1])
         if name == "session.summary":
             return {
                 "session_id": self._session_id,
@@ -652,7 +1237,7 @@ class MechanicalDriver:
             raise RuntimeError(f"query '{name}' needs an active session")
         if name == "mechanical.product_info":
             try:
-                return {"product_info": self._client.get_product_info()}
+                return {"product_version": self._product_version()}
             except Exception as e:
                 return {"error": str(e)}
         if name == "mechanical.files":
@@ -705,6 +1290,10 @@ class MechanicalDriver:
             self._run_count = 0
             self._version = None
             self._launched_at = None
+            self._target_pid = None
+            self._last_run = None
+            self._last_error = None
+            self._last_health = None
 
     @staticmethod
     def _start_dialog_dismisser():

@@ -95,5 +95,5 @@ for m in msgs:
 |---|---|---|
 | `"pre-solve errors: ... contact"` | Missing contacts | Auto-detect contacts or add manually |
 | `"Solution did not converge"` | Non-linear + small load steps | Increase `MinimumTimeStep`, enable `AutoTimeStepping` |
-| Solve hangs at 0% | License server unreachable | Check `ANSYSLMD_LICENSE_FILE` |
+| Solve hangs at 0% | Solver startup did not complete | Inspect `session.health`, solver artifacts, and retry from a fresh session |
 | `"Element formulation incompatible"` | Mixed 2D/3D bodies | Suppress one body or change element type |

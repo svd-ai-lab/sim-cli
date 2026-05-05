@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "sim-plugin-mechanical"
-version = "0.1.4"
+version = "0.1.5"
 description = "Ansys Mechanical (PyMechanical) driver for sim-cli, distributed as an out-of-tree plugin"
 readme = "README.md"
 license = "Apache-2.0"
@@ -46,7 +46,9 @@ mechanical = "sim_plugin_mechanical:plugin_info"
 
 [project.urls]
 Homepage = "https://github.com/svd-ai-lab/sim-plugin-mechanical"
+Repository = "https://github.com/svd-ai-lab/sim-plugin-mechanical"
 Issues = "https://github.com/svd-ai-lab/sim-plugin-mechanical/issues"
+Changelog = "https://github.com/svd-ai-lab/sim-plugin-mechanical/blob/main/CHANGELOG.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/sim_plugin_mechanical"]

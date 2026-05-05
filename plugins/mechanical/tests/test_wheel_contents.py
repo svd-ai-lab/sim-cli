@@ -36,6 +36,19 @@ def test_wheel_contains_skills(tmp_path: Path) -> None:
         "sim_plugin_mechanical/__init__.py",
         "sim_plugin_mechanical/driver.py",
         "sim_plugin_mechanical/_skills/mechanical/SKILL.md",
+        "sim_plugin_mechanical/_skills/mechanical/base/known_issues.md",
+        "sim_plugin_mechanical/_skills/mechanical/base/reference/pymechanical_api.md",
+        "sim_plugin_mechanical/_skills/mechanical/base/reference/scripting_tree.md",
+        "sim_plugin_mechanical/_skills/mechanical/base/reference/bc_scoping.md",
+        "sim_plugin_mechanical/_skills/mechanical/base/reference/result_extraction.md",
+        "sim_plugin_mechanical/_skills/mechanical/base/reference/observation_commands.md",
+        "sim_plugin_mechanical/_skills/mechanical/base/snippets/01_smoke.py",
+        "sim_plugin_mechanical/_skills/mechanical/base/snippets/06_observation_check.py",
+        "sim_plugin_mechanical/_skills/mechanical/base/workflows/observation_demo/README.md",
+        "sim_plugin_mechanical/_skills/mechanical/base/workflows/static_structural/evidence/README.md",
+        "sim_plugin_mechanical/_skills/mechanical/base/workflows/model_review_loop.md",
+        "sim_plugin_mechanical/_skills/mechanical/base/workflows/debug_failed_exec.md",
+        "sim_plugin_mechanical/_skills/mechanical/base/workflows/workbench_handoff.md",
     }
     missing = required - names
     assert not missing, f"missing from wheel: {missing}"
