@@ -20,14 +20,24 @@ smallest focused journal.
 | Class | Typical signal | First check |
 |---|---|---|
 | Journal syntax | Syntax error or IronPython parse failure | Fix the journal only. |
-| Missing template | Static Structural or other template not found | Inspect available templates or choose a supported workflow. |
+| Missing template | `Template ... not found in Project` | Inspect `workbench.templates.visible`, run `workbench.templates.resolve:<intent>`, then compare with official PyWorkbench docs/examples. |
 | Missing cell | Model, Geometry, Setup, or Solution cell is unavailable | Inspect `workbench.systems.summary`. |
 | SDK/fallback mismatch | SDK launch failed, RunWB2 fallback used | Check `session.health.backend`. |
 | Stale project state | Cell status does not match expected step | Refresh/update one cell, then re-inspect. |
 | Handoff mismatch | Mechanical opens a different or empty model | Re-check Workbench Model cell and Mechanical project identity. |
+| Long-running hang | Journal/update is blocked or user interrupted it | Capture a screenshot, inspect visible dialogs/progress, then verify or clean up the current run's Workbench process tree before retry. |
 
 3. Retry with one bounded repair step. Do not rebuild the full project unless
    the current project state is intentionally disposable.
+
+If a documented workflow cannot resolve on the live machine, keep the failure
+structured: include the resolver `attempts`, `errors`, and visible template
+names. Do not add a one-off template spelling to the skill; improve the generic
+resolver only when the candidate form applies across workflows.
+
+For long-running updates, screenshots are an observation channel independent of
+the Workbench journal call. Use them to detect progress bars, modal dialogs,
+and stale windows while the SDK or RunWB2 call is blocked.
 
 ## Minimal retry pattern
 

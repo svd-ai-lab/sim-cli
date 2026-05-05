@@ -812,6 +812,179 @@ class WorkbenchDriver:
             }],
         }
 
+    def _query_journal_json(self, code: str) -> dict:
+        """Run a small read-only Workbench journal and return parsed JSON."""
+        if not self.is_connected:
+            return {
+                "ok": False,
+                "connected": False,
+                "code": "workbench.session.disconnected",
+                "message": "Workbench session is not connected",
+            }
+        dispatched = self._dispatch(code, "query")
+        parsed = dispatched.get("result")
+        if isinstance(parsed, dict):
+            parsed.setdefault("ok", bool(dispatched.get("ok")))
+            return parsed
+        return {
+            "ok": False,
+            "connected": self.is_connected,
+            "code": "workbench.query.unparsed",
+            "message": "Workbench query did not return structured JSON",
+            "stdout": _safe_text(dispatched.get("stdout"), limit=500),
+            "error": _safe_text(dispatched.get("error"), limit=500),
+        }
+
+    def templates_visible(self) -> dict:
+        """Ask the live Workbench session which templates are visible."""
+        script = r'''
+import codecs, json, os, re
+
+def write_result(payload):
+    out = os.path.join(os.environ.get("TEMP", "C:/Temp"), "sim_wb_result.json")
+    f = codecs.open(out, "w", "utf-8")
+    f.write(json.dumps(payload))
+    f.close()
+
+def clean_name(value):
+    text = str(value)
+    marker = "/Schematic/Template:"
+    if marker in text:
+        text = text.split(marker, 1)[1]
+    return text
+
+try:
+    raw = []
+    for item in GetAllVisibleTemplates():
+        try:
+            raw.append(str(item))
+        except:
+            raw.append("<unprintable-template>")
+    templates = [{"name": clean_name(x), "raw": x} for x in raw]
+    write_result({
+        "ok": True,
+        "connected": True,
+        "count": len(templates),
+        "templates": templates,
+    })
+except Exception as e:
+    write_result({
+        "ok": False,
+        "connected": True,
+        "code": "workbench.templates.visible_failed",
+        "error": str(e)[:500],
+    })
+'''
+        return self._query_journal_json(script)
+
+    def templates_resolve(self, target: str) -> dict:
+        """Resolve a user/system intent to a creatable Workbench template.
+
+        This is intentionally dynamic: it queries the running Workbench process,
+        then probes common Workbench template forms instead of relying on a
+        copied inventory table.
+        """
+        target_json = json.dumps(target)
+        script = rf'''
+import codecs, json, os
+
+target = {target_json}
+
+def write_result(payload):
+    out = os.path.join(os.environ.get("TEMP", "C:/Temp"), "sim_wb_result.json")
+    f = codecs.open(out, "w", "utf-8")
+    f.write(json.dumps(payload))
+    f.close()
+
+def clean_name(value):
+    text = str(value)
+    marker = "/Schematic/Template:"
+    if marker in text:
+        text = text.split(marker, 1)[1]
+    return text
+
+def norm(value):
+    return "".join(ch.lower() for ch in str(value) if ch.isalnum())
+
+visible = []
+try:
+    for item in GetAllVisibleTemplates():
+        try:
+            text = str(item)
+        except:
+            text = "<unprintable-template>"
+        visible.append({{"name": clean_name(text), "raw": text}})
+except:
+    pass
+
+attempts = []
+seen = set()
+
+def add(name, solver=None, source="candidate"):
+    key = (name, solver)
+    if key in seen:
+        return
+    seen.add(key)
+    attempts.append({{"name": name, "solver": solver, "source": source}})
+
+target_text = str(target).strip()
+if target_text:
+    add(target_text, None, "target")
+    if "(" not in target_text:
+        add(target_text + " (ANSYS)", None, "target+ansys_suffix")
+        add(target_text, "ANSYS", "target+solver")
+    if target_text.endswith("(ANSYS)"):
+        add(target_text[:-7].strip(), "ANSYS", "split_ansys_suffix")
+
+target_norm = norm(target_text)
+for item in visible:
+    name = item["name"]
+    if target_norm and (target_norm in norm(name) or norm(name) in target_norm):
+        add(name, None, "visible_match")
+        if name.endswith("(ANSYS)"):
+            add(name[:-7].strip(), "ANSYS", "visible_split_ansys_suffix")
+
+errors = []
+resolved = False
+for attempt in attempts:
+    try:
+        solver = attempt["solver"]
+        if solver is None:
+            template = GetTemplate(TemplateName=attempt["name"])
+        else:
+            template = GetTemplate(TemplateName=attempt["name"], Solver=solver)
+        write_result({{
+            "ok": True,
+            "connected": True,
+            "target": target_text,
+            "template": {{"name": attempt["name"], "solver": solver}},
+            "source": attempt["source"],
+            "attempts": attempts,
+            "visible_templates": visible,
+        }})
+        resolved = True
+        break
+    except Exception as e:
+        errors.append({{
+            "name": attempt["name"],
+            "solver": attempt["solver"],
+            "source": attempt["source"],
+            "error": str(e)[:300],
+        }})
+
+if not resolved:
+    write_result({{
+        "ok": False,
+        "connected": True,
+        "code": "workbench.template.resolve_failed",
+        "target": target_text,
+        "attempts": attempts,
+        "errors": errors,
+        "visible_templates": visible,
+    }})
+'''
+        return self._query_journal_json(script)
+
     def query(self, name: str) -> dict:
         if name in {"health", "session.health"}:
             return self.health()
@@ -830,6 +1003,12 @@ class WorkbenchDriver:
             return self.systems_summary()
         if name in {"workbench.project.identity", "project.identity"}:
             return self.project_identity()
+        if name in {"workbench.templates.visible", "templates.visible"}:
+            return self.templates_visible()
+        for prefix in ("workbench.templates.resolve:", "templates.resolve:"):
+            if name.startswith(prefix):
+                target = name[len(prefix):].strip()
+                return self.templates_resolve(target)
         if name == "session.summary":
             return {
                 "session_id": self._session_id,

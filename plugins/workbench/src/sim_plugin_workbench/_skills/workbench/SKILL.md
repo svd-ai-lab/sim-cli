@@ -33,7 +33,7 @@ Concepts, API patterns, and version-agnostic reference:
 |---|---|
 | `base/reference/pyworkbench_api.md` | PyWorkbench SDK API surface: `launch_workbench`, `run_script_string`, `upload_file`, `download_file`, `start_mechanical_server`, `start_fluent_server`. **Read first.** |
 | `base/reference/journal_scripting.md` | IronPython `.wbjn` scripting reference: `SetScriptVersion`, `GetTemplate`, `CreateSystem`, `GetContainer`, and the result file convention. |
-| `base/reference/system_templates.md` | Available analysis system templates: Static Structural, Modal, Thermal, Fluent, CFX, etc. |
+| `base/reference/system_templates.md` | Live template discovery and resolver workflow. Template names are product/configuration dependent; treat any examples as non-authoritative. |
 | `base/reference/file_transfer.md` | File upload/download patterns between client and server. |
 | `base/reference/sub_solver_integration.md` | Starting PyMechanical, PyFluent, PySherlock servers from within a Workbench session. |
 | `base/snippets/` | Numbered IronPython journal snippets (01 through 05). Each writes results to `%TEMP%/sim_wb_result.json`. |
@@ -77,16 +77,23 @@ Concepts, API patterns, and version-agnostic reference:
 6. **Workbench owns cells 1-3.** Engineering Data, Geometry, and Model
    orchestration belongs here. Mechanical setup, solve, and results belong to
    `solver=mechanical`.
+7. **Resolve templates dynamically.** Before creating any Workbench system,
+   query the live session with `workbench.templates.visible` and
+   `workbench.templates.resolve:<intent>`. If resolution fails, compare the
+   live template list with official PyWorkbench examples/docs instead of
+   copying a template table into the skill.
 
 ---
 
 ## Required protocol (one paragraph)
 
 After `/connect` succeeds: read `base/reference/pyworkbench_api.md`,
-`base/reference/journal_scripting.md`, and
+`base/reference/journal_scripting.md`,
+`base/reference/system_templates.md`, and
 `base/workflows/project_review_loop.md`. Inspect `session.health`,
-`workbench.project.identity`, and `workbench.systems.summary`. Execute
-IronPython journals incrementally via `sim exec`, checking `last.result` and
+`workbench.project.identity`, `workbench.systems.summary`, and the relevant
+template resolver result before creating a system. Execute IronPython journals
+incrementally via `sim exec`, checking `last.result` and
 `workbench.systems.summary` after every step. Use snippets from
 `base/snippets/` adapted to the user's task. Before handoff, read
 `base/workflows/mechanical_handoff.md` and confirm Workbench has a refreshed

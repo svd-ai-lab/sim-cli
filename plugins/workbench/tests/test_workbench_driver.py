@@ -206,6 +206,57 @@ class TestSessionLifecycle:
         assert "no_gui" in modes["modes"]
         assert "batch-fallback" in modes["modes"]
 
+    def test_templates_visible_requires_session(self, driver):
+        result = driver.query("workbench.templates.visible")
+        assert result["ok"] is False
+        assert result["code"] == "workbench.session.disconnected"
+
+    def test_templates_visible_query_uses_live_journal(self, driver, monkeypatch):
+        driver._backend = "pyworkbench"
+        driver._client = object()
+        captured = {}
+
+        def fake_dispatch(code, label):
+            captured["code"] = code
+            return {
+                "ok": True,
+                "stdout": '{"ok": true, "count": 1, "templates": [{"name": "FLUENT"}]}',
+                "error": None,
+                "result": {"ok": True, "count": 1, "templates": [{"name": "FLUENT"}]},
+            }
+
+        monkeypatch.setattr(driver, "_dispatch", fake_dispatch)
+        result = driver.query("workbench.templates.visible")
+
+        assert result["ok"] is True
+        assert result["templates"][0]["name"] == "FLUENT"
+        assert "GetAllVisibleTemplates" in captured["code"]
+
+    def test_templates_resolve_query_builds_dynamic_probe(self, driver, monkeypatch):
+        driver._backend = "pyworkbench"
+        driver._client = object()
+        captured = {}
+
+        def fake_dispatch(code, label):
+            captured["code"] = code
+            return {
+                "ok": True,
+                "stdout": '{"ok": true, "template": {"name": "Static Structural (ANSYS)", "solver": null}}',
+                "error": None,
+                "result": {
+                    "ok": True,
+                    "template": {"name": "Static Structural (ANSYS)", "solver": None},
+                },
+            }
+
+        monkeypatch.setattr(driver, "_dispatch", fake_dispatch)
+        result = driver.query("workbench.templates.resolve:Static Structural")
+
+        assert result["ok"] is True
+        assert result["template"]["name"] == "Static Structural (ANSYS)"
+        assert "Static Structural" in captured["code"]
+        assert "GetTemplate" in captured["code"]
+
 
 # ---------------------------------------------------------------------------
 # Fallback logic
