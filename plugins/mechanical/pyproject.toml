@@ -21,10 +21,10 @@ classifiers = [
     "License :: OSI Approved :: Apache Software License",
 ]
 dependencies = [
-    # Versioned pin against PyPI sim-cli-core. Replaces an earlier
+    # Versioned pin against sim-cli-core. Replaces an earlier
     # `sim-cli-core @ git+...sim-cli@main` pin that (a) referenced the
     # pre-rename dist name, and (b) clobbered editable installs of the
-    # runtime on `sim plugin install --upgrade` — see sim-cli#80.
+    # runtime during plugin upgrades — see sim-cli#80.
     "sim-cli-core>=0.3",
     "ansys-mechanical-core",
 ]
