@@ -184,12 +184,27 @@ class TestSessionLifecycle:
         assert driver.is_connected is False
 
     def test_run_raises_without_session(self, driver):
-        with pytest.raises(RuntimeError, match="No active session"):
-            driver.run("print('hello')")
+        result = driver.run("print('hello')")
+        assert result["ok"] is False
+        assert "No active session" in result["error"]
 
     def test_query_raises_unknown(self, driver):
         with pytest.raises(ValueError, match="unknown query"):
             driver.query("nonexistent")
+
+    def test_health_disconnected(self, driver):
+        health = driver.query("session.health")
+        assert health["ok"] is False
+        assert health["connected"] is False
+        assert health["code"] == "workbench.session.disconnected"
+        assert "license" not in str(health).lower()
+
+    def test_ui_modes(self, driver):
+        modes = driver.query("ui.modes")
+        assert modes["ok"] is True
+        assert "gui" in modes["modes"]
+        assert "no_gui" in modes["modes"]
+        assert "batch-fallback" in modes["modes"]
 
 
 # ---------------------------------------------------------------------------
@@ -238,7 +253,144 @@ class TestFallback:
         info = driver.launch(mode="workbench")
         assert info["ok"] is True
         assert info["backend"] == "runwb2"
+        assert driver.query("session.health")["code"] == "workbench.session.fallback_ready"
         driver.disconnect()
+
+    def test_launch_enables_gui_probes_for_visible_ui(self, driver, monkeypatch, tmp_path):
+        def _mock_pywb():
+            class _Client:
+                def is_alive(self):
+                    return True
+
+                def run_script_string(self, code, log_level="warning"):
+                    return '{"ok": true}'
+
+                def exit(self):
+                    return None
+
+            class _FakeModule:
+                __version__ = "0.0.0"
+
+                @staticmethod
+                def launch_workbench(**kwargs):
+                    return _Client()
+
+            return _FakeModule()
+
+        monkeypatch.setattr(
+            "sim_plugin_workbench.driver._try_import_pyworkbench", _mock_pywb
+        )
+        monkeypatch.setattr(driver, "detect_installed", lambda: [_fake_install(tmp_path)])
+
+        info = driver.launch(mode="workbench", ui_mode="gui")
+
+        assert info["backend"] == "pyworkbench"
+        assert any(getattr(p, "name", "") == "gui-dialog" for p in driver.probes)
+        health = driver.query("session.health")
+        assert health["ok"] is True
+        assert health["ui_capabilities"]["screenshot_expected"] is True
+        driver.disconnect()
+
+    def test_launch_keeps_gui_probes_off_for_no_gui(self, driver, monkeypatch, tmp_path):
+        monkeypatch.setattr(
+            "sim_plugin_workbench.driver._try_import_pyworkbench", lambda: None
+        )
+        monkeypatch.setattr(driver, "detect_installed", lambda: [_fake_install(tmp_path)])
+
+        driver.launch(mode="workbench", ui_mode="no_gui")
+
+        assert not any(getattr(p, "name", "") == "gui-dialog" for p in driver.probes)
+        driver.disconnect()
+
+    def test_systems_summary_from_last_result(self, driver):
+        driver._backend = "pyworkbench"
+        driver._client = object()
+        driver._last_run = {
+            "result": {
+                "ok": True,
+                "component_count": 6,
+                "components": [
+                    "Engineering Data", "Geometry", "Model",
+                    "Setup", "Solution", "Results",
+                ],
+                "project_file": "example.wbpj",
+            }
+        }
+
+        summary = driver.query("workbench.systems.summary")
+        identity = driver.query("workbench.project.identity")
+
+        assert summary["system_count"] == 1
+        assert summary["systems"][0]["type"] == "Static Structural"
+        assert identity["checkpoint_ready"] is True
+        assert identity["project_file_name"] == "example.wbpj"
+
+    def test_run_timeout_returns_structured_failure(self, driver, monkeypatch):
+        import time
+
+        driver._backend = "pyworkbench"
+        driver._client = object()
+        monkeypatch.setattr(driver, "_dispatch", lambda code, label: time.sleep(0.2))
+
+        result = driver.run("slow()", timeout_s=0.01)
+
+        assert result["ok"] is False
+        assert "timeout_s" in result["error"]
+        assert any(
+            d["code"] == "sim.runtime.snippet_timeout"
+            for d in result["diagnostics"]
+        )
+
+    def test_run_marks_parsed_journal_failure(self, driver, monkeypatch):
+        driver._backend = "pyworkbench"
+        driver._client = object()
+        monkeypatch.setattr(
+            driver,
+            "_dispatch",
+            lambda code, label: {
+                "ok": True,
+                "label": label,
+                "stdout": '{"ok": false, "error": "template missing"}',
+                "stderr": "",
+                "error": None,
+                "result": {"ok": False, "error": "template missing"},
+                "elapsed_s": 0.01,
+            },
+        )
+
+        result = driver.run("bad journal", label="template-probe")
+
+        assert result["ok"] is False
+        assert result["error"] == "template missing"
+        assert any(
+            d["code"] == "workbench.journal.result_failed"
+            for d in result["diagnostics"]
+        )
+
+    def test_run_keeps_parsed_journal_success(self, driver, monkeypatch):
+        driver._backend = "pyworkbench"
+        driver._client = object()
+        monkeypatch.setattr(
+            driver,
+            "_dispatch",
+            lambda code, label: {
+                "ok": True,
+                "label": label,
+                "stdout": '{"ok": true}',
+                "stderr": "",
+                "error": None,
+                "result": {"ok": True},
+                "elapsed_s": 0.01,
+            },
+        )
+
+        result = driver.run("good journal", label="template-probe")
+
+        assert result["ok"] is True
+        assert not any(
+            d["code"] == "workbench.journal.result_failed"
+            for d in result["diagnostics"]
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -24,6 +24,7 @@ import re
 import shutil
 import subprocess
 import time
+import traceback
 import uuid
 from pathlib import Path
 from typing import Any
@@ -103,6 +104,35 @@ _AWP_ROOT_RE = re.compile(r"^AWP_ROOT(\d{3})$")
 _VERSION_DIR_RE = re.compile(r"v(\d{2})(\d)$")
 
 _RESULT_FILE = Path(os.environ.get("TEMP", "C:/Temp")) / "sim_wb_result.json"
+
+
+def _safe_text(value: object, *, limit: int = 200) -> str | None:
+    """Return a short ASCII-safe string for public diagnostics."""
+    if value is None:
+        return None
+    text = str(value)
+    text = "".join(ch if 32 <= ord(ch) < 127 else "?" for ch in text)
+    return text[:limit]
+
+
+def _safe_name(value: object) -> str | None:
+    """Expose only a basename-like identifier, never a host-local path."""
+    text = _safe_text(value)
+    if not text:
+        return None
+    return Path(text.replace("\\", "/")).name or text
+
+
+def _ui_capabilities(ui_mode: str | None, backend: str | None = None) -> dict:
+    mode = ui_mode or "no_gui"
+    visible = mode != "no_gui"
+    return {
+        "visible_window_expected": visible,
+        "screenshot_expected": visible,
+        "live_project_tree": visible and backend == "pyworkbench",
+        "persistent_sdk": backend == "pyworkbench",
+        "fallback_batch": backend == "runwb2",
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -219,9 +249,15 @@ class WorkbenchDriver:
         self._client: Any = None          # PyWorkbench client or None
         self._session_id: str | None = None
         self._mode: str | None = None
+        self._ui_mode: str | None = None
         self._run_count: int = 0
         self._version: str | None = None
         self._backend: str | None = None  # "pyworkbench" | "runwb2"
+        self._connected_at: float | None = None
+        self._last_run: dict | None = None
+        self._last_error: str | None = None
+        self._last_health: dict | None = None
+        self._launch_options: dict = {}
         self._sim_dir: Path = Path(os.environ.get("SIM_DIR") or (Path.cwd() / ".sim"))
         self.probes: list = _default_workbench_probes(enable_gui=False)
 
@@ -294,7 +330,7 @@ class WorkbenchDriver:
             solver="workbench",
             version=top.version,
             status="ok",
-            message=f"Ansys Workbench {top.version} at {top.path}{sdk_note}",
+            message=f"Ansys Workbench {top.version}{sdk_note}",
             solver_version=top.version,
         )
 
@@ -409,6 +445,98 @@ class WorkbenchDriver:
     def is_connected(self) -> bool:
         return self._client is not None or self._backend == "runwb2"
 
+    def _visible_window_summary(self) -> dict:
+        if self._ui_mode == "no_gui":
+            return {"available": False, "match_count": 0, "processes": []}
+        try:
+            from sim.gui import GuiController  # noqa: PLC0415
+            gui = GuiController(
+                process_name_substrings=("AnsysWBU", "Workbench", "RunWB2"),
+                workdir=str(self._sim_dir),
+            )
+            if not gui.available:
+                return {"available": False, "match_count": 0, "processes": []}
+            data = gui.list_windows()
+        except Exception as exc:  # noqa: BLE001 - GUI support is optional
+            return {
+                "available": False,
+                "match_count": 0,
+                "processes": [],
+                "error": type(exc).__name__,
+            }
+        if not data.get("ok"):
+            return {
+                "available": True,
+                "match_count": 0,
+                "processes": [],
+                "error": _safe_text(data.get("error")),
+            }
+        windows = data.get("windows", []) or []
+        processes = sorted({
+            _safe_text(w.get("proc"), limit=80) or ""
+            for w in windows if w.get("proc")
+        })
+        return {
+            "available": True,
+            "match_count": len(windows),
+            "processes": [p for p in processes if p],
+            "has_visible_window": bool(windows),
+        }
+
+    def _sdk_health_status(self) -> tuple[bool | None, str | None]:
+        if self._backend != "pyworkbench" or self._client is None:
+            return None, None
+        for name in ("is_alive", "is_connected", "connected"):
+            member = getattr(self._client, name, None)
+            try:
+                value = member() if callable(member) else member
+            except Exception as exc:  # noqa: BLE001 - SDK health methods vary
+                return False, f"{type(exc).__name__}: {exc}"
+            if value is not None:
+                return bool(value), None
+        return None, None
+
+    def health(self) -> dict:
+        """Best-effort live-session health without exposing host details."""
+        sdk_alive, sdk_error = self._sdk_health_status()
+        connected = self.is_connected and sdk_alive is not False
+        if not self.is_connected:
+            code = "workbench.session.disconnected"
+            message = "Workbench session is not connected"
+        elif self._backend == "runwb2":
+            code = "workbench.session.fallback_ready"
+            message = "Workbench RunWB2 fallback is ready for one-shot snippets"
+        elif sdk_alive is False:
+            code = "workbench.sdk.health_failed"
+            message = "Workbench SDK health check failed"
+        elif sdk_alive is None:
+            code = "workbench.session.connected_unverified"
+            message = "Workbench session is connected; no SDK health method is available"
+        else:
+            code = "workbench.session.connected"
+            message = "Workbench session is connected"
+        health = {
+            "ok": connected,
+            "connected": connected,
+            "code": code,
+            "message": message,
+            "session_id": self._session_id,
+            "backend": self._backend,
+            "run_count": self._run_count,
+            "ui_mode": self._ui_mode,
+            "ui_capabilities": _ui_capabilities(self._ui_mode, self._backend),
+            "last_error": _safe_text(self._last_error or sdk_error),
+            "version": self._version,
+            "connected_at": self._connected_at,
+            "windows": self._visible_window_summary(),
+            "launch_options": {
+                k: v for k, v in self._launch_options.items()
+                if k in {"mode", "ui_mode", "processors"}
+            },
+        }
+        self._last_health = health
+        return health
+
     def launch(self, mode: str = "workbench", ui_mode: str = "gui", processors: int = 2, **kwargs) -> dict:
         """Start a Workbench session. SDK first, RunWB2 fallback."""
         if self._client is not None:
@@ -443,8 +571,19 @@ class WorkbenchDriver:
 
         self._session_id = str(uuid.uuid4())
         self._mode = mode
+        self._ui_mode = ui_mode
         self._run_count = 0
         self._version = top.version
+        self._connected_at = time.time()
+        self._last_run = None
+        self._last_error = None
+        self._launch_options = {
+            "mode": mode,
+            "ui_mode": ui_mode,
+            "processors": processors,
+        }
+        self.probes = _default_workbench_probes(enable_gui=ui_mode != "no_gui")
+        self._last_health = self.health()
 
         return {
             "ok": True,
@@ -453,6 +592,8 @@ class WorkbenchDriver:
             "ui_mode": ui_mode,
             "version": top.version,
             "backend": self._backend,
+            "ui_capabilities": _ui_capabilities(ui_mode, self._backend),
+            "health": self._last_health,
         }
 
     def _dispatch(self, code: str, label: str = "snippet") -> dict:
@@ -480,9 +621,15 @@ class WorkbenchDriver:
             "elapsed_s": round(time.time() - started, 4),
         }
 
-    def run(self, code: str, label: str = "snippet") -> dict:
+    def run(
+        self,
+        code: str,
+        label: str = "snippet",
+        timeout_s: float | None = None,
+    ) -> dict:
         """Execute a snippet and attach inspect diagnostics."""
         from sim.inspect import InspectCtx, collect_diagnostics       # noqa: PLC0415
+        from sim._timeout import DEFAULT_TIMEOUT_S, call_with_timeout  # noqa: PLC0415
 
         wd = self._sim_dir
         try:
@@ -495,8 +642,75 @@ class WorkbenchDriver:
             before = []
 
         t0 = time.monotonic()
-        result = self._dispatch(code, label)
+        timeout_budget = DEFAULT_TIMEOUT_S if timeout_s is None else timeout_s
+        t_result = call_with_timeout(
+            lambda: self._dispatch(code, label),
+            timeout_s=timeout_budget,
+        )
         wall = time.monotonic() - t0
+        extras: dict[str, Any] = {}
+
+        if t_result.hung:
+            self._last_error = (
+                f"snippet exceeded timeout_s={timeout_budget}; "
+                "disconnect and re-launch the Workbench session"
+            )
+            self._last_health = {
+                **self.health(),
+                "ok": False,
+                "connected": False,
+                "code": "workbench.runtime.timeout_session_degraded",
+                "message": "Workbench snippet timed out",
+            }
+            result = {
+                "ok": False,
+                "label": label,
+                "stdout": "",
+                "stderr": "",
+                "error": self._last_error,
+                "result": None,
+                "elapsed_s": round(wall, 4),
+            }
+            extras.update({
+                "timeout_hit": True,
+                "timeout_s": timeout_budget,
+                "timeout_elapsed_s": wall,
+            })
+        elif t_result.exception is not None:
+            exc = t_result.exception
+            self._last_error = f"{type(exc).__name__}: {exc}"
+            result = {
+                "ok": False,
+                "label": label,
+                "stdout": "",
+                "stderr": "",
+                "error": "".join(
+                    traceback.format_exception(type(exc), exc, exc.__traceback__)
+                ),
+                "result": None,
+                "elapsed_s": round(wall, 4),
+            }
+        else:
+            result = t_result.value
+
+        guard_diagnostics: list[dict] = []
+        parsed = result.get("result")
+        if result.get("ok") and isinstance(parsed, dict) and parsed.get("ok") is False:
+            error = (
+                _safe_text(parsed.get("error") or parsed.get("message"))
+                or "Workbench journal reported ok=false"
+            )
+            result["ok"] = False
+            result["error"] = error
+            guard_diagnostics.append({
+                "severity": "error",
+                "source": "workbench:journal",
+                "code": "workbench.journal.result_failed",
+                "message": "Workbench journal transport succeeded, but the parsed journal result reported failure.",
+                "extra": {
+                    "result_code": _safe_text(parsed.get("code")),
+                },
+            })
 
         ctx = InspectCtx(
             stdout=result.get("stdout", ""),
@@ -507,17 +721,120 @@ class WorkbenchDriver:
             driver_name=self.name,
             session_ns={"_result": result.get("result")},
             workdir_before=before,
+            extras=extras,
         )
         diags, arts = collect_diagnostics(self.probes, ctx)
-        result["diagnostics"] = [d.to_dict() for d in diags]
+        result["diagnostics"] = [d.to_dict() for d in diags] + guard_diagnostics
         result["artifacts"] = [a.to_dict() for a in arts]
+        if not result.get("ok") and result.get("error"):
+            self._last_error = _safe_text(result.get("error"))
+        self._last_run = result
         return result
 
+    def _last_result_dict(self) -> dict:
+        if not self._last_run:
+            return {}
+        value = self._last_run.get("result")
+        return value if isinstance(value, dict) else {}
+
+    def _systems_from_result(self, data: dict) -> list[dict]:
+        systems = data.get("systems")
+        if isinstance(systems, list):
+            out = []
+            for i, system in enumerate(systems):
+                if not isinstance(system, dict):
+                    continue
+                out.append({
+                    "index": i,
+                    "name": _safe_text(system.get("name") or system.get("type")),
+                    "type": _safe_text(system.get("type") or system.get("template")),
+                    "cells": system.get("cells", []),
+                    "status": _safe_text(system.get("status") or "unknown"),
+                })
+            return out
+        components = data.get("components")
+        if isinstance(components, list) or data.get("component_count"):
+            return [{
+                "index": 0,
+                "name": _safe_text(data.get("created") or "Static Structural"),
+                "type": "Static Structural",
+                "cells": [_safe_text(c) for c in (components or [])],
+                "status": "unknown",
+            }]
+        return []
+
+    def systems_summary(self) -> dict:
+        data = self._last_result_dict()
+        systems = self._systems_from_result(data)
+        return {
+            "ok": True,
+            "connected": self.is_connected,
+            "backend": self._backend,
+            "source": "last.result" if data else "unknown",
+            "system_count": len(systems),
+            "systems": systems,
+            "standard_cells": [
+                "Engineering Data", "Geometry", "Model",
+                "Setup", "Solution", "Results",
+            ],
+        }
+
+    def project_identity(self) -> dict:
+        if not self.is_connected:
+            return {
+                "ok": False,
+                "connected": False,
+                "code": "workbench.session.disconnected",
+                "message": "Workbench session is not connected",
+                "checkpoint_ready": False,
+            }
+        systems = self.systems_summary()
+        data = self._last_result_dict()
+        project_name = (
+            _safe_name(data.get("project_file"))
+            or _safe_name(data.get("archive"))
+            or _safe_name(data.get("project"))
+        )
+        return {
+            "ok": True,
+            "connected": True,
+            "backend": self._backend,
+            "project_state": "unknown",
+            "project_file_name": project_name,
+            "has_saved_location": bool(project_name),
+            "system_count": systems["system_count"],
+            "systems": systems["systems"],
+            "checkpoint_ready": bool(project_name and systems["system_count"]),
+            "diagnostics": [] if project_name else [{
+                "severity": "info",
+                "code": "workbench.project.location_unknown",
+                "message": "No saved Workbench project location has been reported yet",
+            }],
+        }
+
     def query(self, name: str) -> dict:
+        if name in {"health", "session.health"}:
+            return self.health()
+        if name in {"ui.modes", "session.ui_modes"}:
+            return {
+                "ok": True,
+                "modes": {
+                    "no_gui": "Workbench SDK/fallback execution without an intentional visible window.",
+                    "gui": "Visible Workbench session when the SDK backend supports it.",
+                    "batch-fallback": "RunWB2-backed one-shot journal execution.",
+                },
+                "aliases": {"gui": "gui", "visible": "gui", "no-gui": "no_gui", "no_gui": "no_gui"},
+                "capabilities": _ui_capabilities(self._ui_mode, self._backend),
+            }
+        if name in {"workbench.systems.summary", "systems.summary"}:
+            return self.systems_summary()
+        if name in {"workbench.project.identity", "project.identity"}:
+            return self.project_identity()
         if name == "session.summary":
             return {
                 "session_id": self._session_id,
                 "mode": self._mode,
+                "ui_mode": self._ui_mode,
                 "connected": self.is_connected,
                 "run_count": self._run_count,
                 "version": self._version,
@@ -534,9 +851,15 @@ class WorkbenchDriver:
         self._client = None
         self._session_id = None
         self._mode = None
+        self._ui_mode = None
         self._run_count = 0
         self._version = None
         self._backend = None
+        self._connected_at = None
+        self._last_run = None
+        self._last_error = None
+        self._launch_options = {}
+        self.probes = _default_workbench_probes(enable_gui=False)
 
     # ── SDK execution ──────────────────────────────────────────────
 

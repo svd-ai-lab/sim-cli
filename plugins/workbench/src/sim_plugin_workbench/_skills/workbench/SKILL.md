@@ -39,6 +39,9 @@ Concepts, API patterns, and version-agnostic reference:
 | `base/snippets/` | Numbered IronPython journal snippets (01 through 05). Each writes results to `%TEMP%/sim_wb_result.json`. |
 | `base/examples/` | Official PyWorkbench examples from pyansys.com — Fluent workflow, PyMechanical integration, logging, cooled turbine blade, cyclic symmetry, axisymmetric rotor, material designer. |
 | `base/workflows/static_structural/` | **6-step Static Structural walkthrough** (Engineering Data → Geometry → Model → Setup → Solution → Results). Per-cell API reference + gotchas + executable `walk_workflow.py`. |
+| `base/workflows/project_review_loop.md` | Required checkpoint loop: inspect health, project identity, systems summary, then run one bounded journal step. |
+| `base/workflows/debug_failed_exec.md` | Failure triage loop for failed Workbench snippets and RunWB2 journals. |
+| `base/workflows/mechanical_handoff.md` | Workbench-to-Mechanical checklist for Static Structural workflows. |
 | `base/known_issues.md` | Vendor quirks, SDK version constraints, IronPython limitations. |
 
 ## sdk/<active_sdk_layer>/ — PyWorkbench SDK specifics
@@ -71,17 +74,20 @@ Concepts, API patterns, and version-agnostic reference:
    acceptance criteria — if missing, ask the user.
 5. **Acceptance ≠ exit code.** Validate against physics-based criteria
    (e.g., component count, temperature range), not just exit code.
+6. **Workbench owns cells 1-3.** Engineering Data, Geometry, and Model
+   orchestration belongs here. Mechanical setup, solve, and results belong to
+   `solver=mechanical`.
 
 ---
 
 ## Required protocol (one paragraph)
 
-After `/connect` succeeds: read `base/reference/pyworkbench_api.md` and
-`base/reference/journal_scripting.md` to understand the execution model.
-Gather Category A inputs from the user. Execute IronPython journals
-incrementally via `sim exec`, checking `last.result` after every step.
-Use snippets from `base/snippets/` adapted to the user's task. After the
-final step, evaluate against the user's acceptance criteria. For the
-canonical smoke test, the snippet sequence is `01_smoke_test` →
-`02_create_static_structural`, followed by verifying 6 standard
-components exist.
+After `/connect` succeeds: read `base/reference/pyworkbench_api.md`,
+`base/reference/journal_scripting.md`, and
+`base/workflows/project_review_loop.md`. Inspect `session.health`,
+`workbench.project.identity`, and `workbench.systems.summary`. Execute
+IronPython journals incrementally via `sim exec`, checking `last.result` and
+`workbench.systems.summary` after every step. Use snippets from
+`base/snippets/` adapted to the user's task. Before handoff, read
+`base/workflows/mechanical_handoff.md` and confirm Workbench has a refreshed
+Model cell. Mechanical owns setup, solve, and result extraction.

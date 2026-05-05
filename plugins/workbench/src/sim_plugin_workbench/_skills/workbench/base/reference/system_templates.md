@@ -1,7 +1,6 @@
 # Workbench Analysis System Templates
 
 Available system templates for `GetTemplate(TemplateName=...)`.
-Verified on Ansys 24.1.
 
 Before assuming a template exists, ask the live Workbench session:
 
@@ -9,7 +8,7 @@ Before assuming a template exists, ask the live Workbench session:
 templates = GetAllVisibleTemplates()
 ```
 
-Template availability depends on installed products and license features.
+Template availability depends on the local Workbench configuration.
 For example, a Workbench environment may expose CFD/project templates but
 not Mechanical templates. If `GetTemplate(...)` raises a
 `Template ... not found in Project` error, treat it as a missing
@@ -70,11 +69,10 @@ system2 = template2.CreateSystem()
 
 ## Notes
 
-- The exact list of available templates depends on the installed Ansys
-  products and licenses.
+- The exact list of available templates depends on the local Workbench
+  configuration.
 - Use `GetAllVisibleTemplates()` during smoke setup and skip or choose a
   template that is present instead of assuming Mechanical templates exist.
 - `Solver` parameter values: `"ANSYS"` (Mechanical), `"FLUENT"`,
   `"CFX"`, `"MAXWELL"`, etc.
-- Some templates may not be available if the corresponding product is
-  not installed.
+- Some templates may not be available in a given environment.

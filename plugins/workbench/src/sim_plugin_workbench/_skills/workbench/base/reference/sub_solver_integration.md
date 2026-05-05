@@ -80,5 +80,5 @@ when the Workbench session terminates.
 
 - `system_name` is the Workbench system identifier (e.g., "SYS", "SYS 1")
 - The system must exist in the project before starting its server
-- Sub-solver licenses are consumed when the server starts
+- Start only the sub-solver server needed for the current workflow
 - Only one server per system at a time

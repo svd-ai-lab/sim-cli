@@ -62,7 +62,7 @@ mechanical = connect_to_mechanical(ip='localhost', port=server_port)
 print(mechanical.project_directory)
 ```
 
-Output: `C:\Users\ansys\AppData\Local\Temp\WB_ansys_19576_2\wbnew_files\`
+Output: `<temporary Workbench project files directory>`
 
 ## Analysis Execution
 

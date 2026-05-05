@@ -36,6 +36,18 @@ def test_wheel_contains_skills(tmp_path: Path) -> None:
         "sim_plugin_workbench/__init__.py",
         "sim_plugin_workbench/driver.py",
         "sim_plugin_workbench/_skills/workbench/SKILL.md",
+        "sim_plugin_workbench/_skills/workbench/base/known_issues.md",
+        "sim_plugin_workbench/_skills/workbench/base/reference/pyworkbench_api.md",
+        "sim_plugin_workbench/_skills/workbench/base/reference/journal_scripting.md",
+        "sim_plugin_workbench/_skills/workbench/base/reference/system_templates.md",
+        "sim_plugin_workbench/_skills/workbench/base/snippets/01_smoke_test.py",
+        "sim_plugin_workbench/_skills/workbench/base/snippets/02_create_static_structural.py",
+        "sim_plugin_workbench/_skills/workbench/base/workflows/static_structural/README.md",
+        "sim_plugin_workbench/_skills/workbench/base/workflows/static_structural/evidence/README.md",
+        "sim_plugin_workbench/_skills/workbench/base/workflows/project_review_loop.md",
+        "sim_plugin_workbench/_skills/workbench/base/workflows/debug_failed_exec.md",
+        "sim_plugin_workbench/_skills/workbench/base/workflows/mechanical_handoff.md",
+        "sim_plugin_workbench/_skills/workbench/tests/test_orchestration.py",
     }
     missing = required - names
     assert not missing, f"missing from wheel: {missing}"

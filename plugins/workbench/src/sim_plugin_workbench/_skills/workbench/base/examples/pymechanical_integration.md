@@ -66,7 +66,7 @@ print(mechanical.project_directory)
 
 Output:
 ```
-C:\Users\ansys\AppData\Local\Temp\WB_ansys_8664_2\wbnew_files\
+<temporary Workbench project files directory>
 ```
 
 ## Running Solver Script

@@ -54,7 +54,7 @@ systems. Use the Fluent solver API for mesh and result operations.
 **Affects**: All SDK versions, all solver versions
 **Category**: Skill
 **Description**: Files uploaded via `wb.upload_file()` land in the server's
-TEMP directory (`C:\Users\<user>\AppData\Local\Temp`), not in the IronPython
+TEMP directory (`%TEMP%`), not in the IronPython
 process's `os.getcwd()` (which is `c:\windows\system32\spool\drivers\x64\3`).
 IronPython scripts must use `os.environ.get("TEMP")` as base path to find
 uploaded files.
