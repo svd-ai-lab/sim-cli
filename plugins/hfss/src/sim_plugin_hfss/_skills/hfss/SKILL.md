@@ -78,6 +78,20 @@ Return JSON-serializable data from the last expression when possible:
 }
 ```
 
+## Modeling Gotchas
+
+- For small antenna feeds between curved conductors, do not rely on
+  `lumped_port(..., create_port_sheet=True)` until the generated sheet has
+  been visually or solver-message validated. HFSS can create a non-planar port
+  sheet between round objects, which fails during port refinement. Prefer an
+  explicit planar sheet plus an explicit two-point integration line.
+- Save the project before a real solve smoke, and capture AEDT messages
+  immediately after `analyze_setup(...)` if it returns false. Reopening the
+  project later can lose the most useful failure context.
+- For GUI evidence on Windows, inspect the screenshot after taking it. If a
+  full-desktop capture is black, capture the AEDT window by handle instead of
+  treating the file's existence as visual proof.
+
 ## First-Version Limits
 
 - Direct `.aedt` and `.aedtz` solving is not validated yet.
