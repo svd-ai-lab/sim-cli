@@ -92,6 +92,42 @@ for PyMechanical / Ansys Mechanical sessions.
 8. **Check docs or probe before guessing APIs.** If unsure about an Abaqus
    keyword, CAE method, command option, or output variable, follow
    `base/reference/doc_lookup.md` before editing the real model.
+9. **Use a case workspace for non-trivial work.** Do not scatter generated
+   scripts, `.cae`, `.odb`, diagnostics, renders, metrics, and reports across
+   the shell cwd, temp folders, and chat history. Establish one case or run
+   folder before modeling, and keep artifacts in predictable subfolders.
+
+## Case workspace shape
+
+For any non-trivial Abaqus task, establish or verify a durable case workspace
+before creating geometry, submitting jobs, rendering results, or writing a
+report. A workspace is just a self-contained project folder that a future
+agent or human can reopen:
+
+```text
+<workdir>/
+  model/          # .cae database, named checkpoints, model copies
+  input/          # parameters, CAD, source data, user-provided decks
+  scripts/        # generated or hand-written Abaqus/CAE and ODB scripts
+  run/            # solver-native job outputs: .inp, .odb, .msg, .sta, .dat
+  render/         # Abaqus/CAE or Viewer PNG/MP4/viewport evidence
+  output/         # metrics JSON, tables, extracted summaries
+  report/         # markdown/html/pdf summary when generated
+```
+
+Use the user-provided folder when one exists. When starting from scratch,
+choose a descriptive slug such as `runs/bracket_static` or
+`runs/hole_plate_modal` and pass it as `--workspace` for CAE authoring
+sessions. The driver may keep its managed `session.cae` at the workspace root;
+save named review checkpoints under `model/` when they help resume or compare
+work, for example `model/hole_plate_01_geometry.cae`,
+`model/hole_plate_02_mesh.cae`, and `model/hole_plate_03_solved.cae`.
+
+Prefer Abaqus/CAE or Abaqus Viewer for canonical render evidence. `render/`
+should contain solver-rendered contour images, deformed-shape views, modal
+views, or animations when requested. `output/` should contain machine-readable
+metrics and extracted tables. `report/` should reference those artifacts by
+path and state which files support each conclusion.
 
 ---
 
@@ -99,7 +135,8 @@ for PyMechanical / Ansys Mechanical sessions.
 
 After `sim check abaqus` confirms the solver is available: gather Category A
 inputs from the user (geometry, material properties, loads, BCs, analysis
-type, acceptance criteria).
+type, acceptance criteria). For non-trivial work, establish the case workspace
+above before generating files.
 
 For batch work: write the `.inp` deck or `.py` script, lint with `sim lint`,
 execute with `sim run --solver abaqus`, then choose the post-processing path
@@ -107,11 +144,15 @@ by artifact: `.dat` -> Python text parsing on the fetched file; ODB -> vendor
 Python via `sim run --solver abaqus script.py` (sim-cli is the right and only
 tool here). For ordinary file-side post-processing and plotting, follow the
 sim-cli Python-helper environment guidance. Validate against physics-based
-acceptance criteria.
+acceptance criteria. Keep source decks/scripts under `input/` or `scripts/`,
+job products under `run/`, Abaqus-rendered images or animations under
+`render/`, and extracted metrics/tables under `output/`.
 
 For modeling/debug/reporting work: start `sim connect --solver abaqus --mode
-cae --ui-mode no_gui`, optionally adding `--backend bridge` for a live noGUI
-CAE process. Build the model in small CAE Python snippets, inspect after each
-major step, submit jobs from the session, read diagnostics, fix the model, and
-produce a report that states assumptions, units, mesh, BCs, loads, solver
-messages, result checks, and acceptance status.
+cae --ui-mode no_gui --workspace <workdir>`, optionally adding
+`--backend bridge` for a live noGUI CAE process. Build the model in small CAE
+Python snippets, inspect after each major step, save checkpoints when useful,
+submit jobs from the session, read diagnostics, render canonical views in
+Abaqus/CAE or Viewer, fix the model, and produce a report that states
+assumptions, units, mesh, BCs, loads, solver messages, result checks,
+artifact paths, and acceptance status.

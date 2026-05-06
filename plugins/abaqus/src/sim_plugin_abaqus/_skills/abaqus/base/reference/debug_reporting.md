@@ -51,10 +51,34 @@ print("\n".join(errors))
 1. Classify the failure: modeling error, missing set/surface, material/section
    issue, mesh quality, contact, convergence, license/environment, or
    post-processing.
-2. Fix the smallest model element that explains the failure.
-3. Re-inspect the model summary before rerunning.
-4. Rerun and compare diagnostics against the previous attempt.
-5. Record what changed and why in the final report.
+2. Keep the failure evidence in the case workspace: native solver files in
+   `run/`, parser output or metrics in `output/`, and screenshots/renders in
+   `render/`.
+3. Fix the smallest model element that explains the failure.
+4. Re-inspect the model summary before rerunning.
+5. Rerun and compare diagnostics against the previous attempt.
+6. Record what changed and why in the final report.
+
+## Workspace Evidence
+
+For non-trivial work, reports and debugging should assume a self-contained case
+workspace:
+
+```text
+<workdir>/
+  model/          # .cae database and checkpoints
+  input/          # parameters, CAD, source data, user-provided decks
+  scripts/        # Abaqus/CAE and ODB scripts used to create or inspect
+  run/            # .inp, .odb, .msg, .sta, .dat, .com, logs
+  render/         # Abaqus/CAE or Viewer images/animations
+  output/         # parsed diagnostics, metrics JSON, tables
+  report/         # generated summaries
+```
+
+Abaqus/CAE or Abaqus Viewer should produce the canonical render evidence for
+Abaqus-specific review. Use host-side Python for text parsing and tables, but
+run ODB readers and viewport/export scripts through Abaqus embedded Python.
+The report should make it clear which artifacts support each claim.
 
 ## Report Checklist
 
@@ -68,7 +92,9 @@ A usable Abaqus report should include:
 - Solver status: completed/failed, key warnings/errors, increments/cutbacks.
 - Result quantities tied to acceptance criteria.
 - Engineering interpretation: pass/fail, margin, and dominant assumptions.
-- Reproducibility: input deck or CAE script path, job name, and output files.
+- Reproducibility: case workspace path, input deck or CAE script path, job
+  name, checkpoint `.cae` files, ODB/text diagnostics, render evidence, and
+  output metrics/tables.
 
 ## Report Tone
 

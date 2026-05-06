@@ -38,31 +38,74 @@ loops when a local interactive process is acceptable. The bridge uses a
 per-session token and should be used only in trusted workspaces owned by the
 session user.
 
+## Case Workspace
+
+For non-trivial authoring, the `--workspace` value is the case folder, not a
+throwaway temp directory. Create or verify this structure before the first real
+modeling snippet:
+
+```text
+<workdir>/
+  model/          # .cae database, named checkpoints, model copies
+  input/          # parameters, CAD, source data, user-provided decks
+  scripts/        # generated or hand-written Abaqus/CAE and ODB scripts
+  run/            # solver-native job outputs: .inp, .odb, .msg, .sta, .dat
+  render/         # Abaqus/CAE or Viewer PNG/MP4/viewport evidence
+  output/         # metrics JSON, tables, extracted summaries
+  report/         # markdown/html/pdf summary when generated
+```
+
+The driver may manage `session.cae` at the workspace root. Treat that as the
+live session database, and save named checkpoints under `model/` when they help
+review or resume work:
+
+```text
+model/<case_slug>_01_geometry.cae
+model/<case_slug>_02_loads_mesh.cae
+model/<case_slug>_03_solved.cae
+```
+
+Keep generated snippets under `scripts/` when they are meant to be reused.
+Keep Abaqus job files under `run/` by setting job names and working paths
+deliberately in the CAE snippets. Put Abaqus-rendered contour images,
+deformed-shape views, modal views, and animations under `render/`. Put
+machine-readable extrema, probes, frame inventories, and tables under
+`output/`. Reports should live under `report/` and reference these artifacts by
+path.
+
 ## Agent Loop
 
 1. Capture Category A inputs: geometry, material data, units, contacts,
    loads, boundary conditions, analysis type, mesh criteria, and acceptance
    criteria.
-2. Create the model skeleton: model name, part geometry, materials, sections,
+2. Establish the case workspace, create the subfolders above, and decide the
+   case slug, job name, and checkpoint names.
+3. Create the model skeleton: model name, part geometry, materials, sections,
    assembly instances, datum/sets/surfaces.
-3. Inspect immediately:
+4. Inspect immediately:
 
 ```powershell
 sim inspect cae.model_summary
 ```
 
-4. Add steps, interactions, BCs, loads, output requests, and mesh controls in
+5. Add steps, interactions, BCs, loads, output requests, and mesh controls in
    small snippets.
-5. Submit a job from CAE Python only after the model summary contains the
+6. Save a named `.cae` checkpoint after each passed major layer when the model
+   has become valuable to resume or review.
+7. Submit a job from CAE Python only after the model summary contains the
    expected parts, materials, sections, steps, loads, BCs, instances, and job.
-6. Inspect diagnostics:
+8. Inspect diagnostics and generated files:
 
 ```powershell
 sim inspect job.diagnostics
 sim inspect workdir.files
 ```
 
-7. Fix modeling or solver issues, rerun, and only then report results.
+9. Render canonical review views with Abaqus/CAE or Abaqus Viewer when visual
+   evidence is needed, and place them under `render/`.
+10. Extract metrics or tables needed for acceptance into `output/`.
+11. Fix modeling or solver issues, rerun, and only then report results under
+   `report/`.
 
 ## Snippet Contract
 
@@ -86,6 +129,9 @@ stale state.
 
 Do not submit a job until these facts are true:
 
+- A case workspace exists and contains the expected `model/`, `input/`,
+  `scripts/`, `run/`, `render/`, `output/`, and `report/` folders or a
+  deliberate documented subset.
 - Units are stated in the conversation or report.
 - Every part has a material and section assignment.
 - The assembly contains the expected instances.
