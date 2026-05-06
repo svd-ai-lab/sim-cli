@@ -4,10 +4,11 @@
 
 <br>
 
-**Make every engineering tool agent-native.**
+**Make CAD, CAE, and physics simulation software agent-native.**
 
-*Today's CAD and CAE software was built for engineers clicking through GUIs.*
-*Tomorrow's user is an LLM agent — and it needs a way in.*
+`sim` is an open-source CLI + HTTP runtime for automating engineering simulation tools with LLM agents. It gives agents a standard way to launch solvers, execute code step by step, inspect state, capture screenshots, and recover from errors across GUI-heavy tools like COMSOL, ANSYS, Abaqus, Fluent, Simulink, LTspice, and more.
+
+*Think of it as a container runtime for simulations: agents talk to `sim`, and `sim` talks to solvers.*
 
 <p align="center">
   <a href="#-quick-start"><img src="https://img.shields.io/badge/Quick_Start-2_min-3b82f6?style=for-the-badge" alt="Quick Start"></a>
