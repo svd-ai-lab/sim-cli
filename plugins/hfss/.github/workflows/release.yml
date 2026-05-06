@@ -1,0 +1,76 @@
+name: Release to PyPI
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected-version:
+        description: Version in pyproject.toml to publish
+        required: true
+        type: string
+      ref:
+        description: Git ref to publish
+        required: false
+        default: main
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: pypi
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify version
+        run: |
+          expected="${{ inputs.expected-version }}"
+          version=$(uv run --no-project python -c "import pathlib, tomllib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])")
+          if [ "$expected" != "$version" ]; then
+            echo "expected version $expected does not match pyproject.toml version $version" >&2
+            exit 1
+          fi
+
+      - name: Check PyPI version availability
+        run: |
+          uv run --no-project python - <<'PY'
+          import pathlib
+          import sys
+          import tomllib
+          import urllib.error
+          import urllib.request
+
+          project = tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]
+          name = project["name"]
+          version = project["version"]
+          url = f"https://pypi.org/pypi/{name}/{version}/json"
+          try:
+              with urllib.request.urlopen(url, timeout=20):
+                  pass
+          except urllib.error.HTTPError as exc:
+              if exc.code == 404:
+                  sys.exit(0)
+              raise
+          print(f"{name} {version} already exists on PyPI", file=sys.stderr)
+          sys.exit(1)
+          PY
+
+      - name: Build package
+        run: uv build
+
+      - name: Publish to PyPI
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.UV_PUBLISH_TOKEN }}
+        run: |
+          if [ -z "$UV_PUBLISH_TOKEN" ]; then
+            echo "UV_PUBLISH_TOKEN secret is not configured" >&2
+            exit 1
+          fi
+          uv publish --token "$UV_PUBLISH_TOKEN" dist/*

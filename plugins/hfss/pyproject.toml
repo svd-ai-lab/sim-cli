@@ -1,0 +1,59 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sim-plugin-hfss"
+version = "0.1.0"
+description = "Ansys HFSS driver for sim-cli, distributed as a plugin"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+authors = [{ name = "svd-ai-lab" }]
+keywords = ["hfss", "aedt", "pyansys", "pyaedt", "em", "simulation", "sim-cli", "plugin"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: Apache Software License",
+]
+dependencies = [
+    "sim-cli-core>=0.3.4",
+    "pyaedt>=0.26.3,<1",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8",
+    "build>=1.0",
+]
+
+[project.entry-points."sim.drivers"]
+hfss = "sim_plugin_hfss:HfssDriver"
+
+[project.entry-points."sim.skills"]
+hfss = "sim_plugin_hfss:skills_dir"
+
+[project.entry-points."sim.plugins"]
+hfss = "sim_plugin_hfss:plugin_info"
+
+[project.urls]
+Homepage = "https://github.com/svd-ai-lab/sim-plugin-hfss"
+Repository = "https://github.com/svd-ai-lab/sim-plugin-hfss"
+Issues = "https://github.com/svd-ai-lab/sim-plugin-hfss/issues"
+Changelog = "https://github.com/svd-ai-lab/sim-plugin-hfss/blob/main/CHANGELOG.md"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sim_plugin_hfss"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+  "integration: tests that build wheels or touch external tooling",
+]
