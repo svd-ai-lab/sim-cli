@@ -82,12 +82,11 @@ The server supports multiple concurrent sessions keyed by session_id. Each `Sess
 
 `LintResult`, `Diagnostic`, `RunResult`, `ConnectionInfo` are dataclasses with `to_dict()` for JSON serialization.
 
-### Driver registry (`src/sim/drivers/__init__.py`)
+### Driver registry (plugin entry points)
 
-Drivers are resolved lazily through two channels:
+`sim-cli-core` is solver-agnostic and ships with no in-tree solver drivers. Drivers are provided by installed plugin packages that expose the `sim.drivers` entry-point group. Use `sim plugin list` and `sim plugin info <name>` to inspect the plugins visible in the active environment.
 
-- **`_BUILTIN_REGISTRY`** — an ordered list of `(name, "module:Class")` tuples for the open-source drivers that ship with `sim-cli-core` itself (PyBaMM, OpenFOAM, CalculiX, gmsh, SU2, LAMMPS, Elmer, scikit-fem, MFEM, OpenSeesPy, SfePy, OpenMDAO, FiPy, pymoo, Pyomo, SimPy, Trimesh, Devito, CoolProp, scikit-rf, pandapower, ParaView, meshio, PyVista, Newton, Isaac Sim, LTspice). The canonical list lives in `src/sim/drivers/__init__.py`.
-- **`sim.drivers` entry-point group** — external drivers register themselves via standard Python entry points and are discovered at import time, validated, and appended after the built-ins. Built-ins win on name collisions. Each plugin lives in its own out-of-tree package with its own `compatibility.yaml`.
+Plugin implementation work belongs in the owning `sim-plugin-<solver>` repository, where the package metadata, `DriverProtocol` implementation, `compatibility.yaml`, bundled skills, and plugin tests live. Do not add solver drivers under `src/sim/drivers/<name>` in this repo.
 
 A driver may set `supports_session = True` to implement the persistent-session lifecycle (`launch`/`run`/`query`/`disconnect`); the rest are one-shot only. `get_driver(name)` looks up by `.name` attribute and lazily imports the implementation module on first use, so a broken plugin does not crash the CLI.
 
@@ -105,14 +104,11 @@ A driver may set `supports_session = True` to implement the persistent-session l
 
 Session routing rules: an explicit `X-Sim-Session` header wins (404 if unknown); otherwise the server falls back to the sole live session; otherwise `/exec` returns 400. Clients can also set `SIM_SESSION` env var or pass `sim --session <id> ...` to scope a whole CLI invocation.
 
-## Adding a new driver
+## Adding or changing a solver driver
 
-1. Create `src/sim/drivers/<name>/driver.py` implementing `DriverProtocol`
-2. (Optional) `runtime.py` for persistent-session support
-3. Register in `src/sim/drivers/__init__.py`: import and append to `DRIVERS`
-4. If the driver needs server-side launch logic, extend `server.py`'s `/connect` handler accordingly
+Create or update solver drivers in the owning `sim-plugin-<solver>` repository. A plugin should implement `DriverProtocol`, register the driver through `[project.entry-points."sim.drivers"]` in its `pyproject.toml`, and carry its own compatibility metadata, bundled skills, and tests.
 
-See `pybamm/driver.py` for the smallest reference implementation. Persistent-session examples live in the out-of-tree plugin packages.
+The core CLI should only change when the shared runtime contract or plugin discovery machinery changes. Before editing driver-facing docs or behavior, inspect the installed environment with `sim plugin list` and `sim plugin info <solver>`, then work in the plugin repo that owns that solver.
 
 ## Test Layout
 
@@ -131,12 +127,10 @@ tests/
     test_logs.py                     sim logs CLI
     test_multi_session.py            session routing + concurrency
     test_run.py                      one-shot subprocess execution
-  drivers/                           per-driver unit + integration tests for in-tree drivers
-  fixtures/                          mock solver scripts (one set per in-tree driver, plus shared mocks)
-  execution/                         optional end-to-end scripts for in-tree drivers
+  fixtures/                          mock scripts and shared test assets
 ```
 
-Tests for out-of-tree plugin drivers live in their own plugin repos. Tests in this repo that require a real solver are gated by import-availability flags (e.g. `HAS_PYBAMM`) and skip gracefully when the package is missing.
+Solver plugin tests live in their own plugin repos. Tests in this repo cover the shared CLI/runtime contract and plugin discovery behavior.
 
 ## Notes
 
