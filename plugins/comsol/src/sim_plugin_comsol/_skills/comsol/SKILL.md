@@ -285,6 +285,17 @@ Treat COMSOL as a live engineering state, not as a one-shot code generator.
 Most user-facing sessions are human-in-the-loop Desktop sessions; keep the
 visible model coherent after every step.
 
+COMSOL's Java API is stateful and layered. Many `set(...)` calls mutate the
+model tree, but downstream objects and the Desktop view may not reflect those
+changes until the relevant sequence is built or run. Use `run()` calls as
+intentional synchronization points when the next step depends on updated state
+or when the user expects the Model Builder / Graphics view to be current. Do
+not make this mechanical: batch coherent edits first, then choose the smallest
+appropriate build/run for the layer you changed (for example geometry, mesh,
+plot, study, or solver). The goal is to understand and respect COMSOL's
+commit/refresh mechanism, not to force a fixed `run()` after every property
+assignment.
+
 0. If the question is about a saved `.mph` (parameters, physics tags,
    solved/unsolved state, mesh size), use `inspect_mph(path)` first — no
    JVM and no `sim connect` needed. Skip to step 1 only if the model needs
