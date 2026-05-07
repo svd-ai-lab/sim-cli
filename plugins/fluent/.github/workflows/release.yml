@@ -1,6 +1,6 @@
-name: release
+name: Release
 
-on:
+"on":
   workflow_dispatch:
     inputs:
       expected-version:
