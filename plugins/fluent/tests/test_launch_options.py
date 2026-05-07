@@ -39,6 +39,30 @@ def _install_fake_pyfluent(monkeypatch: pytest.MonkeyPatch, calls: list[dict]) -
     monkeypatch.setitem(sys.modules, "ansys.fluent.core", core)
 
 
+def _install_signature_limited_pyfluent(
+    monkeypatch: pytest.MonkeyPatch,
+    calls: list[dict],
+) -> None:
+    ansys = types.ModuleType("ansys")
+    fluent = types.ModuleType("ansys.fluent")
+    core = types.ModuleType("ansys.fluent.core")
+    core.__version__ = "0.37.9"
+    core.config = _Config()
+
+    def launch_fluent(*, ui_mode, precision, mode):
+        calls.append({"ui_mode": ui_mode, "precision": precision, "mode": mode})
+        return _FakeSession()
+
+    core.launch_fluent = launch_fluent
+    core.connect_to_fluent = lambda **_kwargs: _FakeSession()
+    fluent.core = core
+    ansys.fluent = fluent
+
+    monkeypatch.setitem(sys.modules, "ansys", ansys)
+    monkeypatch.setitem(sys.modules, "ansys.fluent", fluent)
+    monkeypatch.setitem(sys.modules, "ansys.fluent.core", core)
+
+
 def test_launch_forwards_normalized_fluent_options(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -115,6 +139,28 @@ def test_launch_workspace_alias_maps_to_cwd(
     assert result["launch_options"]["cwd"] == str(tmp_path.resolve())
 
 
+def test_launch_filters_kwargs_for_older_pyfluent_signatures(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    calls: list[dict] = []
+    _install_signature_limited_pyfluent(monkeypatch, calls)
+
+    driver = PyFluentDriver(sim_dir=tmp_path / ".sim")
+    result = driver.launch(
+        mode="solver",
+        ui_mode="no_gui",
+        dimension=2,
+        processor_count=4,
+        cwd=tmp_path,
+    )
+
+    assert calls == [{"ui_mode": "no_gui", "precision": "double", "mode": "solver"}]
+    assert result["launch_options"]["dimension"] == 2
+    assert result["launch_options"]["processor_count"] == 4
+    assert result["launch_options"]["cwd"] == str(tmp_path.resolve())
+
+
 def test_launch_rejects_conflicting_processor_arguments(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -142,7 +188,7 @@ def test_launch_rejects_unknown_fluent_options(
         driver.launch(mode="solver", ui_mode="no_gui", unsupported=True)
 
 
-def test_run_artifact_roles_include_fluent_pdf_fla_and_json(
+def test_run_artifact_roles_include_fluent_outputs(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -156,6 +202,13 @@ root = Path(r"{tmp_path}")
 (root / "table.pdf").write_text("pdf")
 (root / "chem.fla").write_text("fla")
 (root / "result.json").write_text("{{}}")
+(root / "case.cas.h5").write_text("case")
+(root / "data.dat.h5").write_text("data")
+(root / "mesh.msh.h5").write_text("mesh")
+(root / "run.trn").write_text("transcript")
+(root / "run.jou").write_text("journal")
+(root / "profile.csv").write_text("x,y")
+(root / "contour.png").write_text("png")
 _result = {{"status": "ok"}}
 """
     result = driver.run(code, label="artifact-role-test")
@@ -165,3 +218,10 @@ _result = {{"status": "ok"}}
     assert roles["table.pdf"] == "pdf-table"
     assert roles["chem.fla"] == "flamelet"
     assert roles["result.json"] == "result-json"
+    assert roles["case.cas.h5"] == "fluent-case"
+    assert roles["data.dat.h5"] == "fluent-data"
+    assert roles["mesh.msh.h5"] == "fluent-mesh"
+    assert roles["run.trn"] == "fluent-transcript"
+    assert roles["run.jou"] == "fluent-journal"
+    assert roles["profile.csv"] == "tabular-data"
+    assert roles["contour.png"] == "image"

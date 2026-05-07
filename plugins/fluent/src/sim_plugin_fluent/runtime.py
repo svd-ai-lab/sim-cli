@@ -20,6 +20,7 @@ class PyFluentRuntime:
         self._sessions: dict[str, SessionInfo] = {}
         self._active_id: str | None = None
         self._last_record: RunRecord | None = None
+        self._records: list[RunRecord] = []
 
     # ── session management ───────────────────────────────────────────────────────
 
@@ -47,10 +48,25 @@ class PyFluentRuntime:
     def active_session_id(self) -> str | None:
         return self._active_id
 
+    @property
+    def sim_dir(self) -> Path:
+        return self._sim_dir
+
+    @property
+    def run_count(self) -> int:
+        return len(self._records)
+
+    @property
+    def records(self) -> tuple[RunRecord, ...]:
+        return tuple(self._records)
+
     def get_active_session(self) -> SessionInfo | None:
         if self._active_id is None:
             return None
         return self._sessions.get(self._active_id)
+
+    def clear_active(self) -> None:
+        self._active_id = None
 
     # ── snippet execution ────────────────────────────────────────────────────────
 
@@ -140,6 +156,7 @@ class PyFluentRuntime:
         )
 
         self._last_record = record
+        self._records.append(record)
         self._write_log(record)
         return record
 

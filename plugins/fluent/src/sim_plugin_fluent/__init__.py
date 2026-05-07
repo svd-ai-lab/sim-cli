@@ -1,6 +1,6 @@
-"""PyFluent driver plugin for sim-cli.
+"""PyFluent driver plugin for sim.
 
-Distributed as an out-of-tree plugin; discovered by sim-cli via the
+Distributed as an out-of-tree plugin; discovered by sim via the
 ``sim.drivers`` entry-point group. Bundled skill files (under ``_skills/``)
 are exposed via the ``sim.skills`` entry-point group.
 """
@@ -13,7 +13,7 @@ skills_dir = files(__name__) / "_skills"
 
 plugin_info = {
     "name": "fluent",
-    "summary": "Driver plugin for sim-cli.",
+    "summary": "Ansys Fluent driver and bundled skill for sim.",
     "homepage": "https://github.com/svd-ai-lab/sim-plugin-fluent",
     "license_class": "commercial",
     "solver_name": "fluent",

@@ -34,7 +34,9 @@ def test_wheel_contains_skills(tmp_path: Path) -> None:
 
     required = {
         "sim_plugin_fluent/__init__.py",
+        "sim_plugin_fluent/artifacts.py",
         "sim_plugin_fluent/driver.py",
+        "sim_plugin_fluent/queries.py",
         "sim_plugin_fluent/_skills/fluent/SKILL.md",
         "sim_plugin_fluent/_skills/fluent/base/snippets/setup_partially_premixed_flamelet.py",
         "sim_plugin_fluent/_skills/fluent/base/snippets/write_pdf_table.py",
@@ -43,6 +45,8 @@ def test_wheel_contains_skills(tmp_path: Path) -> None:
     }
     missing = required - names
     assert not missing, f"missing from wheel: {missing}"
+    assert not any("/skill_tests/" in name for name in names)
+    assert not any("/_skills/fluent/tests/" in name for name in names)
 
 
 def test_flamelet_skill_regression_text() -> None:
@@ -57,3 +61,4 @@ def test_flamelet_skill_regression_text() -> None:
     assert "Partially Premixed Flamelet/PDF Table Run" in task_templates
     assert "write_pdf_cmd" in task_templates
     assert "read_case -> read_pdf -> read_data" in acceptance
+    assert "sim-cli generic" not in task_templates

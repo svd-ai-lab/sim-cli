@@ -1,16 +1,9 @@
 # Fluent-specific runtime dependencies
 
-The generic connect / exec / inspect / disconnect loop, step-execution
-pattern, state-query pattern, failure handling, and acceptance
-evaluation all live in the shared sim-cli skill:
-
-- [`sim-cli/reference/lifecycle.md`](../../../sim-cli/reference/lifecycle.md) — patterns 0–6
-- [`sim-cli/reference/command_surface.md`](../../../sim-cli/reference/command_surface.md)
-- [`sim-cli/reference/escalation.md`](../../../sim-cli/reference/escalation.md)
-- [`sim-cli/reference/acceptance.md`](../../../sim-cli/reference/acceptance.md)
-
-This file covers only the **Fluent-specific** dependency rules that the
-generic patterns do not capture.
+This file covers Fluent-specific dependency rules that apply whether you
+are using a live sim session or a direct PyFluent script. When you choose
+the live sim path, combine these rules with the sim runtime lifecycle and
+inspect commands surfaced by the active session.
 
 ---
 

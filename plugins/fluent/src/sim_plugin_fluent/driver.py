@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import ast
+import inspect
 import os
 import re
+import shutil
 import uuid
 from pathlib import Path
 import sys
@@ -19,6 +21,7 @@ from sim.inspect import (
 )
 from sim.runner import run_subprocess
 
+from .artifacts import classify_fluent_artifact
 from .queries import handle_query
 from .runtime import PyFluentRuntime
 
@@ -30,12 +33,6 @@ _DEFAULT_FLUENT_SDK_ATTRS: list[str] = [
     "setup.models.viscous.model",
     "setup.models.energy.enabled",
 ]
-
-_FLUENT_ARTIFACT_ROLES = {
-    ".pdf": "pdf-table",
-    ".fla": "flamelet",
-    ".json": "result-json",
-}
 
 
 def _default_fluent_probes(enable_gui: bool = False) -> list:
@@ -114,12 +111,34 @@ def _normalize_launch_options(
     }
 
 
-def _fluent_artifact_role(path: str, current_role: str) -> str:
-    low = path.lower()
-    for suffix, role in _FLUENT_ARTIFACT_ROLES.items():
-        if low.endswith(suffix):
-            return role
-    return current_role
+def _call_with_supported_kwargs(fn, kwargs: dict):
+    """Call a PyFluent function while tolerating SDK keyword drift."""
+    try:
+        sig = inspect.signature(fn)
+    except (TypeError, ValueError):
+        return fn(**kwargs)
+
+    params = sig.parameters
+    if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values()):
+        return fn(**kwargs)
+
+    filtered = {
+        name: value
+        for name, value in kwargs.items()
+        if name in params
+    }
+    return fn(**filtered)
+
+
+def _candidate_install_roots(path: Path) -> list[Path]:
+    roots = [path]
+    if path.name.lower() == "fluent":
+        roots.append(path.parent)
+    for parent in path.parents:
+        if re.fullmatch(r"v\d{3}", parent.name, flags=re.IGNORECASE):
+            roots.append(parent)
+            break
+    return roots
 
 
 def _path_to_fluent_install(path: Path, source: str) -> "SolverInstall | None":
@@ -159,17 +178,32 @@ def _scan_fluent_installs() -> list[SolverInstall]:
     """
     found: dict[str, SolverInstall] = {}  # path -> install (dedup by path)
 
+    def add_candidate(path: Path, source: str) -> None:
+        for root in _candidate_install_roots(path):
+            install = _path_to_fluent_install(root, source=source)
+            if install and install.path not in found:
+                found[install.path] = install
+
     # 1) AWP_ROOT* env vars
     for k, v in os.environ.items():
         if not re.match(r"AWP_ROOT\d{3}$", k):
             continue
         if not v:
             continue
-        install = _path_to_fluent_install(Path(v), source=f"env:{k}")
-        if install and install.path not in found:
-            found[install.path] = install
+        add_candidate(Path(v), source=f"env:{k}")
 
-    # 2) Default install dirs (each platform)
+    # 2) Explicit Fluent root hints.
+    for k in ("SIM_FLUENT_ROOT", "FLUENT_ROOT", "PYFLUENT_FLUENT_ROOT"):
+        v = os.environ.get(k)
+        if v:
+            add_candidate(Path(v), source=f"env:{k}")
+
+    # 3) Fluent on PATH.
+    fluent_binary = shutil.which("fluent")
+    if fluent_binary:
+        add_candidate(Path(fluent_binary), source="path:fluent")
+
+    # 4) Default install dirs (each platform)
     bases: list[Path] = [
         Path(r"C:\Program Files\ANSYS Inc"),
         Path("/usr/ansys_inc"),
@@ -180,11 +214,9 @@ def _scan_fluent_installs() -> list[SolverInstall]:
         if not base.is_dir():
             continue
         for vdir in sorted(base.glob("v???")):
-            install = _path_to_fluent_install(vdir, source=f"default-path:{base}")
-            if install and install.path not in found:
-                found[install.path] = install
+            add_candidate(vdir, source=f"default-path:{base}")
 
-    # 3) Windows registry (best effort; never raises)
+    # 5) Windows registry (best effort; never raises)
     try:
         import winreg  # type: ignore[import-not-found]
         for hive in (winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER):
@@ -204,12 +236,10 @@ def _scan_fluent_installs() -> list[SolverInstall]:
                     try:
                         sub = winreg.OpenKey(key, subname)
                         install_dir, _ = winreg.QueryValueEx(sub, "InstallDir")
-                        install = _path_to_fluent_install(
-                            Path(install_dir).parent,  # InstallDir is .../fluent — go up
+                        add_candidate(
+                            Path(install_dir).parent,
                             source="registry:HKLM" if hive == winreg.HKEY_LOCAL_MACHINE else "registry:HKCU",
                         )
-                        if install and install.path not in found:
-                            found[install.path] = install
                     except (OSError, FileNotFoundError):
                         continue
             finally:
@@ -245,6 +275,7 @@ class PyFluentDriver:
         # working dir).
         self.probes = _default_fluent_probes()
         self._gui = None  # GuiController; set at launch() time when ui_mode=gui
+        self._pyfluent_version: str | None = None
 
     # ── DriverProtocol ───────────────────────────────────────────────────────────
 
@@ -417,6 +448,7 @@ class PyFluentDriver:
                 "ansys-fluent-core is not installed. "
                 "Run: pip install ansys-fluent-core"
             ) from exc
+        self._pyfluent_version = getattr(pyfluent, "__version__", None)
 
         # Ensure pyfluent can locate Fluent 2024 R1 (v241).
         # pyfluent >=0.38.0 dropped v241 from FluentVersion enum. The
@@ -444,8 +476,9 @@ class PyFluentDriver:
         )
 
         if ip is not None and port is not None:
-            session = pyfluent.connect_to_fluent(
-                ip=ip, port=port, password=password or ""
+            session = _call_with_supported_kwargs(
+                pyfluent.connect_to_fluent,
+                {"ip": ip, "port": port, "password": password or ""},
             )
             source = "connection"
             mode = "solver"
@@ -478,7 +511,7 @@ class PyFluentDriver:
                 launch_kwargs["processor_count"] = launch_options["processor_count"]
             if launch_options["cwd"] is not None:
                 launch_kwargs["cwd"] = launch_options["cwd"]
-            session = pyfluent.launch_fluent(**launch_kwargs)
+            session = _call_with_supported_kwargs(pyfluent.launch_fluent, launch_kwargs)
             source = "launch"
 
         session_id = str(uuid.uuid4())
@@ -503,9 +536,11 @@ class PyFluentDriver:
         from sim.gui import GuiController  # noqa: PLC0415
         self._gui = GuiController(
             process_name_substrings=self.GUI_PROCESS_FILTER,
-            workdir=str(self._runtime._sim_dir),
+            workdir=str(self._runtime.sim_dir),
         ) if gui_mode else None
-        return info.to_dict()
+        out = info.to_dict()
+        out["health"] = self.health()
+        return out
 
     def run(
         self, code: str, label: str = "pyfluent-snippet",
@@ -531,7 +566,7 @@ class PyFluentDriver:
         # is a list of relative paths.
         session_info = self._runtime.get_active_session()
         launch_options = session_info.launch_options if session_info is not None else {}
-        workdir_path = Path(launch_options.get("cwd") or self._runtime._sim_dir)
+        workdir_path = Path(launch_options.get("cwd") or self._runtime.sim_dir)
         try:
             workdir_path.mkdir(parents=True, exist_ok=True)
             before = sorted(
@@ -586,10 +621,14 @@ class PyFluentDriver:
         )
         diags, arts = collect_diagnostics(self.probes, ctx)
         for art in arts:
-            art.role = _fluent_artifact_role(art.path, art.role)
+            art.role = classify_fluent_artifact(art.path, art.role)
         out["diagnostics"] = [d.to_dict() for d in diags]
         out["artifacts"] = [a.to_dict() for a in arts]
         return out
+
+    def health(self) -> dict:
+        """Return a lightweight health summary for the active Fluent session."""
+        return handle_query("session.health", self._runtime, driver=self)
 
     def disconnect(self) -> dict:
         """Tear down the active Fluent session."""
@@ -599,14 +638,17 @@ class PyFluentDriver:
                 session_info.session.exit()
             except Exception:
                 pass
-            self._runtime._active_id = None
+            self._runtime.clear_active()
         self._gui = None
+        self.probes = _default_fluent_probes()
         return {"ok": True, "disconnected": True}
 
     def query(self, name: str) -> dict:
         """
         Run a named query against the active session.
 
-        Supported names: session.summary, workflow.summary, last.result, field.catalog
+        Supported names include session.summary, session.health,
+        session.versions, workflow.summary, last.result, field.catalog,
+        and Fluent-specific fluent.* summaries.
         """
-        return handle_query(name, self._runtime)
+        return handle_query(name, self._runtime, driver=self)

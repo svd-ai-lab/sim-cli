@@ -1,6 +1,6 @@
 # Task Templates — fluent-sim v0
 
-> Each template defines: goal, required inputs, common missing items, runtime step order, and completion condition.
+> Each template defines: goal, required inputs, common missing items, execution step order, and completion condition.
 > These are **task-level protocols**, not Python code. For API details, see `pyfluent_cheat_sheet.md` (planned).
 
 ---
@@ -185,7 +185,7 @@ Create or load a Fluent reacting-flow case that uses the partially premixed stea
 
 | Step | Label | Notes |
 |---|---|---|
-| 1 | `connect` | mode=solver; keep sim-cli generic by passing Fluent launch values through driver options, e.g. `--driver-option dimension=2 --driver-option precision=double`; use `--workspace` for the run directory or `--driver-option cwd=...` when needed |
+| 1 | `connect-or-launch` | mode=solver; for live sim sessions pass Fluent launch values through driver options, e.g. `--driver-option dimension=2 --driver-option precision=double`; for direct PyFluent scripts pass the same values to `launch_fluent(...)` |
 | 2 | `read-mesh-or-case` | Read mesh/case; set `two_dim_space = "axisymmetric"` if needed |
 | 3 | `setup-flow-models` | Enable energy and turbulence before combustion setup |
 | 4 | `setup-partially-premixed-flamelet` | Use `setup_partially_premixed_flamelet.py`; imports CHEMKIN as `flamelet-mixture`, sets stream table, runs `calc_fla()` and `calc_pdf()` |
@@ -211,4 +211,4 @@ Create or load a Fluent reacting-flow case that uses the partially premixed stea
 - If the user says "run the simulation", ask whether a case file already exists or whether meshing must be done first.
 - If the user asks for flamelet, non-premixed, partially premixed, PDF table, or combustion lookup-table work, choose Template 5 unless they explicitly request Composition PDF Transport instead.
 - Templates may be chained (meshing → solver) but must remain in separate sessions unless `switch_to_solver()` is used within a meshing session.
-- **Reference example values are for API syntax illustration only.** Parameter values in `reference/pyfluent_examples/` (e.g., 0.4 m/s, 293.15 K, `water-liquid` from the mixing elbow example) describe a specific published test case. They must not be used to fill in missing user inputs. When required inputs are absent, apply SKILL.md §5.1: ask for Category A inputs — do not substitute example values.
+- **Reference example values are for API syntax illustration only.** Parameter values in `reference/pyfluent_examples/` (e.g., 0.4 m/s, 293.15 K, `water-liquid` from the mixing elbow example) describe a specific published test case. They must not be used to fill in missing user inputs. When required inputs are absent, ask for the missing inputs rather than substituting example values.

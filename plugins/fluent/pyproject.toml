@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "sim-plugin-fluent"
-version = "0.1.0"
-description = "Ansys Fluent (PyFluent) driver for sim-cli, distributed as an out-of-tree plugin"
+version = "0.2.0"
+description = "Ansys Fluent (PyFluent) driver and bundled skill for sim"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
@@ -42,13 +42,16 @@ fluent = "sim_plugin_fluent:plugin_info"
 
 [project.urls]
 Homepage = "https://github.com/svd-ai-lab/sim-plugin-fluent"
+Repository = "https://github.com/svd-ai-lab/sim-plugin-fluent"
 Issues = "https://github.com/svd-ai-lab/sim-plugin-fluent/issues"
+Changelog = "https://github.com/svd-ai-lab/sim-plugin-fluent/blob/main/CHANGELOG.md"
 
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/sim_plugin_fluent"]
 
 [tool.pytest.ini_options]
+testpaths = ["tests"]
 markers = [
   "integration: tests that build wheels or touch external tooling",
 ]

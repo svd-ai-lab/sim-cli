@@ -1,0 +1,51 @@
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected-version:
+        description: Version expected in pyproject.toml
+        required: true
+        type: string
+      ref:
+        description: Git ref to publish
+        required: true
+        default: main
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: pypi
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - name: Verify version
+        shell: bash
+        run: |
+          VERSION="$(uv run python - <<'PY'
+import tomllib
+from pathlib import Path
+data = tomllib.loads(Path("pyproject.toml").read_text())
+print(data["project"]["version"])
+PY
+)"
+          test "$VERSION" = "${{ inputs.expected-version }}"
+      - name: Ensure version is not already on PyPI
+        shell: bash
+        run: |
+          STATUS="$(curl -s -o /dev/null -w "%{http_code}" "https://pypi.org/pypi/sim-plugin-fluent/${{ inputs.expected-version }}/json")"
+          test "$STATUS" = "404"
+      - name: Build
+        run: uv build
+      - name: Publish
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.UV_PUBLISH_TOKEN }}
+        run: uv publish --token "$UV_PUBLISH_TOKEN" dist/*

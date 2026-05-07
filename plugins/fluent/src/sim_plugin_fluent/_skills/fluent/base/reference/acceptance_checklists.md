@@ -7,7 +7,7 @@
 
 ## Pre-Execution Gate — Acceptance Criteria Must Be Defined
 
-Before submitting the first `sim run` snippet, verify that **at least one outcome-based acceptance criterion** exists for this task.
+Before executing the first state-changing Fluent step, verify that **at least one outcome-based acceptance criterion** exists for this task.
 
 An outcome-based criterion specifies what the simulation must produce or demonstrate — not just that it runs:
 
@@ -29,7 +29,7 @@ Do not proceed on the assumption that "successful execution = task complete."
 
 After the final step of a workflow, the agent must:
 
-1. Run `sim query session.summary` and `sim query last.result`
+1. Inspect the final live-session state or direct-script outputs
 2. Work through the relevant checklist below
 3. Mark each item as PASS / FAIL / N/A with the actual observed value
 4. If all REQUIRED items pass → report COMPLETE
@@ -132,11 +132,11 @@ Items marked **[OPTIONAL]** are only applicable if the user requested that outpu
 - **[REQUIRED]** `last.result.result.status = "ok"`
 
 ### Disconnect
-- **[REQUIRED]** `sim disconnect` exits 0
+- **[REQUIRED]** The live session or direct PyFluent process exits cleanly
 
 ### Log Files
-- **[RECOMMENDED]** `.sim/v1_runs/` contains at least 1 JSON log file
-- **[RECOMMENDED]** Log file `ok` field = true
+- **[RECOMMENDED]** `.sim/runs/` contains at least 1 JSON log file for live sim sessions
+- **[RECOMMENDED]** The final log or direct-script result reports `ok = true`
 
 ---
 
@@ -145,7 +145,7 @@ Items marked **[OPTIONAL]** are only applicable if the user requested that outpu
 ### Session and Launch State
 - **[REQUIRED]** `session.summary.connected = true`
 - **[REQUIRED]** `session.summary.mode` or `solver_kind = "solver"`
-- **[REQUIRED]** `launch_options` or session metadata reports the intended Fluent `dimension`, `precision`, processor count, and `cwd` when sim-cli launched the session
+- **[REQUIRED]** Launch options or session metadata reports the intended Fluent `dimension`, `precision`, processor count, and working directory
 
 ### Flamelet and Table Generation
 - **[REQUIRED]** CHEMKIN import used material name `flamelet-mixture`
