@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.13 - 2026-05-08
+
+- Clarify COMSOL Java API build/run calls as intentional synchronization points for layered model state and live Desktop refresh.
+- Document that agents should batch coherent edits, then choose the smallest appropriate `run()`/build barrier before relying on downstream state or GUI freshness.
+
 ## 0.1.12 - 2026-05-04
 
 - Add `comsol.model.identity` inspection for active/bound model tags, saved model location, model path, and checkpoint readiness.
