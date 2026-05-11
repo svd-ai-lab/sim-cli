@@ -17,8 +17,8 @@ a failed model build.
    Abaqus Scripting Reference Guide for object and method signatures, the
    Keywords Guide for `.inp` syntax, and the Execution Guide for command-line
    options.
-4. **Abaqus runtime introspection** inside `sim exec` or
-   `sim run --solver abaqus probe.py` for final verification of object
+4. **Abaqus runtime introspection** inside `uv run sim exec` or
+   `uv run sim run --solver abaqus probe.py` for final verification of object
    availability and accepted arguments.
 
 ## Command-Line Discovery
@@ -26,7 +26,7 @@ a failed model build.
 Use these probes before relying on memory:
 
 ```powershell
-sim check abaqus
+uv run sim check abaqus
 abaqus help
 abaqus doc
 abaqus fetch job=<example-name>

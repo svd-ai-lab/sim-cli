@@ -19,7 +19,7 @@ Use the mode closest to where the job state lives:
 
 | Mode | Pick when | Recipe |
 |---|---|---|
-| Live | The solve is in progress or an Abaqus session is already open. This wins on Windows hosts because there is no portable streaming-tail alternative. | `sim inspect job.diagnostics` and `sim inspect workdir.files` |
+| Live | The solve is in progress or an Abaqus session is already open. This wins on Windows hosts because there is no portable streaming-tail alternative. | `uv run sim inspect job.diagnostics` and `uv run sim inspect workdir.files` |
 | Post-mortem | The job finished and the files are on disk. | Use Python stdlib text parsing locally against fetched files. Prefer `uv run python ...` when uv is available; otherwise use the user's chosen Python environment. |
 
 Host-side parsing and plotting should follow the sim-cli Python-helper
@@ -33,7 +33,7 @@ uv run --with matplotlib python plot_results.py
 
 Avoid assuming bare `python` has matplotlib or other helper dependencies. If uv
 is unavailable, use the interpreter/environment the user normally uses. Abaqus
-ODB access is the exception: run ODB readers through `sim run --solver abaqus
+ODB access is the exception: run ODB readers through `uv run sim run --solver abaqus
 odb_reader.py` so Abaqus launches its own embedded Python.
 
 ```python

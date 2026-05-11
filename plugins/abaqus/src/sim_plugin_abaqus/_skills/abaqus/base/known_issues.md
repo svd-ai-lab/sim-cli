@@ -27,7 +27,7 @@ Result parsing uses `errors="replace"` to handle encoding issues.
 **Discovered**: 2026-04-13
 **Status**: By design
 **Description**: Abaqus creates multiple output files per job (.dat, .odb,
-.msg, .sta, .com, .prt, .sim, .simdir). When running via `sim run` with
+.msg, .sta, .com, .prt, .sim, .simdir). When running via `uv run sim run` with
 `.inp` files, these are created in the input file's directory.
 **Workaround**: The E2E test script uses `tempfile.TemporaryDirectory`
 to isolate output files. For production use, consider dedicated working

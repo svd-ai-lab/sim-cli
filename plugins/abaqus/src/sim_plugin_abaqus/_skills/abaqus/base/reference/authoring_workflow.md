@@ -9,14 +9,14 @@ The Abaqus plugin supports two CAE session backends. Use the default
 file-backed backend when maximum isolation matters:
 
 ```powershell
-sim connect --solver abaqus --mode cae --ui-mode no_gui --workspace runs/abaqus_case
-sim exec "<Abaqus/CAE Python snippet>"
-sim inspect cae.model_summary
-sim inspect job.diagnostics
-sim disconnect
+uv run sim connect --solver abaqus --mode cae --ui-mode no_gui --workspace runs/abaqus_case
+uv run sim exec "<Abaqus/CAE Python snippet>"
+uv run sim inspect cae.model_summary
+uv run sim inspect job.diagnostics
+uv run sim disconnect
 ```
 
-Each `sim exec` call launches Abaqus/CAE for one snippet, loads the session
+Each `uv run sim exec` call launches Abaqus/CAE for one snippet, loads the session
 `.cae` database if it exists, runs the snippet, saves the database, and returns
 model/workspace diagnostics. Treat this as persistent model state, not as a
 live GUI process.
@@ -24,10 +24,10 @@ live GUI process.
 Use the bridge backend for faster iterative authoring:
 
 ```powershell
-sim connect --solver abaqus --mode cae --ui-mode no_gui --backend bridge --workspace runs/abaqus_case
-sim exec "<Abaqus/CAE Python snippet>"
-sim inspect cae.model_summary
-sim disconnect
+uv run sim connect --solver abaqus --mode cae --ui-mode no_gui --backend bridge --workspace runs/abaqus_case
+uv run sim exec "<Abaqus/CAE Python snippet>"
+uv run sim inspect cae.model_summary
+uv run sim disconnect
 ```
 
 The bridge backend keeps one noGUI CAE process alive and sends snippets through
@@ -85,7 +85,7 @@ path.
 4. Inspect immediately:
 
 ```powershell
-sim inspect cae.model_summary
+uv run sim inspect cae.model_summary
 ```
 
 5. Add steps, interactions, BCs, loads, output requests, and mesh controls in
@@ -97,8 +97,8 @@ sim inspect cae.model_summary
 8. Inspect diagnostics and generated files:
 
 ```powershell
-sim inspect job.diagnostics
-sim inspect workdir.files
+uv run sim inspect job.diagnostics
+uv run sim inspect workdir.files
 ```
 
 9. Render canonical review views with Abaqus/CAE or Abaqus Viewer when visual
@@ -142,6 +142,6 @@ Do not submit a job until these facts are true:
 
 ## When Batch Is Better
 
-Use `sim run --solver abaqus file.inp` instead when the complete model is
+Use `uv run sim run --solver abaqus file.inp` instead when the complete model is
 already available, when a deterministic generated input deck is simpler, or
 when a scheduler/HPC system owns job submission.

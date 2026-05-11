@@ -27,7 +27,7 @@ It supports two script formats:
 
 The driver runs these via subprocess (`abaqus job=X input=file.inp
 interactive` or `abaqus cae noGUI=script.py`). In CAE authoring sessions,
-each `sim exec` snippet runs inside Abaqus/CAE against a saved session `.cae`
+each `uv run sim exec` snippet runs inside Abaqus/CAE against a saved session `.cae`
 database, then saves the database back for the next step. With
 `--backend bridge`, snippets are sent to one long-lived noGUI CAE process over
 a localhost command channel protected by a per-session token. Use bridge mode
@@ -65,9 +65,9 @@ for PyMechanical / Ansys Mechanical sessions.
 0. **Respect the Abaqus embedded-Python boundary.** Ordinary file-side
    plotting/post-processing follows the sim-cli Python-helper environment
    guidance. Abaqus/CAE and ODB scripts are different: execute them through
-   `sim run --solver abaqus script.py` so Abaqus launches its embedded Python
+   `uv run sim run --solver abaqus script.py` so Abaqus launches its embedded Python
    with the vendor modules available.
-1. **Availability first.** Run `sim check abaqus` before creating files. If
+1. **Availability first.** Run `uv run sim check abaqus` before creating files. If
    it reports `not_installed`, do not keep trying random paths. Ask the user
    to install Abaqus or set `SIM_ABAQUS_COMMAND` / `ABAQUS_COMMAND` /
    `ABAQUS_BAT_PATH` to the exact launcher, for example
@@ -81,14 +81,14 @@ for PyMechanical / Ansys Mechanical sessions.
 5. **Working directory matters.** Abaqus creates output files (.dat, .odb,
    .msg, .sta) next to the input file. Use `cwd` appropriately.
 6. **Use the right mode.** If the model is already fully specified, prefer
-   `sim run --solver abaqus file.inp` or `sim run --solver abaqus script.py`.
+   `uv run sim run --solver abaqus file.inp` or `uv run sim run --solver abaqus script.py`.
    If the agent is building/debugging the model incrementally, use
-   `sim connect --solver abaqus --mode cae` and iterate with `sim exec`. Use
+   `uv run sim connect --solver abaqus --mode cae` and iterate with `uv run sim exec`. Use
    `--backend bridge` when repeated small snippets need a live in-memory CAE
    session.
 7. **Save and inspect after every modeling step.** In CAE authoring mode,
    each snippet should leave the `.cae` database in a coherent state and then
-   check `sim inspect cae.model_summary` or `sim inspect job.diagnostics`.
+   check `uv run sim inspect cae.model_summary` or `uv run sim inspect job.diagnostics`.
 8. **Check docs or probe before guessing APIs.** If unsure about an Abaqus
    keyword, CAE method, command option, or output variable, follow
    `base/reference/doc_lookup.md` before editing the real model.
@@ -133,22 +133,22 @@ path and state which files support each conclusion.
 
 ## Required protocol
 
-After `sim check abaqus` confirms the solver is available: gather Category A
+After `uv run sim check abaqus` confirms the solver is available: gather Category A
 inputs from the user (geometry, material properties, loads, BCs, analysis
 type, acceptance criteria). For non-trivial work, establish the case workspace
 above before generating files.
 
-For batch work: write the `.inp` deck or `.py` script, lint with `sim lint`,
-execute with `sim run --solver abaqus`, then choose the post-processing path
+For batch work: write the `.inp` deck or `.py` script, lint with `uv run sim lint`,
+execute with `uv run sim run --solver abaqus`, then choose the post-processing path
 by artifact: `.dat` -> Python text parsing on the fetched file; ODB -> vendor
-Python via `sim run --solver abaqus script.py` (sim-cli is the right and only
+Python via `uv run sim run --solver abaqus script.py` (sim-cli is the right and only
 tool here). For ordinary file-side post-processing and plotting, follow the
 sim-cli Python-helper environment guidance. Validate against physics-based
 acceptance criteria. Keep source decks/scripts under `input/` or `scripts/`,
 job products under `run/`, Abaqus-rendered images or animations under
 `render/`, and extracted metrics/tables under `output/`.
 
-For modeling/debug/reporting work: start `sim connect --solver abaqus --mode
+For modeling/debug/reporting work: start `uv run sim connect --solver abaqus --mode
 cae --ui-mode no_gui --workspace <workdir>`, optionally adding
 `--backend bridge` for a live noGUI CAE process. Build the model in small CAE
 Python snippets, inspect after each major step, save checkpoints when useful,

@@ -11,15 +11,15 @@ iterative noGUI CAE authoring session, inspect runtime health, collect model
 summaries, read job diagnostics, and report generated artifacts such as `.dat`,
 `.msg`, `.sta`, `.cae`, and `.odb` files.
 
-The Abaqus application is not bundled. Bring your own Abaqus installation and
-license. See [LICENSE-NOTICE.md](LICENSE-NOTICE.md).
+The Abaqus application is not bundled. See
+[LICENSE-NOTICE.md](LICENSE-NOTICE.md).
 
 This plugin is for Dassault SIMULIA Abaqus, not Ansys Mechanical. Use the
 Mechanical plugin for PyMechanical and Ansys Mechanical sessions.
 
 ## What an agent can do with Abaqus
 
-- Run complete Abaqus input decks with `sim run --solver abaqus model.inp`.
+- Run complete Abaqus input decks with `uv run sim run --solver abaqus model.inp`.
 - Run Abaqus/CAE Python scripts through Abaqus's embedded Python.
 - Build and debug CAE models incrementally with `connect`, `exec`, and
   `inspect`.
@@ -37,8 +37,8 @@ Mechanical plugin for PyMechanical and Ansys Mechanical sessions.
 Use this when the model is already fully specified as an Abaqus `.inp` deck:
 
 ```powershell
-sim lint path/to/model.inp
-sim run --solver abaqus path/to/model.inp
+uv run sim lint path/to/model.inp
+uv run sim run --solver abaqus path/to/model.inp
 ```
 
 Abaqus writes output artifacts next to the deck. Inspect `.msg`, `.sta`, `.dat`,
@@ -49,8 +49,8 @@ and `.odb` outputs before treating the result as accepted.
 Use this when the model is authored by a complete Abaqus/CAE Python script:
 
 ```powershell
-sim lint path/to/model.py
-sim run --solver abaqus path/to/model.py
+uv run sim lint path/to/model.py
+uv run sim run --solver abaqus path/to/model.py
 ```
 
 The plugin invokes `abaqus cae noGUI=<script>`, so Abaqus modules are imported
@@ -62,11 +62,11 @@ Use this when an agent should build, inspect, debug, and report a model across
 multiple bounded snippets:
 
 ```powershell
-sim connect --solver abaqus --mode cae --ui-mode no_gui
-sim inspect session.health
-sim exec --file step.py
-sim inspect cae.model_summary
-sim inspect job.latest
+uv run sim connect --solver abaqus --mode cae --ui-mode no_gui
+uv run sim inspect session.health
+uv run sim exec --file step.py
+uv run sim inspect cae.model_summary
+uv run sim inspect job.latest
 ```
 
 The default file-backed backend starts Abaqus/CAE for each snippet, loads the
@@ -77,7 +77,7 @@ For trusted local workspaces that need faster repeated snippets, request the
 bridge backend:
 
 ```powershell
-sim connect --solver abaqus --mode cae --ui-mode no_gui --driver-option backend=bridge
+uv run sim connect --solver abaqus --mode cae --ui-mode no_gui --driver-option backend=bridge
 ```
 
 Bridge mode starts one long-lived noGUI CAE process on localhost with a
@@ -90,7 +90,7 @@ Install these before asking an agent to use this plugin:
 
 - Python 3.10 or newer.
 - [uv](https://docs.astral.sh/uv/) for Python environment and package installs.
-- sim-cli or a project environment where sim-cli can be installed.
+- A project Python environment where sim-cli-core can be installed.
 - A local Abaqus installation available through `abaqus.bat`, `abqNNNN.bat`, or
   an explicit launcher path.
 
@@ -98,71 +98,80 @@ If Abaqus is installed but not discoverable, point the driver at the launcher:
 
 ```powershell
 $env:SIM_ABAQUS_COMMAND = 'C:\SIMULIA\Commands\abq2026.bat'
-sim check abaqus
+uv run sim check abaqus
 ```
 
-The plugin does not include Abaqus, vendor binaries, vendor SDKs, or licensed
+The plugin does not include Abaqus, vendor binaries, vendor SDKs, or vendor
 example content. It installs the Python adapter and bundled agent guidance only.
 
 ## Install
 
-For most users and agents, install the latest published PyPI version:
+For agent projects, install sim-cli-core and the Abaqus plugin in the project
+environment:
 
 ```powershell
-uv pip install sim-plugin-abaqus
+uv init  # only if this is not already a uv project
+uv add sim-cli-core sim-plugin-abaqus
+uv run sim plugin sync-skills --target .agents/skills --copy
+uv run sim check abaqus
+uv run sim plugin doctor abaqus --deep
 ```
 
-You can also install through sim-cli's plugin command:
+For Claude Code, sync the bundled skill to `.claude/skills` instead:
 
 ```powershell
-sim plugin install sim-plugin-abaqus
+uv run sim plugin sync-skills --target .claude/skills --copy
 ```
 
 For quick testing of the current source branch, install from GitHub:
 
 ```powershell
-uv pip install "git+https://github.com/svd-ai-lab/sim-plugin-abaqus.git@main"
+uv add sim-cli-core "git+https://github.com/svd-ai-lab/sim-plugin-abaqus.git@main"
 ```
 
 For a reproducible agent run, pin a commit SHA:
 
 ```powershell
-uv pip install "git+https://github.com/svd-ai-lab/sim-plugin-abaqus.git@<commit-sha>"
+uv add sim-cli-core "git+https://github.com/svd-ai-lab/sim-plugin-abaqus.git@<commit-sha>"
 ```
+
+`uv run sim ...` runs sim from this project environment, so it sees this
+project's plugins. Without uv, create and activate a venv, then install
+`sim-cli-core` plus this plugin with `python -m pip`.
 
 ## Verify Install
 
 After installation, sim-cli should auto-discover the driver and bundled skill:
 
 ```powershell
-sim check abaqus
+uv run sim check abaqus
 ```
 
-If `sim check abaqus` reports that Abaqus itself is unavailable, first confirm
-the Python package installed correctly, then fix the local Abaqus launcher or
-license prerequisites.
+If `uv run sim check abaqus` reports that Abaqus itself is unavailable, first
+confirm the Python package installed correctly, then fix the local Abaqus
+launcher or runtime prerequisites.
 
 ## Connect And Inspect Health
 
 Use a noGUI authoring session for bounded agent-driven CAE work:
 
 ```powershell
-sim connect --solver abaqus --mode cae --ui-mode no_gui
-sim inspect session.health
-sim inspect cae.model_summary
-sim inspect workdir.files
+uv run sim connect --solver abaqus --mode cae --ui-mode no_gui
+uv run sim inspect session.health
+uv run sim inspect cae.model_summary
+uv run sim inspect workdir.files
 ```
 
 Use one-shot execution for complete decks or scripts:
 
 ```powershell
-sim run --solver abaqus path/to/job.inp
-sim run --solver abaqus path/to/cae_script.py
+uv run sim run --solver abaqus path/to/job.inp
+uv run sim run --solver abaqus path/to/cae_script.py
 ```
 
 ## Common Agent Workflow
 
-1. Confirm `sim check abaqus` is `ok`.
+1. Confirm `uv run sim check abaqus` is `ok`.
 2. Choose batch `.inp`, complete CAE script, or iterative CAE authoring.
 3. Gather geometry, materials, loads, boundary conditions, analysis type, and
    acceptance criteria before changing the model.
@@ -174,12 +183,13 @@ sim run --solver abaqus path/to/cae_script.py
 
 ## Troubleshooting
 
-- `sim` command not found: install sim-cli in the same Python environment.
-- Driver not discovered: reinstall the plugin and run `sim check abaqus`.
+- `sim` command not found: run commands through `uv run sim ...` or activate
+  the venv that contains sim-cli-core.
+- Driver not discovered: reinstall the plugin and run `uv run sim check abaqus`.
 - Abaqus not detected: set `SIM_ABAQUS_COMMAND` to the exact launcher path.
 - A `.py` script imports fail in normal Python: run it through
-  `sim run --solver abaqus script.py`; Abaqus modules live in Abaqus's embedded
-  interpreter.
+  `uv run sim run --solver abaqus script.py`; Abaqus modules live in Abaqus's
+  embedded interpreter.
 - A job exits with code `0` but results look wrong: inspect `.msg`, `.sta`,
   `.dat`, and `.odb` outputs and compare against engineering criteria.
 - Bridge backend stops responding: inspect `session.health`, disconnect, and
@@ -192,9 +202,10 @@ Give an agent this instruction when the task is about Abaqus:
 ```text
 Use the bundled Abaqus skill from sim-plugin-abaqus. First identify whether the
 task needs a batch .inp run, a complete Abaqus/CAE Python script run, or an
-iterative noGUI CAE authoring session. Confirm `sim check abaqus` first. For
-iterative work, connect with `sim connect --solver abaqus --mode cae --ui-mode
-no_gui`, run one bounded snippet at a time, then inspect `session.health`,
+iterative noGUI CAE authoring session. Confirm `uv run sim check abaqus`
+first. For iterative work, connect with `uv run sim connect --solver abaqus
+--mode cae --ui-mode no_gui`, run one bounded snippet at a time, then inspect
+`session.health`,
 `cae.model_summary`, `workdir.files`, and `job.latest`. Validate against
 physics-based acceptance criteria, not only exit code.
 ```
