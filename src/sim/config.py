@@ -29,6 +29,7 @@ else:  # pragma: no cover — exercised only on 3.10
 
 DEFAULT_SERVER_PORT = 7600
 DEFAULT_SERVER_HOST = "127.0.0.1"
+DEFAULT_CONTEXT_API_BASE_URL = "https://sim.svdailab.com/api/v1"
 
 
 # ── Paths ────────────────────────────────────────────────────────────────────
@@ -179,6 +180,30 @@ def list_solver_pins() -> dict[str, dict]:
     return {k: v for k, v in solvers.items() if isinstance(v, dict)}
 
 
+def resolve_context_api_base_url() -> str:
+    """env SIM_CONTEXT_API_BASE_URL > config [context].api_base_url > hosted default."""
+    raw = os.environ.get("SIM_CONTEXT_API_BASE_URL")
+    if raw:
+        return raw.rstrip("/")
+    cfg = _cached_config()
+    base_url = cfg.get("context", {}).get("api_base_url")
+    if isinstance(base_url, str) and base_url:
+        return base_url.rstrip("/")
+    return DEFAULT_CONTEXT_API_BASE_URL
+
+
+def resolve_context_api_key() -> str | None:
+    """env SIM_CONTEXT_API_KEY > config [context].api_key > None."""
+    raw = os.environ.get("SIM_CONTEXT_API_KEY")
+    if raw:
+        return raw
+    cfg = _cached_config()
+    key = cfg.get("context", {}).get("api_key")
+    if isinstance(key, str) and key:
+        return key
+    return None
+
+
 # ── Init helper ──────────────────────────────────────────────────────────────
 
 
@@ -192,6 +217,11 @@ GLOBAL_STUB = """\
 # [server]
 # port = 7600
 # host = "127.0.0.1"
+#
+# [context]
+# api_base_url = "https://sim.svdailab.com/api/v1"
+# Prefer SIM_CONTEXT_API_KEY for secrets; config is supported for managed hosts.
+# api_key = "sim_sk_..."
 
 # [solvers.fluent]
 # path = "C:\\\\Program Files\\\\ANSYS Inc\\\\v252"
@@ -207,6 +237,11 @@ PROJECT_STUB = """\
 
 # [server]
 # port = 7600
+#
+# [context]
+# api_base_url = "https://sim.svdailab.com/api/v1"
+# Prefer SIM_CONTEXT_API_KEY for secrets; config is supported for managed hosts.
+# api_key = "sim_sk_..."
 
 # [solvers.fluent]
 # profile = "pyfluent_0_38_modern"
