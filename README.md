@@ -86,79 +86,96 @@ script still matches the real solver state.
 
 Use this path when the agent and solver are on the same machine. You do not
 need to start `sim serve` manually for the local happy path; `sim connect`
-will use the local runtime.
+will use the local runtime. The default docs use
+[`uv`](https://docs.astral.sh/uv/) so agents run the `sim` and plugins declared
+by the current project instead of guessing which executable is on `PATH`.
 
-Prerequisite: install [`uv`](https://docs.astral.sh/uv/) if you do not already
-have a Python tool manager.
+`uv run sim ...` runs `sim` from this project environment, so it sees this
+project's installed solver plugins.
 
-With the recommended `uv tool install sim-cli-core` setup:
-
-- the `sim` executable is placed in `$(uv tool dir --bin)`, usually
-  `~/.local/bin/sim`
-- `sim-cli-core` lives in its own uv-managed tool environment under
-  `$(uv tool dir)/sim-cli-core`, usually
-  `~/.local/share/uv/tools/sim-cli-core`
-- `sim plugin install ...` installs the plugin package into the Python
-  environment running `sim`, so by default plugins go into that same
-  `sim-cli-core` tool environment and are visible to that `sim` executable
-- plugins are independent Python distributions; current plugin discovery still
-  uses Python entry points from the environment running `sim`
-- synced skills are separate files for agents to read; they go to
-  `.agents/skills` or `.claude/skills`
-
-Use `.agents/skills` for Codex and GitHub Copilot projects. Use
-`.claude/skills` for Claude Code projects.
+macOS/Linux:
 
 ```bash
-# 1. Install the sim CLI.
-uv tool install sim-cli-core
+uv init  # only if this is not already a uv project
+uv add sim-cli-core sim-plugin-comsol
+uv run sim plugin sync-skills --target .agents/skills --copy
+uv run sim check comsol
+uv run sim plugin doctor comsol --deep
+```
 
-# 2. Discover available solver plugins.
-sim plugin catalog
+Windows PowerShell:
 
-# 3. Install the plugin for the solver you want.
-sim plugin install sim-plugin-comsol
+```powershell
+uv init  # only if this is not already a uv project
+uv add sim-cli-core sim-plugin-comsol
+uv run sim plugin sync-skills --target .agents/skills --copy
+uv run sim check comsol
+uv run sim plugin doctor comsol --deep
+```
 
-# 4. Make the plugin's bundled skill visible to Codex or Copilot in this project.
+Use `.agents/skills` for Codex and GitHub Copilot projects. For Claude Code,
+sync to `.claude/skills` instead:
+
+```bash
+uv run sim plugin sync-skills --target .claude/skills --copy
+```
+
+### Without uv
+
+If you cannot use `uv`, create a normal Python virtual environment, install
+`sim-cli-core` and the solver plugin into that environment, then run `sim`
+from the activated environment.
+
+macOS/Linux:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install sim-cli-core sim-plugin-comsol
 sim plugin sync-skills --target .agents/skills --copy
-
-# 5. Check that sim can see the solver on this machine.
 sim check comsol
-
-# 6. Verify the plugin and, with --deep, the local solver detection path.
 sim plugin doctor comsol --deep
 ```
 
-For **Claude Code**, use the project-local Claude target:
+Windows PowerShell:
 
-```bash
-sim plugin install sim-plugin-comsol
-sim plugin sync-skills --target .claude/skills --copy
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install sim-cli-core sim-plugin-comsol
+sim plugin sync-skills --target .agents/skills --copy
+sim check comsol
+sim plugin doctor comsol --deep
 ```
 
-If you omit `--target`, the CLI uses Claude-oriented defaults:
-`./.claude/skills` when the project has a `./.claude/` directory, otherwise
-`~/.claude/skills`.
+### Optional global CLI
 
-`sim plugin install` runs skill sync automatically unless you pass
-`--no-sync`. For Codex or Copilot, run the
-`sync-skills --target .agents/skills --copy` command after install when you
-want the skill materialized inside the project.
+For a personal machine where one global `sim` plus one plugin set is enough:
+
+```powershell
+uv tool install sim-cli-core --with sim-plugin-comsol
+sim check comsol
+```
+
+This is convenient for humans, but project-local `uv run sim ...` is more
+predictable for agents and teams.
 
 ## Hand this prompt to your agent
 
 After setup, give your coding agent a direct instruction like this:
 
 ```text
-Use the solver skill installed under .agents/skills. Use sim-cli to check my
-local solver installation before connecting. Work one bounded step at a time:
-connect, inspect the session, execute a small step, inspect last.result and the
-live model state, then save or update a checkpoint before continuing. Do not
-guess solver API names; inspect the live model or the solver's local docs first.
-If I make manual changes in the solver UI, re-inspect the live state before
-continuing instead of assuming your previous script still matches the model.
-Report saved artifacts, numerical checks, warnings, and anything that still
-needs human engineering review.
+Use the solver skill installed under .agents/skills. Run sim through this
+project with `uv run sim ...`. Check my local solver installation before
+connecting. Work one bounded step at a time: connect, inspect the session,
+execute a small step, inspect last.result and the live model state, then save
+or update a checkpoint before continuing. Do not guess solver API names; inspect
+the live model or the solver's local docs first. If I make manual changes in
+the solver UI, re-inspect the live state before continuing instead of assuming
+your previous script still matches the model. Report saved artifacts, numerical
+checks, warnings, and anything that still needs human engineering review.
 ```
 
 For Claude Code, replace `.agents/skills` with `.claude/skills`.
@@ -169,20 +186,20 @@ If COMSOL and Codex are on the same machine, start by installing the COMSOL
 plugin and syncing its bundled skill into the `.agents/skills` project target:
 
 ```bash
-uv tool install sim-cli-core
-sim plugin install sim-plugin-comsol
-sim plugin sync-skills --target .agents/skills --copy
-sim check comsol
-sim plugin doctor comsol --deep
+uv add sim-cli-core sim-plugin-comsol
+uv run sim plugin sync-skills --target .agents/skills --copy
+uv run sim check comsol
+uv run sim plugin doctor comsol --deep
 ```
 
 Then ask Codex:
 
 ```text
 Use the COMSOL skill under .agents/skills. Start by checking COMSOL through
-sim-cli. If you need a visible live COMSOL Desktop session, use:
+`uv run sim check comsol`. If you need a visible live COMSOL Desktop session,
+use:
 
-sim connect --solver comsol --ui-mode gui --driver-option visual_mode=shared-desktop
+uv run sim connect --solver comsol --ui-mode gui --driver-option visual_mode=shared-desktop
 
 After connecting, inspect session.health and comsol.model.identity. Confirm the
 live model binding is healthy before treating the GUI as synchronized. For
@@ -199,18 +216,19 @@ policy, follow the bundled COMSOL skill.
 For any solver, the agent should prefer this loop over one large generated
 script:
 
-1. `sim check <solver>` to detect installed solver versions and plugin
+1. `uv run sim check <solver>` to detect installed solver versions and plugin
    compatibility.
-2. `sim connect --solver <solver> ...` for live stateful work, or `sim run`
-   for a deterministic one-shot script.
-3. `sim inspect session.versions` and the solver-specific health or identity
-   target before changing state.
-4. `sim exec --file step.py --label <step>` for one bounded modeling or
-   analysis step.
-5. `sim inspect last.result` and solver-specific state before continuing.
+2. `uv run sim connect --solver <solver> ...` for live stateful work, or
+   `uv run sim run` for a deterministic one-shot script.
+3. `uv run sim inspect session.versions` and the solver-specific health or
+   identity target before changing state.
+4. `uv run sim exec --file step.py --label <step>` for one bounded modeling
+   or analysis step.
+5. `uv run sim inspect last.result` and solver-specific state before
+   continuing.
 6. Save checkpoints and artifacts when the solver plugin or skill requires
    them.
-7. `sim disconnect` when the session is done.
+7. `uv run sim disconnect` when the session is done.
 
 Screenshots and plots help humans review the result, but engineering
 acceptance should prefer numeric evidence when the solver skill defines it:
@@ -219,9 +237,9 @@ or expected trends.
 
 ## Local vs remote solvers
 
-**Same machine:** install `sim-cli-core` and the solver plugin locally, sync
-the skill to your agent, then use `sim connect`. Do not add `--host` unless
-you are intentionally talking to a remote `sim serve`.
+**Same machine:** install `sim-cli-core` and the solver plugin into the project
+environment, sync the skill to your agent, then use `uv run sim connect`. Do
+not add `--host` unless you are intentionally talking to a remote `sim serve`.
 
 **Remote solver workstation, lab box, or HPC login node:** install
 `sim-cli-core` and the solver plugin on the solver host, start `sim serve`
@@ -229,13 +247,13 @@ there, then point the local agent at that host:
 
 ```bash
 # On the solver host.
-sim serve --host 0.0.0.0 --port 7600
+uv run sim serve --host 0.0.0.0 --port 7600
 
 # On the agent/control machine.
-sim --host <solver-host-ip> check <solver>
-sim --host <solver-host-ip> connect --solver <solver>
-sim --host <solver-host-ip> inspect session.summary
-sim --host <solver-host-ip> disconnect
+uv run sim --host <solver-host-ip> check <solver>
+uv run sim --host <solver-host-ip> connect --solver <solver>
+uv run sim --host <solver-host-ip> inspect session.summary
+uv run sim --host <solver-host-ip> disconnect
 ```
 
 Only bind `sim serve` to a trusted network such as a VPN, Tailscale, or a
@@ -249,47 +267,46 @@ reached through an explicit plugin package.
 
 Ready-to-use plugins:
 
-| Solver | Install |
+| Solver | Package spec |
 | --- | --- |
-| COMSOL | `sim plugin install sim-plugin-comsol` |
-| MATLAB / Simulink | `sim plugin install git+https://github.com/svd-ai-lab/sim-plugin-matlab@main` |
-| Ansys Workbench | `sim plugin install sim-plugin-workbench` |
-| Ansys Mechanical | `sim plugin install sim-plugin-mechanical` |
-| Ansys Fluent | `sim plugin install sim-plugin-fluent` |
-| Ansys HFSS | `sim plugin install sim-plugin-hfss` |
-| Abaqus | `sim plugin install sim-plugin-abaqus` |
-| LTspice | `sim plugin install sim-plugin-ltspice` |
-| OpenFOAM | `sim plugin install git+https://github.com/svd-ai-lab/sim-plugin-openfoam@main` |
+| COMSOL | `sim-plugin-comsol` |
+| MATLAB / Simulink | `git+https://github.com/svd-ai-lab/sim-plugin-matlab@main` |
+| Ansys Workbench | `sim-plugin-workbench` |
+| Ansys Mechanical | `sim-plugin-mechanical` |
+| Ansys Fluent | `sim-plugin-fluent` |
+| Ansys HFSS | `sim-plugin-hfss` |
+| Abaqus | `sim-plugin-abaqus` |
+| LTspice | `sim-plugin-ltspice` |
+| OpenFOAM | `git+https://github.com/svd-ai-lab/sim-plugin-openfoam@main` |
 
 Under development: Amesim, Dymola, and Flotherm.
 
-After installing any plugin, sync its bundled skill and verify that the local
+After adding any plugin package, sync its bundled skill and verify that the local
 solver can be reached:
 
 ```bash
-sim plugin list
+uv run sim plugin list
 
 # Codex or Copilot
-sim plugin sync-skills --target .agents/skills --copy
+uv run sim plugin sync-skills --target .agents/skills --copy
 
 # Claude Code
-sim plugin sync-skills --target .claude/skills --copy
+uv run sim plugin sync-skills --target .claude/skills --copy
 
-sim check <solver>
-sim plugin doctor <solver> --deep
+uv run sim check <solver>
+uv run sim plugin doctor <solver> --deep
 ```
 
-Use `sim plugin catalog` to inspect the broader catalogue. See
-[docs/plugin-install.md](docs/plugin-install.md) for the full plugin
-installation reference.
+For direct wheel, Git, local checkout, or non-uv workflows, see
+[docs/plugin-install.md](docs/plugin-install.md).
 
 ## Project setup with sim.toml
 
-For a project that should be reproducible for another user or agent, commit a
-`sim.toml` manifest:
+For reproducible Python packages, commit the `pyproject.toml` and `uv.lock`
+created by `uv add`. Use `sim.toml` for solver defaults and workspace settings:
 
 ```bash
-sim init
+uv run sim init
 ```
 
 Example:
@@ -307,41 +324,41 @@ package = "sim-plugin-comsol"
 Then a fresh checkout can run:
 
 ```bash
-sim setup --dry-run
-sim setup
+uv sync
+uv run sim setup --dry-run
 
 # Codex or Copilot
-sim plugin sync-skills --target .agents/skills --copy
+uv run sim plugin sync-skills --target .agents/skills --copy
 
 # Claude Code
-sim plugin sync-skills --target .claude/skills --copy
+uv run sim plugin sync-skills --target .claude/skills --copy
 ```
 
 ## Common commands
 
 | Command | Use it for |
 |---|---|
-| `sim plugin catalog` | Discover solver plugins and copy-paste install strings. |
-| `sim plugin install <source>` | Install a solver plugin and sync its bundled skill. |
-| `sim plugin sync-skills --target .agents/skills --copy` | Materialize installed plugin skills for Codex or Copilot. |
-| `sim plugin sync-skills --target .claude/skills --copy` | Materialize installed plugin skills for Claude Code. |
-| `sim check <solver>` | Detect local or remote solver installs. |
-| `sim connect --solver <solver>` | Open a persistent solver session. |
-| `sim exec --file step.py` | Run one bounded step in the live session. |
-| `sim inspect <target>` | Query session, result, or solver-specific state. |
-| `sim run script.py --solver <solver>` | Run a deterministic one-shot script. |
-| `sim disconnect` | Tear down the active session. |
-| `sim setup` | Install plugins declared in `sim.toml`. |
+| `uv run sim plugin list` | Show plugins visible in this project environment. |
+| `uv run sim plugin info <solver>` | Show plugin metadata and compatibility summary. |
+| `uv run sim plugin doctor <solver> --deep` | Check plugin wiring plus local solver detection. |
+| `uv run sim plugin sync-skills --target .agents/skills --copy` | Materialize installed plugin skills for Codex or Copilot. |
+| `uv run sim plugin sync-skills --target .claude/skills --copy` | Materialize installed plugin skills for Claude Code. |
+| `uv run sim check <solver>` | Detect local or remote solver installs. |
+| `uv run sim connect --solver <solver>` | Open a persistent solver session. |
+| `uv run sim exec --file step.py` | Run one bounded step in the live session. |
+| `uv run sim inspect <target>` | Query session, result, or solver-specific state. |
+| `uv run sim run script.py --solver <solver>` | Run a deterministic one-shot script. |
+| `uv run sim disconnect` | Tear down the active session. |
+| `uv run sim setup` | Apply plugin declarations from `sim.toml` when you use them. |
 
-Run `sim describe` for a machine-readable command manifest, or `sim <command>
---help` for exact options.
+Run `uv run sim describe` for a machine-readable command manifest, or
+`uv run sim <command> --help` for exact options.
 
-## Safety and licensing
+## Solver ownership
 
 `sim-cli` does not bundle or redistribute simulation solvers or vendor SDKs.
-You are responsible for installing each underlying solver and complying with
-its EULA, copyright, and license terms. See [NOTICE](NOTICE) for optional SDK
-dependency notes.
+Install and operate each underlying solver according to its vendor terms. See
+[NOTICE](NOTICE) for optional SDK dependency notes.
 
 `sim-cli` is an independent open-source project and is not affiliated with,
 endorsed by, or sponsored by any solver vendor. Product, solver, and company
