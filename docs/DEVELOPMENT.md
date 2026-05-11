@@ -43,7 +43,7 @@ src/sim/
                      import time
 tests/               unit tests + fixtures
 assets/              logo · banner · architecture (SVG)
-docs/                translated READMEs (de · ja · zh) + architecture docs
+docs/                user, plugin, and architecture docs
 ```
 
 ## Dev flags and utilities
@@ -111,5 +111,5 @@ Cross-check: `verify_skills_layout(root, profiles)` in `compat.py` validates tha
 
 ## Architecture docs
 
-- [`docs/architecture/version-compat.md`](architecture/version-compat.md) — profile env design
+- [`docs/architecture/version-compat.md`](architecture/version-compat.md) — compatibility and plugin discovery contract
 - [`docs/architecture/skills-layering-plan.md`](architecture/skills-layering-plan.md) — layered skill composition design

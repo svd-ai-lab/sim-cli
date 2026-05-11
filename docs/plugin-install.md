@@ -25,7 +25,7 @@ GitHub Copilot, Claude Code, or another agent.
 | Sync installed skills for Codex or GitHub Copilot | `sim plugin sync-skills --target .agents/skills --copy` |
 | Sync installed skills for Claude Code | `sim plugin sync-skills --target .claude/skills --copy` |
 
-## Python environment
+## Python environment and plugin visibility
 
 With the recommended user install:
 
@@ -38,10 +38,23 @@ placed in `$(uv tool dir --bin)`, usually `~/.local/bin/sim`. The tool
 environment is under `$(uv tool dir)/sim-cli-core`, usually
 `~/.local/share/uv/tools/sim-cli-core`.
 
-By default, `sim plugin install <source>` installs the plugin into the Python
-interpreter that is running `sim`. For the recommended uv tool setup, that means
-plugins are installed into the same `sim-cli-core` tool environment, not into
-your current project `.venv`.
+By default, `sim plugin install <source>` installs the plugin package into the
+Python interpreter that is running `sim`. For the recommended uv tool setup,
+that means plugins are installed into the same `sim-cli-core` tool environment,
+not into your current project `.venv`.
+
+This is a visibility rule, not a packaging coupling. Solver plugins are
+independent Python distributions, but the current CLI discovers them through
+Python entry points from the environment running `sim`.
+
+For a project-scoped uv environment, install both `sim-cli-core` and the solver
+plugins into that project and run `sim` through `uv run`:
+
+```bash
+uv add sim-cli-core sim-plugin-comsol
+uv run sim check comsol
+uv run sim plugin sync-skills --target .agents/skills --copy
+```
 
 You can override the install target:
 
@@ -49,9 +62,8 @@ You can override the install target:
 sim plugin install sim-plugin-comsol --python /path/to/venv/bin/python
 ```
 
-Only do this when you intend to run `sim` from that same Python environment or
-otherwise know that the plugin will be discoverable there. Plugin discovery uses
-Python entry points from the environment running `sim`.
+Only use `--python` when you intend to run `sim` from that same Python
+environment or otherwise know that the plugin will be discoverable there.
 
 Skills are different from Python packages. The plugin package lives in Python's
 site-packages; the bundled skill is synced into an agent-readable directory such

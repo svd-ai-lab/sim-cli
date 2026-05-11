@@ -98,9 +98,11 @@ With the recommended `uv tool install sim-cli-core` setup:
 - `sim-cli-core` lives in its own uv-managed tool environment under
   `$(uv tool dir)/sim-cli-core`, usually
   `~/.local/share/uv/tools/sim-cli-core`
-- `sim plugin install ...` installs plugins into the Python environment running
-  `sim`, so by default plugins go into that same `sim-cli-core` tool
-  environment
+- `sim plugin install ...` installs the plugin package into the Python
+  environment running `sim`, so by default plugins go into that same
+  `sim-cli-core` tool environment and are visible to that `sim` executable
+- plugins are independent Python distributions; current plugin discovery still
+  uses Python entry points from the environment running `sim`
 - synced skills are separate files for agents to read; they go to
   `.agents/skills` or `.claude/skills`
 
