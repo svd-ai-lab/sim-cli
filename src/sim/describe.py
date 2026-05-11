@@ -81,6 +81,14 @@ _EXAMPLES: dict[str, list[dict[str, str]]] = {
     "logs": [
         {"cmd": "sim logs --limit 20", "summary": "Show the last 20 history entries."},
     ],
+    "context": [
+        {"cmd": 'sim context get --domain comsol "chip package overheating"',
+         "summary": "Fetch hosted engineering context for an agent."},
+    ],
+    "context get": [
+        {"cmd": 'sim --json context get --domain comsol "chip package overheating"',
+         "summary": "Return an agent-readable context pack as JSON."},
+    ],
     "config show": [
         {"cmd": "sim config show --json",
          "summary": "Print the resolved config (project + global merged)."},
@@ -179,6 +187,14 @@ ERROR_CODES: dict[str, str] = {
         "A driver returned a value that doesn't match DriverProtocol.",
     "NONINTERACTIVE_INPUT_REQUIRED":
         "--no-interactive is set and the command would otherwise prompt.",
+    "CONTEXT_API_KEY_MISSING":
+        "Hosted engineering context was requested but no API key is configured.",
+    "CONTEXT_API_UNAUTHORIZED":
+        "The hosted engineering context API rejected the configured API key or scope.",
+    "CONTEXT_API_RATE_LIMITED":
+        "The hosted engineering context API rate limit was exceeded.",
+    "CONTEXT_API_REQUEST_FAILED":
+        "The hosted engineering context API could not be reached or returned an error.",
 }
 
 

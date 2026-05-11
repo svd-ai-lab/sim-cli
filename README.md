@@ -69,6 +69,17 @@ plugins. A plugin can provide both:
 - a **skill**, so the agent knows the solver-specific workflow, pitfalls, and
   inspection rules
 
+Hosted engineering context is optional. When configured, agents can ask for a
+Context7-style context pack before modeling:
+
+```powershell
+$env:SIM_CONTEXT_API_KEY="sim_sk_..."
+uv run sim context get --domain comsol "chip package overheating near voltage regulator"
+```
+
+The context API returns source pointers and engineering hints. It does not
+replace local solver execution or expose private index internals.
+
 ## Human-in-the-loop collaboration
 
 `sim` is designed for shared control, not unattended black-box automation.
