@@ -236,6 +236,7 @@ Ready-to-use plugins:
 | Ansys Fluent | `sim plugin install sim-plugin-fluent` |
 | Ansys HFSS | `sim plugin install sim-plugin-hfss` |
 | Abaqus | `sim plugin install sim-plugin-abaqus` |
+| LTspice | `sim plugin install sim-plugin-ltspice` |
 | OpenFOAM | `sim plugin install git+https://github.com/svd-ai-lab/sim-plugin-openfoam@main` |
 
 Under development: Amesim, Dymola, and Flotherm.
