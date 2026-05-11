@@ -302,8 +302,6 @@ names remain the property of their respective owners.
   development, and architecture notes
 - [docs/plugin-install.md](docs/plugin-install.md) - plugin installation
   reference
-- [docs/architecture/version-compat.md](docs/architecture/version-compat.md) -
-  compatibility profile design
 
 ## License
 
