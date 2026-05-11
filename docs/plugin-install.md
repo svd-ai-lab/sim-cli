@@ -94,7 +94,7 @@ Requirements:
 - `sim-cli-core` installed and on `PATH`
 - Python with `pip` available to the interpreter running `sim`
 - network access to the package index, direct URL, or Git host you provide
-- the underlying solver installed and licensed if `--deep` detection should
+- the underlying simulation solver installed if `--deep` detection should
   succeed
 
 If `sim` is on `PATH` but you need to install the plugin into a specific Python
@@ -117,11 +117,11 @@ The skill ships inside the wheel, so the same artifact can provide both the
 driver and the agent instructions. No network access is required beyond the
 artifact you already have.
 
-## Private and commercial plugins
+## Private plugins
 
-Commercial plugin availability depends on third-party license conditions.
-Private wrappers should be distributed through explicit private repos, direct
-wheel URLs, or standard private Python package indexes:
+Private plugin availability depends on the solver, team, and distribution
+model. Private wrappers should be distributed through explicit private repos,
+direct wheel URLs, or standard private Python package indexes:
 
 ```bash
 sim plugin install sim-plugin-mechanical --extra-index-url https://example.com/simple/
@@ -129,7 +129,7 @@ sim plugin install git+ssh://git@example.com/acme/sim-plugin-internal
 sim plugin install https://example.com/wheels/sim_plugin_internal-0.1.0-py3-none-any.whl
 ```
 
-Contact <contact@svd-ai-lab.com> to discuss commercial plugin access.
+Contact <contact@svd-ai-lab.com> to discuss private plugin access.
 
 ## Project manifests with sim.toml
 
@@ -200,8 +200,8 @@ sim check comsol
 
 `plugin doctor` checks entry points, driver instantiation, bundled skills, and
 the plugin compatibility metadata. `--deep` also calls solver detection, so it
-can fail when the plugin is valid but the commercial solver is missing,
-unlicensed, or installed in an unsupported location.
+can fail when the plugin is valid but the simulation solver is missing, not
+available to the current process, or installed in an unsupported location.
 
 ## Editable installs
 

@@ -222,7 +222,7 @@ protected LAN. The runtime currently has no auth layer, and `/connect` plus
 
 ## Solver plugins
 
-`sim-cli-core` ships with no commercial solver drivers built in. Each solver is
+`sim-cli-core` ships with no solver drivers built in. Each simulation solver is
 reached through an explicit plugin package.
 
 ```bash
@@ -287,8 +287,8 @@ Run `sim describe` for a machine-readable command manifest, or `sim <command>
 
 ## Safety and licensing
 
-`sim-cli` does not bundle or redistribute commercial solvers or vendor SDKs.
-You must install and license each underlying solver yourself and comply with
+`sim-cli` does not bundle or redistribute simulation solvers or vendor SDKs.
+You are responsible for installing each underlying solver and complying with
 its EULA, copyright, and license terms. See [NOTICE](NOTICE) for optional SDK
 dependency notes.
 
