@@ -66,6 +66,7 @@ single `mph` line (1.2.x). Always read `base/`, then your active
 | `base/reference/runtime_introspection.md` | Live-session inspection contract: preferred `uv run sim inspect` targets, compatibility rules, partial results, and raw Java fallbacks. |
 | `base/reference/java_api_patterns.md` | Stable Java API probing patterns: tags first, properties before `set`, selection checks, and version-safe try/except snippets. |
 | `base/reference/mph_file_format.md` | `.mph` is a ZIP archive — internal layout, the three `nodeType` variants (compact/solved/preview), the Global Parameter `T="33"` contract, and the stdlib `mph_inspect` reader. Read this when you need to introspect a `.mph` *without* spinning up `comsolmphserver`. |
+| `base/reference/offline_postprocessing_exports.md` | Optional pattern for COMSOL-free/Python postprocessing after a solve. Use when the user asks for reusable result artifacts, full-domain VTU field exports, CSV tables, or postprocessing without keeping COMSOL open. |
 
 Larger engineering examples do not live in this plugin skill. Keep this
 plugin-owned content focused on the driver protocol, live introspection,
@@ -191,6 +192,17 @@ Parameter `T="33"` extraction contract.
 Use `.mph` archive inspection for saved artifacts and offline comparison.
 Use live runtime introspection for the current JPype session, especially
 before changing selections, physics features, studies, and result nodes.
+
+## Optional offline postprocessing exports
+
+When the user wants Python-friendly postprocessing without keeping COMSOL
+open, export reusable data artifacts once from the live or headless COMSOL
+session, then process those files offline. Prefer full-domain VTU field data
+and CSV/TXT tables over screenshots or slices as the reusable source data.
+
+See
+[`base/reference/offline_postprocessing_exports.md`](base/reference/offline_postprocessing_exports.md)
+for the optional bundle layout and headless export snippets.
 
 ---
 
