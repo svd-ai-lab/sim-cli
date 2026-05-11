@@ -240,17 +240,17 @@ reached through an explicit plugin package.
 
 Ready-to-use plugins:
 
-| Solver | Package spec |
-| --- | --- |
-| COMSOL | `sim-plugin-comsol` |
-| MATLAB / Simulink | `git+https://github.com/svd-ai-lab/sim-plugin-matlab@main` |
-| Ansys Workbench | `sim-plugin-workbench` |
-| Ansys Mechanical | `sim-plugin-mechanical` |
-| Ansys Fluent | `sim-plugin-fluent` |
-| Ansys HFSS | `sim-plugin-hfss` |
-| Abaqus | `sim-plugin-abaqus` |
-| LTspice | `sim-plugin-ltspice` |
-| OpenFOAM | `git+https://github.com/svd-ai-lab/sim-plugin-openfoam@main` |
+| Solver | Package spec | Plugin repo |
+| --- | --- | --- |
+| COMSOL | `sim-plugin-comsol` | [sim-plugin-comsol](https://github.com/svd-ai-lab/sim-plugin-comsol) |
+| MATLAB / Simulink | `sim-plugin-matlab` | [sim-plugin-matlab](https://github.com/svd-ai-lab/sim-plugin-matlab) |
+| Ansys Workbench | `sim-plugin-workbench` | [sim-plugin-workbench](https://github.com/svd-ai-lab/sim-plugin-workbench) |
+| Ansys Mechanical | `sim-plugin-mechanical` | [sim-plugin-mechanical](https://github.com/svd-ai-lab/sim-plugin-mechanical) |
+| Ansys Fluent | `sim-plugin-fluent` | [sim-plugin-fluent](https://github.com/svd-ai-lab/sim-plugin-fluent) |
+| Ansys HFSS | `sim-plugin-hfss` | [sim-plugin-hfss](https://github.com/svd-ai-lab/sim-plugin-hfss) |
+| Abaqus | `sim-plugin-abaqus` | [sim-plugin-abaqus](https://github.com/svd-ai-lab/sim-plugin-abaqus) |
+| LTspice | `sim-plugin-ltspice` | [sim-plugin-ltspice](https://github.com/svd-ai-lab/sim-plugin-ltspice) |
+| OpenFOAM | `sim-plugin-openfoam` | [sim-plugin-openfoam](https://github.com/svd-ai-lab/sim-plugin-openfoam) |
 
 Under development: Amesim, Dymola, and Flotherm.
 
