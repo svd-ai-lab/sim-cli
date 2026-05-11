@@ -105,19 +105,6 @@ Skills are different from Python packages. The plugin package lives in Python's
 site-packages; the bundled skill is synced into an agent-readable directory such
 as `.agents/skills` or `.claude/skills`.
 
-## Optional global CLI
-
-For a personal machine where one global `sim` plus one plugin set is enough:
-
-```bash
-uv tool install sim-cli-core --with sim-plugin-comsol
-sim check comsol
-sim plugin sync-skills --target .agents/skills --copy
-```
-
-This is convenient, but project-local `uv run sim ...` is more predictable for
-agents and teams.
-
 ## sim plugin install
 
 `sim plugin install <source>` is still available for direct wheel, Git, local

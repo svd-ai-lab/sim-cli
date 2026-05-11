@@ -138,18 +138,6 @@ sim check comsol
 sim plugin doctor comsol --deep
 ```
 
-### Optional global CLI
-
-For a personal machine where one global `sim` plus one plugin set is enough:
-
-```powershell
-uv tool install sim-cli-core --with sim-plugin-comsol
-sim check comsol
-```
-
-This is convenient for humans, but project-local `uv run sim ...` is more
-predictable for agents and teams.
-
 ## Hand this prompt to your agent
 
 After setup, give your coding agent a direct instruction like this:
