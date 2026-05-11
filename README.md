@@ -69,6 +69,19 @@ plugins. A plugin can provide both:
 - a **skill**, so the agent knows the solver-specific workflow, pitfalls, and
   inspection rules
 
+## Human-in-the-loop collaboration
+
+`sim` is designed for shared control, not unattended black-box automation.
+When a solver plugin exposes live state through `sim inspect`, the agent can
+re-read the current solver session after each meaningful step. That means an
+engineer can cut in through the solver GUI, change geometry, parameters,
+boundary conditions, plots, or saved artifacts, then ask the agent to inspect
+again and continue from the real current state.
+
+This is the collaboration model: the human can watch, correct, and steer; the
+agent keeps using inspection and checkpoints instead of assuming its previous
+script is still the source of truth.
+
 ## Quick Start: agent setup
 
 Use this path when the agent and solver are on the same machine. You do not
@@ -119,6 +132,8 @@ local solver installation before connecting. Work one bounded step at a time:
 connect, inspect the session, execute a small step, inspect last.result and the
 live model state, then save or update a checkpoint before continuing. Do not
 guess solver API names; inspect the live model or the solver's local docs first.
+If I make manual changes in the solver UI, re-inspect the live state before
+continuing instead of assuming your previous script still matches the model.
 Report saved artifacts, numerical checks, warnings, and anything that still
 needs human engineering review.
 ```
