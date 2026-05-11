@@ -26,6 +26,107 @@ class FakeProcess:
         return self.returncode
 
 
+class FakeSelection:
+    def __init__(self, entities=None, named=""):
+        self._entities = list(entities or [])
+        self._named = named
+
+    def entities(self):
+        return list(self._entities)
+
+    def named(self):
+        return self._named
+
+
+class FakeNodeSet:
+    def __init__(self, nodes):
+        self._nodes = {node.tag(): node for node in nodes}
+
+    def tags(self):
+        return list(self._nodes)
+
+    def __call__(self, tag=None):
+        if tag is None:
+            return self
+        return self._nodes[tag]
+
+
+class FakeFeature:
+    def __init__(self, tag, ftype, name, properties=None, entities=None):
+        self._tag = tag
+        self._type = ftype
+        self._name = name
+        self._properties = dict(properties or {})
+        self._selection = FakeSelection(entities or [])
+
+    def tag(self):
+        return self._tag
+
+    def getType(self):
+        return self._type
+
+    def name(self):
+        return self._name
+
+    def selection(self):
+        return self._selection
+
+    def properties(self):
+        return list(self._properties)
+
+    def getString(self, name):
+        if name not in self._properties:
+            raise KeyError(name)
+        return self._properties[name]
+
+
+class FakePhysics:
+    def __init__(self, tag, ptype, name, features):
+        self._tag = tag
+        self._type = ptype
+        self._name = name
+        self._features = FakeNodeSet(features)
+
+    def tag(self):
+        return self._tag
+
+    def getType(self):
+        return self._type
+
+    def name(self):
+        return self._name
+
+    def feature(self, tag=None):
+        return self._features(tag)
+
+
+class FakeComponent:
+    def __init__(self, tag):
+        self._tag = tag
+        self._physics = FakeNodeSet([
+            FakePhysics(
+                "ht",
+                "HeatTransfer",
+                "Heat Transfer in Solids",
+                [
+                    FakeFeature(
+                        "temp1",
+                        "TemperatureBoundary",
+                        "Temperature 1",
+                        properties={"T0": "373[K]", "T0_src": "userdef"},
+                        entities=[1],
+                    ),
+                ],
+            )
+        ])
+
+    def tag(self):
+        return self._tag
+
+    def physics(self, tag=None):
+        return self._physics(tag)
+
+
 class FakeComsolModel:
     def __init__(self, tag):
         self._tag = tag
@@ -36,6 +137,7 @@ class FakeComsolModel:
         self._location_uri = None
         self._model_path = r"C:\work\checkpoint_model\input;C:\work\checkpoint_model\model"
         self._read_only = False
+        self._components = FakeNodeSet([FakeComponent("comp1")])
 
     def tag(self):
         return self._tag
@@ -60,6 +162,12 @@ class FakeComsolModel:
 
     def isReadOnly(self):
         return self._read_only
+
+    def component(self, tag=None):
+        return self._components(tag)
+
+    def physics(self, tag=None):
+        return self.component("comp1").physics(tag)
 
 
 class FakeModelUtil:
@@ -468,6 +576,65 @@ class TestLifecycleDiagnostics:
         assert identity["has_saved_location"] is True
         assert identity["has_model_path"] is True
         assert identity["checkpoint_ready"] is True
+
+    def test_query_model_describe_disconnected(self):
+        driver = ComsolDriver()
+
+        result = driver.query("comsol.model.describe")
+
+        assert result["ok"] is False
+        assert result["code"] == "comsol.session.disconnected"
+
+    def test_query_model_describe_connected(self, tmp_path, monkeypatch):
+        driver, _model_util = _shared_desktop_driver(tmp_path, monkeypatch)
+
+        result = driver.query("comsol.model.describe")
+
+        assert result["ok"] is True
+        assert result["what"] == "physics"
+        assert result["partial"] is True
+        assert result["physics"][0]["tag"] == "ht"
+        assert result["physics"][0]["features"][0]["tag"] == "temp1"
+
+    def test_query_model_describe_text_connected(self, tmp_path, monkeypatch):
+        driver, _model_util = _shared_desktop_driver(tmp_path, monkeypatch)
+
+        result = driver.query("comsol.model.describe_text")
+
+        assert result["ok"] is True
+        assert "TemperatureBoundary" in result["text"]
+        assert "T0=373[K]" in result["text"]
+        assert result["summary"]["what"] == "physics"
+
+    def test_query_node_properties_by_dot_path(self, tmp_path, monkeypatch):
+        driver, _model_util = _shared_desktop_driver(tmp_path, monkeypatch)
+
+        result = driver.query(
+            "comsol.node.properties:component.comp1.physics.ht.feature.temp1"
+        )
+
+        assert result["ok"] is True
+        assert result["type"] == "TemperatureBoundary"
+        assert result["name"] == "Temperature 1"
+        assert result["properties"] == ["T0", "T0_src"]
+        assert result["property_values"]["T0"] == "373[K]"
+
+    def test_query_node_properties_by_tag(self, tmp_path, monkeypatch):
+        driver, _model_util = _shared_desktop_driver(tmp_path, monkeypatch)
+
+        result = driver.query("comsol.node.properties:temp1")
+
+        assert result["ok"] is True
+        assert result["tag"] == "temp1"
+        assert result["property_values"]["T0_src"] == "userdef"
+
+    def test_query_node_properties_unknown_node(self, tmp_path, monkeypatch):
+        driver, _model_util = _shared_desktop_driver(tmp_path, monkeypatch)
+
+        result = driver.query("comsol.node.properties:missing_feature")
+
+        assert result["ok"] is False
+        assert result["code"] == "comsol.node.properties_failed"
 
     def test_query_ui_modes(self):
         driver = ComsolDriver()

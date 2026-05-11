@@ -25,7 +25,7 @@ import traceback
 import uuid
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
-from typing import Callable, TextIO
+from typing import Any, Callable, TextIO
 
 from sim.driver import ConnectionInfo, Diagnostic, LintResult, SolverInstall
 from sim.inspect import (
@@ -1306,6 +1306,271 @@ class ComsolDriver:
         )
         return identity
 
+    def _disconnected_query_result(self, target: str) -> dict:
+        health = self.health()
+        return {
+            "ok": False,
+            "connected": False,
+            "target": target,
+            "code": health.get("code", "comsol.session.disconnected"),
+            "message": health.get("message", "COMSOL session is not connected"),
+        }
+
+    def _model_describe(self, *, text: bool = False) -> dict:
+        if self._model is None:
+            return self._disconnected_query_result(
+                "comsol.model.describe_text" if text else "comsol.model.describe"
+            )
+        try:
+            from .lib import describe, format_text
+
+            summary = describe(self._model)
+            warnings = [
+                (
+                    "Live model describe currently covers physics interfaces and "
+                    "their features; inspect other layers with targeted node "
+                    "properties or read-only sim exec probes."
+                )
+            ]
+            if text:
+                return {
+                    "ok": True,
+                    "target": "comsol.model.describe_text",
+                    "text": format_text(summary),
+                    "summary": summary,
+                    "partial": True,
+                    "warnings": warnings,
+                }
+            return {
+                "ok": True,
+                "target": "comsol.model.describe",
+                **summary,
+                "partial": True,
+                "warnings": warnings,
+            }
+        except Exception as exc:  # noqa: BLE001 - Java APIs vary by COMSOL version
+            return {
+                "ok": False,
+                "target": "comsol.model.describe_text" if text else "comsol.model.describe",
+                "code": "comsol.model.describe_failed",
+                "error": str(exc),
+                "exception_type": type(exc).__name__,
+            }
+
+    @staticmethod
+    def _call_node_method(node: Any, method_name: str, *args: Any) -> Any:
+        method = getattr(node, method_name, None)
+        if not callable(method):
+            raise AttributeError(f"{type(node).__name__} has no callable {method_name}()")
+        return method(*args)
+
+    @staticmethod
+    def _node_tags(container: Any) -> list[str]:
+        return [str(tag) for tag in list(container.tags())]
+
+    def _resolve_node_path(self, target: str) -> Any:
+        if self._model is None:
+            raise RuntimeError("COMSOL session is not connected")
+
+        cleaned = target.strip()
+        if not cleaned:
+            raise ValueError("missing node target after comsol.node.properties:")
+
+        # Allow either dot or colon separators in driver-specific inspect names.
+        tokens = [
+            piece for piece in re.split(r"[.:]+", cleaned)
+            if piece and piece not in {"model", "root"}
+        ]
+        if not tokens:
+            raise ValueError(f"invalid node target: {target!r}")
+        if len(tokens) == 1:
+            return self._find_node_by_tag(tokens[0])
+
+        aliases = {
+            "comp": "component",
+            "components": "component",
+            "geometry": "geom",
+            "geometries": "geom",
+            "materials": "material",
+            "physicses": "physics",
+            "features": "feature",
+            "meshes": "mesh",
+            "studies": "study",
+            "results": "result",
+            "selections": "selection",
+            "variables": "variable",
+            "functions": "func",
+            "property_group": "propertyGroup",
+            "propertygroup": "propertyGroup",
+            "propertygroups": "propertyGroup",
+            "datasets": "dataset",
+            "numericals": "numerical",
+        }
+        child_methods = {
+            "component",
+            "geom",
+            "physics",
+            "feature",
+            "material",
+            "mesh",
+            "study",
+            "result",
+            "selection",
+            "variable",
+            "func",
+            "propertyGroup",
+            "dataset",
+            "numerical",
+            "view",
+            "param",
+        }
+
+        node: Any = self._model
+        index = 0
+        while index < len(tokens):
+            raw_method = tokens[index]
+            method_name = aliases.get(raw_method.lower(), raw_method)
+            if method_name not in child_methods:
+                raise ValueError(
+                    f"expected a COMSOL child method at {raw_method!r} in {target!r}"
+                )
+            tag: str | None = None
+            if index + 1 < len(tokens):
+                candidate = tokens[index + 1]
+                candidate_method = aliases.get(candidate.lower(), candidate)
+                if candidate_method not in child_methods:
+                    tag = candidate
+                    index += 1
+            node = (
+                self._call_node_method(node, method_name, tag)
+                if tag is not None
+                else self._call_node_method(node, method_name)
+            )
+            index += 1
+        return node
+
+    def _find_node_by_tag(self, tag: str) -> Any:
+        if self._model is None:
+            raise RuntimeError("COMSOL session is not connected")
+
+        visited: set[int] = set()
+        child_scopes = (
+            "component",
+            "geom",
+            "physics",
+            "feature",
+            "material",
+            "mesh",
+            "study",
+            "result",
+            "selection",
+            "propertyGroup",
+            "dataset",
+            "numerical",
+        )
+
+        def visit(node: Any, scopes: tuple[str, ...]) -> Any | None:
+            try:
+                marker = id(node)
+            except Exception:
+                marker = 0
+            if marker in visited:
+                return None
+            visited.add(marker)
+
+            if self._safe_node_string(node, "tag") == tag:
+                return node
+
+            for scope in scopes:
+                try:
+                    list_method = getattr(node, scope, None)
+                    if not callable(list_method):
+                        continue
+                    child_container = list_method()
+                except Exception:
+                    continue
+                try:
+                    child_tags = self._node_tags(child_container)
+                except Exception:
+                    child_tags = []
+                for child_tag in child_tags:
+                    try:
+                        child = list_method(child_tag)
+                    except Exception:
+                        continue
+                    if child_tag == tag:
+                        return child
+                    found = visit(
+                        child,
+                        child_scopes,
+                    )
+                    if found is not None:
+                        return found
+            return None
+
+        found = visit(
+            self._model,
+            child_scopes + ("param",),
+        )
+        if found is None:
+            raise KeyError(f"could not resolve COMSOL node tag {tag!r}")
+        return found
+
+    @staticmethod
+    def _safe_node_string(node: Any, method_name: str) -> str | None:
+        method = getattr(node, method_name, None)
+        if not callable(method):
+            return None
+        try:
+            return str(method())
+        except Exception:
+            return None
+
+    @staticmethod
+    def _read_node_properties(node: Any) -> tuple[list[str], dict[str, str], list[dict]]:
+        names = [str(name) for name in list(node.properties())]
+        values: dict[str, str] = {}
+        warnings: list[dict] = []
+        for name in names:
+            try:
+                values[name] = str(node.getString(name))
+            except Exception as exc:  # noqa: BLE001 - COMSOL property readers vary
+                warnings.append({
+                    "property": name,
+                    "code": "comsol.node.property_value_unreadable",
+                    "exception_type": type(exc).__name__,
+                    "message": str(exc),
+                })
+        return names, values, warnings
+
+    def _node_properties(self, target: str) -> dict:
+        if self._model is None:
+            return self._disconnected_query_result("comsol.node.properties")
+        try:
+            node = self._resolve_node_path(target)
+            names, values, warnings = self._read_node_properties(node)
+            return {
+                "ok": True,
+                "target": "comsol.node.properties",
+                "node": target,
+                "type": self._safe_node_string(node, "getType"),
+                "name": self._safe_node_string(node, "name"),
+                "tag": self._safe_node_string(node, "tag"),
+                "properties": names,
+                "property_values": values,
+                "warnings": warnings,
+                "partial": bool(warnings),
+            }
+        except Exception as exc:  # noqa: BLE001 - Java exceptions vary
+            return {
+                "ok": False,
+                "target": "comsol.node.properties",
+                "node": target,
+                "code": "comsol.node.properties_failed",
+                "error": str(exc),
+                "exception_type": type(exc).__name__,
+            }
+
     def query(self, name: str) -> dict:
         if name in {"health", "session.health"}:
             return self.health()
@@ -1337,6 +1602,13 @@ class ComsolDriver:
                 },
                 "aliases": dict(_COMSOL_UI_MODE_ALIASES),
             }
+        if name in {"model.describe", "comsol.model.describe"}:
+            return self._model_describe(text=False)
+        if name in {"model.describe_text", "comsol.model.describe_text"}:
+            return self._model_describe(text=True)
+        for prefix in ("node.properties:", "comsol.node.properties:"):
+            if name.startswith(prefix):
+                return self._node_properties(name[len(prefix):])
         return {"ok": False, "error": f"unknown inspect target: {name}"}
 
     def _check_port(self, port: int, timeout: float = 2) -> bool:
