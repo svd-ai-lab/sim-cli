@@ -91,6 +91,19 @@ will use the local runtime.
 Prerequisite: install [`uv`](https://docs.astral.sh/uv/) if you do not already
 have a Python tool manager.
 
+With the recommended `uv tool install sim-cli-core` setup:
+
+- the `sim` executable is placed in `$(uv tool dir --bin)`, usually
+  `~/.local/bin/sim`
+- `sim-cli-core` lives in its own uv-managed tool environment under
+  `$(uv tool dir)/sim-cli-core`, usually
+  `~/.local/share/uv/tools/sim-cli-core`
+- `sim plugin install ...` installs plugins into the Python environment running
+  `sim`, so by default plugins go into that same `sim-cli-core` tool
+  environment
+- synced skills are separate files for agents to read; they go to
+  `.agents/skills` or `.claude/skills`
+
 Use `.agents/skills` for Codex and GitHub Copilot projects. Use
 `.claude/skills` for Claude Code projects.
 

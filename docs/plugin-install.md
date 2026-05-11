@@ -25,6 +25,38 @@ GitHub Copilot, Claude Code, or another agent.
 | Sync installed skills for Codex or GitHub Copilot | `sim plugin sync-skills --target .agents/skills --copy` |
 | Sync installed skills for Claude Code | `sim plugin sync-skills --target .claude/skills --copy` |
 
+## Python environment
+
+With the recommended user install:
+
+```bash
+uv tool install sim-cli-core
+```
+
+`uv` creates a dedicated tool environment for `sim-cli-core`. The executable is
+placed in `$(uv tool dir --bin)`, usually `~/.local/bin/sim`. The tool
+environment is under `$(uv tool dir)/sim-cli-core`, usually
+`~/.local/share/uv/tools/sim-cli-core`.
+
+By default, `sim plugin install <source>` installs the plugin into the Python
+interpreter that is running `sim`. For the recommended uv tool setup, that means
+plugins are installed into the same `sim-cli-core` tool environment, not into
+your current project `.venv`.
+
+You can override the install target:
+
+```bash
+sim plugin install sim-plugin-comsol --python /path/to/venv/bin/python
+```
+
+Only do this when you intend to run `sim` from that same Python environment or
+otherwise know that the plugin will be discoverable there. Plugin discovery uses
+Python entry points from the environment running `sim`.
+
+Skills are different from Python packages. The plugin package lives in Python's
+site-packages; the bundled skill is synced into an agent-readable directory such
+as `.agents/skills` or `.claude/skills`.
+
 ## Install sources
 
 `sim plugin install <source>` passes explicit install sources to pip or
@@ -103,17 +135,22 @@ sim plugin doctor comsol --deep
 Requirements:
 
 - `sim-cli-core` installed and on `PATH`
-- Python with `pip` available to the interpreter running `sim`
+- `uv` available, or Python with `pip` available to the interpreter running
+  `sim`
 - network access to the package index, direct URL, or Git host you provide
 - the underlying simulation solver installed if `--deep` detection should
   succeed
 
-If `sim` is on `PATH` but you need to install the plugin into a specific Python
-environment, pin the target interpreter:
+In the common uv tool setup, do not pass `--python`; let the plugin install into
+the same tool environment as `sim`. If you intentionally maintain another
+Python environment that should own both `sim` and its plugins, pin that
+interpreter:
 
 ```bash
 sim plugin install sim-plugin-comsol --python /path/to/venv/bin/python
 ```
+
+Then run `sim` from that same environment so plugin entry points are visible.
 
 ## Offline installs
 
