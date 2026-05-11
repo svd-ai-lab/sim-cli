@@ -23,21 +23,10 @@ solver readiness and sync bundled skills into the agent project.
 
 ## uv project setup
 
-Use this path for agent projects and reproducible engineering work.
-
-macOS/Linux:
+Use this path for agent projects and reproducible engineering work. Run from
+the project root:
 
 ```bash
-uv init  # only if this is not already a uv project
-uv add sim-cli-core sim-plugin-comsol
-uv run sim plugin sync-skills --target .agents/skills --copy
-uv run sim check comsol
-uv run sim plugin doctor comsol --deep
-```
-
-Windows PowerShell:
-
-```powershell
 uv init  # only if this is not already a uv project
 uv add sim-cli-core sim-plugin-comsol
 uv run sim plugin sync-skills --target .agents/skills --copy

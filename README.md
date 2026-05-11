@@ -91,21 +91,9 @@ will use the local runtime. The default docs use
 by the current project instead of guessing which executable is on `PATH`.
 
 `uv run sim ...` runs `sim` from this project environment, so it sees this
-project's installed solver plugins.
-
-macOS/Linux:
+project's installed solver plugins. Run from the project root:
 
 ```bash
-uv init  # only if this is not already a uv project
-uv add sim-cli-core sim-plugin-comsol
-uv run sim plugin sync-skills --target .agents/skills --copy
-uv run sim check comsol
-uv run sim plugin doctor comsol --deep
-```
-
-Windows PowerShell:
-
-```powershell
 uv init  # only if this is not already a uv project
 uv add sim-cli-core sim-plugin-comsol
 uv run sim plugin sync-skills --target .agents/skills --copy
