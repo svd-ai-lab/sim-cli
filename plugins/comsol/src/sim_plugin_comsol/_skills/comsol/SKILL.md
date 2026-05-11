@@ -1,17 +1,18 @@
 ---
 name: comsol-sim
-description: Use when working with COMSOL Multiphysics through the sim runtime, shared-desktop client-server GUI collaboration, a fallback Desktop attach workflow, or saved `.mph` artifacts — building/debugging/solving stateful COMSOL models through the JPype Java API when structured runtime inspection is needed, controlling an already-open ordinary Desktop through Java Shell for small human-in-the-loop edits, and performing offline `.mph` introspection without a JVM.
+description: Use when working with COMSOL Multiphysics through the sim runtime, shared-desktop client-server GUI collaboration, or saved `.mph` artifacts — building/debugging/solving stateful COMSOL models through the JPype Java API when structured runtime inspection is needed, and performing offline `.mph` introspection without a JVM. Includes a fragile Java Shell Desktop attach fallback only for explicit small edits in an already-open ordinary Desktop session.
 ---
 
 # comsol-sim
 
 This file is the **COMSOL Multiphysics** index. Use the sim runtime/JPype path
 for serious model building, solving, inspection, saved `.mph` artifacts, and
-reliable live GUI collaboration through `visual_mode=shared-desktop`. Use
-Desktop attach as a fallback for small user-visible edits in an already-open
-ordinary COMSOL Desktop, quick visual checks, or human-in-the-loop
-interventions. Use the offline `.mph` inspection path for saved artifacts when
-no live COMSOL session is needed.
+reliable live GUI collaboration through `visual_mode=shared-desktop`. Treat
+Desktop attach as a fragile UIA fallback, not a normal routing option: use it
+only when the user explicitly needs a small edit inside an already-open
+ordinary COMSOL Desktop and reconnecting through `mphclient` is not acceptable.
+Use the offline `.mph` inspection path for saved artifacts when no live COMSOL
+session is needed.
 
 This skill is self-contained for COMSOL work. Do not require a separate skill
 checkout or an external sim-cli skill. Use this file for the COMSOL workflow,
@@ -25,8 +26,8 @@ Choose the control path first:
 
 | Path | Use it for | Avoid it for |
 |---|---|---|
-| sim runtime / JPype | Building, solving, inspecting, debugging, saving `.mph`, repeatable case generation, and reliable live GUI co-editing with `visual_mode=shared-desktop`. | Already-open ordinary Desktop sessions that the user does not want to reconnect as `mphclient`. |
-| Desktop attach / Java Shell | Fallback for small visible Desktop edits, quick plots/tables, and user-in-the-loop adjustments in an already-open ordinary COMSOL window. | Long builders, heavy debugging, or anything that needs reliable structured exceptions or server-side inspect. |
+| sim runtime / JPype | Building, solving, inspecting, debugging, saving `.mph`, repeatable case generation, and reliable live GUI co-editing with `visual_mode=shared-desktop`. | Only avoid when the user explicitly refuses a server-backed/shared Desktop session. |
+| Desktop attach / Java Shell | Rare fallback for explicit small edits in an already-open ordinary COMSOL window when server-backed shared Desktop is not acceptable. | Default agent routing, long builders, heavy debugging, solves, validation, or anything that needs reliable structured exceptions or server-side inspect. |
 | saved `.mph` inspection | Offline summaries, archive diffs, and artifact review without starting COMSOL. | Mutating live model state. |
 
 For the sim runtime, start with `uv run sim check comsol`, then
@@ -40,11 +41,8 @@ uv run sim inspect session.health
 
 Confirm `ui_capabilities.model_builder_live: true`,
 `active_model_tag`, and `live_model_binding.ok: true` before treating the GUI
-as synchronized with agent edits. For Desktop attach fallback, start with
-`sim-comsol-attach open --json --timeout 120` or
-`sim-comsol-attach health --json`, then submit bounded Java Shell snippets with
-`--submit-key ctrl_enter`. The returned `session.versions` payload tells you
-which COMSOL-specific subfolders to load:
+as synchronized with agent edits. The returned `session.versions` payload tells
+you which COMSOL-specific subfolders to load:
 
 ```json
 "session.versions": {
@@ -74,10 +72,11 @@ plugin-owned content focused on the driver protocol, live introspection,
 debug loops, and the smallest smoke/reference workflow.
 
 Each numbered step is a self-contained snippet for the sim runtime after
-`uv run sim connect --solver comsol`. For Desktop attach, translate only small bounded
-steps into Java Shell snippets. Do not assume a Java Shell session always
-provides a prebound `model` or `m` variable; probe with a tiny print first, and
-prefer the sim runtime when you need a reliable model handle.
+`uv run sim connect --solver comsol`. For the rare Desktop attach fallback,
+translate only small bounded steps into Java Shell snippets. Do not assume a
+Java Shell session always provides a prebound `model` or `m` variable; probe
+with a tiny print first, and prefer the sim runtime when you need a reliable
+model handle.
 
 Before running a new or complex workflow, read
 [`base/reference/runtime_introspection.md`](base/reference/runtime_introspection.md)
@@ -239,9 +238,10 @@ Use this policy:
   a clear model tag derived from the case name.
 - If starting from scratch in the sim runtime, pass a descriptive
   `model_tag=<case_slug>` when connecting if the current driver supports it.
-- If starting from scratch in shared Desktop or Desktop attach mode, bind to
-  the active Desktop model first, then set a visible title/label and save it
-  early to an absolute `.mph` path.
+- If starting from scratch in shared Desktop mode, bind to the active Desktop
+  model first, then set a visible title/label and save it early to an absolute
+  `.mph` path. Apply the same identity rule to the rare Desktop attach fallback
+  before making any visible edit.
 - Keep all related files under one working folder, for example:
 
 ```text
@@ -305,16 +305,16 @@ assignment.
    - Use `uv run sim connect --solver comsol --ui-mode gui --driver-option
      visual_mode=shared-desktop` when the user wants real-time Model Builder
      visibility and the agent needs structured `uv run sim inspect`/JPype state.
-   - Use the standalone Desktop attach helper only when the user already
-     opened ordinary COMSOL Desktop, wants to avoid the `mphclient` server
-     login/session switch, or needs a small human-in-the-loop edit.
    - Use plain `uv run sim connect --solver comsol` for no-GUI/server execution,
      driver-managed artifacts, and existing sim runtime workflows.
-2. For Desktop attach, run `sim-comsol-attach open --json --timeout 120` or
-   `sim-comsol-attach health --json`, then confirm the Java Shell channel is
-   ready.
-3. For sim runtime, run `uv run sim check comsol`, connect if needed, and read
+   - Use the standalone Desktop attach helper only when the user explicitly
+     chooses a small edit in an already-open ordinary Desktop and does not want
+     the server-backed `shared-desktop` path.
+2. For sim runtime, run `uv run sim check comsol`, connect if needed, and read
    `session.versions` plus `uv run sim inspect session.health`.
+3. If the user explicitly chose Desktop attach, run `sim-comsol-attach open
+   --json --timeout 120` or `sim-comsol-attach health --json`, then confirm the
+   Java Shell channel is ready before submitting any snippet.
 4. Establish or verify model identity, working folder, and checkpoint target.
    For sim runtime, inspect `comsol.model.identity` when available. For
    Desktop attach, probe the visible model title/file path through Java Shell
@@ -348,7 +348,7 @@ COMSOL has several visual surfaces. Do not collapse them into one
 | `server-graphics` | `comsolmphserver -graphics`; plot windows may appear when a result plot is run. `ui_mode=gui` is an alias for this. | Yes for the server-side model, but there is no Model Builder tree. |
 | `desktop-inspection` | Save a `.mph` artifact, then open it in full COMSOL Desktop / Model Builder. | No. It is an inspection copy unless explicitly reloaded. |
 | `shared-desktop` | Full COMSOL Desktop attached to the same server, with the agent binding to the Desktop's active model tag. Request from sim-cli with `--driver-option visual_mode=shared-desktop`. | Yes, when `model_builder_live: true`. |
-| `desktop-attach` | Fallback ordinary COMSOL Desktop path, controlled through the Java Shell UIA channel via `sim-comsol-attach`. No `mphclient`, no shared server login dialog. | Yes, in the visible Desktop model, but without `uv run sim inspect`/JPype session introspection. |
+| `desktop-attach` | Advanced fallback for an already-open ordinary COMSOL Desktop, controlled through the fragile Java Shell UIA channel via `sim-comsol-attach`. No `mphclient`, no shared server login dialog. | Yes, in the visible Desktop model, but without `uv run sim inspect`/JPype session introspection. |
 
 Use `uv run sim inspect session.health` or `uv run sim exec` target `session.health`
 to check `requested_ui_mode`, `effective_ui_mode`, `ui_capabilities`,
@@ -356,14 +356,16 @@ PIDs, logs, and visible COMSOL window titles. Treat `model_builder_live:
 false` as authoritative: agent-side JPype edits will not automatically
 refresh a separately opened COMSOL Desktop window.
 
-### Ordinary Desktop attach helper
+### Advanced fallback: Ordinary Desktop attach helper
 
-For already-open ordinary Desktop sessions, the standalone helper is the
-fallback path. Agents and humans must use the same command path:
-prefer `uvx --from sim-plugin-comsol sim-comsol-attach ...` over relying
-on a PATH-installed `sim-comsol-attach.exe`. This keeps development,
-documentation, and user reproduction aligned even when Python user
-Scripts directories are not on PATH.
+Skip this section for normal COMSOL work. Use the standalone helper only when
+the user explicitly wants a small edit in an already-open ordinary Desktop
+session and does not want to reconnect through the server-backed
+`shared-desktop` path. Agents and humans must use the same command path: prefer
+`uvx --from sim-plugin-comsol sim-comsol-attach ...` over relying on a
+PATH-installed `sim-comsol-attach.exe`. This keeps development, documentation,
+and user reproduction aligned even when Python user Scripts directories are not
+on PATH.
 
 ```powershell
 uvx --from sim-plugin-comsol sim-comsol-attach open --json --timeout 120
@@ -396,7 +398,9 @@ For `exec`, submit bounded Java Shell snippets that use COMSOL's Java API
 against the visible Desktop model. Keep the same modeling discipline as
 `uv run sim exec`: one layer at a time, verify the Desktop after each geometry,
 material, physics, mesh, solve, and plot step, then continue. The helper
-audits submissions under `.sim/comsol-desktop-attach/audit.jsonl`.
+audits submissions under `.sim/comsol-desktop-attach/audit.jsonl`. Do not use
+this path as evidence that a full solve or long workflow succeeded unless you
+independently verify the resulting COMSOL state or artifacts.
 
 COMSOL 6.4 Desktop gotchas:
 - User-opened model windows may be titled `Untitled.mph - COMSOL

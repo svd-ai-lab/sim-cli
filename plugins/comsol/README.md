@@ -5,17 +5,16 @@ Use Codex, Claude Code, or another AI agent to work with
 already use.
 
 `sim-plugin-comsol` gives an agent practical COMSOL control paths: inspect
-saved `.mph` files, attach to a visible COMSOL Desktop session, build or modify
-models through the COMSOL Java API, run studies, check live-session health, and
-export results while the engineer can keep watching or intervening in COMSOL
-Desktop.
+saved `.mph` files, build or modify models through the COMSOL Java API, run
+studies, check live-session health, and work through a shared visible COMSOL
+Desktop session when the engineer wants to watch or intervene.
 
 COMSOL itself and its `mph` Python binding are not bundled. See
 [LICENSE-NOTICE.md](LICENSE-NOTICE.md).
 
 ## What an agent can do with COMSOL
 
-- Help with a model you already have open in COMSOL Desktop.
+- Load and modify existing COMSOL `.mph` models.
 - Build and solve a model step by step while you watch the Model Builder.
 - Inspect a saved `.mph` file before deciding what to change.
 - Run bounded edits, checks, plots, and result-export steps through COMSOL's
@@ -23,9 +22,9 @@ COMSOL itself and its `mph` Python binding are not bundled. See
 - Keep a structured audit trail of commands, health checks, and generated
   artifacts so results can be reviewed rather than guessed.
 
-This repository is intended to be the complete COMSOL agent bundle: driver,
-Desktop attach helper, and bundled COMSOL skill. A receiving agent should not
-need a separate COMSOL skill checkout.
+This repository is intended to be the complete COMSOL agent bundle: driver and
+bundled COMSOL skill. A receiving agent should not need a separate COMSOL skill
+checkout.
 
 ## Choose the right COMSOL workflow
 
@@ -49,25 +48,7 @@ view of agent edits.
 Prefer this path for reliable multi-step model building, solving, structured
 inspection, and repeatable agent workflows.
 
-### 2. User-owned Desktop attach — best for small visible edits
-
-Use this when the user already opened COMSOL Desktop normally, loaded their
-`.mph`, opened Java Shell, and wants an agent to make a small visible edit or
-run a quick human-in-the-loop check inside that same Desktop window:
-
-```powershell
-sim-comsol-attach open --json --timeout 120
-sim-comsol-attach health --json
-sim-comsol-attach exec --file step.java --json
-```
-
-The Desktop attach helper submits COMSOL Java Shell text to the visible user
-session. It is intentionally conservative: it should help with bounded edits
-and quick checks, but it should not be treated as proof that a full solve or
-long workflow succeeded unless the agent verifies the resulting COMSOL state or
-artifacts.
-
-### 3. Saved `.mph` inspection — best before changing a file
+### 2. Saved `.mph` inspection — best before changing a file
 
 When the user only needs to know what is in a saved COMSOL model, use the
 bundled offline inspection helpers before launching a heavyweight COMSOL
@@ -104,16 +85,14 @@ is about COMSOL:
 
 ```text
 Use the bundled COMSOL skill from sim-plugin-comsol. First identify whether the
-user wants: (1) a reliable agent-owned shared Desktop session, (2) a small edit
-inside an already-open COMSOL Desktop via Java Shell attach, or (3) offline
+user wants: (1) a reliable agent-owned shared Desktop session or (2) offline
 inspection of a saved .mph file. For reliable visible co-editing, use
 `sim connect --solver comsol --ui-mode gui --driver-option visual_mode=shared-desktop`
-and verify `session.health.live_model_binding.ok`. Use Java Shell Desktop
-attach only for already-open ordinary Desktop sessions, small edits, or
-human-in-the-loop fallback work. For non-trivial modeling, establish the target
-model identity and working folder first: load the given .mph, or set a
-descriptive model tag/title and save an early checkpoint .mph under a case
-workdir. Build and solve the requested model one bounded step at a time.
+and verify `session.health.live_model_binding.ok`. For non-trivial modeling,
+establish the target model identity and working folder first: load the given
+.mph, or set a descriptive model tag/title and save an early checkpoint .mph
+under a case workdir. Build and solve the requested model one bounded step at a
+time.
 ```
 
 The bundled skill entry point is:
@@ -127,10 +106,9 @@ src/sim_plugin_comsol/_skills/comsol/SKILL.md
 `sim-plugin-comsol` is a Python package that extends
 [sim-cli](https://github.com/svd-ai-lab/sim-cli). sim-cli provides the common
 agent runtime surface (`connect`, `exec`, `inspect`, `screenshot`, `run`), while
-this plugin supplies the COMSOL-specific driver, Desktop attach command, and
-COMSOL agent skill.
+this plugin supplies the COMSOL-specific driver and COMSOL agent skill.
 
-The plugin registers the Desktop attach CLI plus three entry-point groups:
+The plugin registers three entry-point groups:
 
 ```toml
 [project.entry-points."sim.drivers"]
@@ -141,14 +119,11 @@ comsol = "sim_plugin_comsol:skills_dir"
 
 [project.entry-points."sim.plugins"]
 comsol = "sim_plugin_comsol:plugin_info"
-
-[project.scripts]
-sim-comsol-attach = "sim_plugin_comsol.desktop_attach.cli:main"
 ```
 
 `sim.drivers` exposes the driver class; `sim.skills` exposes a directory of
 skill files bundled inside the wheel; `sim.plugins` exposes plugin metadata for
-discovery. `sim-comsol-attach` exposes the Desktop-first collaboration path.
+discovery.
 
 ## Develop
 
