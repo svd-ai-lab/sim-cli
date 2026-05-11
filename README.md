@@ -225,17 +225,33 @@ protected LAN. The runtime currently has no auth layer, and `/connect` plus
 `sim-cli-core` ships with no solver drivers built in. Each simulation solver is
 reached through an explicit plugin package.
 
+Ready-to-use plugins:
+
+| Solver | Install |
+| --- | --- |
+| COMSOL | `sim plugin install sim-plugin-comsol` |
+| MATLAB / Simulink | `sim plugin install git+https://github.com/svd-ai-lab/sim-plugin-matlab@main` |
+| Ansys Workbench | `sim plugin install sim-plugin-workbench` |
+| Ansys Mechanical | `sim plugin install sim-plugin-mechanical` |
+| Ansys Fluent | `sim plugin install sim-plugin-fluent` |
+| Ansys HFSS | `sim plugin install sim-plugin-hfss` |
+| Abaqus | `sim plugin install sim-plugin-abaqus` |
+| OpenFOAM | `sim plugin install git+https://github.com/svd-ai-lab/sim-plugin-openfoam@main` |
+
+Under development: Amesim, Dymola, and Flotherm.
+
+After installing any plugin, sync its bundled skill and verify that the local
+solver can be reached:
+
 ```bash
-sim plugin catalog                 # discover available plugins
-sim plugin install sim-plugin-comsol
-sim plugin list                    # installed/registered plugins
-sim plugin info comsol             # metadata and compatibility summary
-sim plugin doctor comsol --deep    # plugin checks plus solver detection
+sim plugin list
+sim plugin sync-skills --target .agents/skills --copy
+sim check <solver>
+sim plugin doctor <solver> --deep
 ```
 
-Install sources are explicit: PyPI package specs, private package indexes,
-direct wheel or sdist URLs, Git URLs, and local plugin directories or artifacts.
-See [docs/plugin-install.md](docs/plugin-install.md) for the full plugin
+Use `sim plugin catalog` to inspect the broader catalogue. See
+[docs/plugin-install.md](docs/plugin-install.md) for the full plugin
 installation reference.
 
 ## Project setup with sim.toml
