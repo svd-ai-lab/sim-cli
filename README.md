@@ -143,18 +143,16 @@ sim plugin doctor comsol --deep
 After setup, give your coding agent a direct instruction like this:
 
 ```text
-Use the solver skill installed under .agents/skills. Run sim through this
-project with `uv run sim ...`. Check my local solver installation before
-connecting. Work one bounded step at a time: connect, inspect the session,
-execute a small step, inspect last.result and the live model state, then save
-or update a checkpoint before continuing. Do not guess solver API names; inspect
-the live model or the solver's local docs first. If I make manual changes in
-the solver UI, re-inspect the live state before continuing instead of assuming
-your previous script still matches the model. Report saved artifacts, numerical
-checks, warnings, and anything that still needs human engineering review.
+Use the installed solver skill. Run sim through this project with
+`uv run sim ...`. Check my local solver installation before connecting. Work
+one bounded step at a time: connect, inspect the session, execute a small step,
+inspect last.result and the live model state, then save or update a checkpoint
+before continuing. Do not guess solver API names; inspect the live model or the
+solver's local docs first. If I make manual changes in the solver UI,
+re-inspect the live state before continuing instead of assuming your previous
+script still matches the model. Report saved artifacts, numerical checks,
+warnings, and anything that still needs human engineering review.
 ```
-
-For Claude Code, replace `.agents/skills` with `.claude/skills`.
 
 ## Example: COMSOL and Codex on one machine
 
@@ -171,9 +169,8 @@ uv run sim plugin doctor comsol --deep
 Then ask Codex:
 
 ```text
-Use the COMSOL skill under .agents/skills. Start by checking COMSOL through
-`uv run sim check comsol`. If you need a visible live COMSOL Desktop session,
-use:
+Use the installed COMSOL skill. Start by checking COMSOL through `uv run sim
+check comsol`. If you need a visible live COMSOL Desktop session, use:
 
 uv run sim connect --solver comsol --ui-mode gui --driver-option visual_mode=shared-desktop
 
