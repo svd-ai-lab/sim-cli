@@ -143,9 +143,8 @@ needed.
 
 ## Example: COMSOL and Codex on one machine
 
-Assume COMSOL and Codex are running on the same machine. The README should help
-the user set up the agent environment; detailed COMSOL modeling rules belong to
-the bundled COMSOL skill.
+If COMSOL and Codex are on the same machine, start by installing the COMSOL
+plugin and syncing its bundled skill into the Codex project:
 
 ```bash
 uv tool install sim-cli-core
