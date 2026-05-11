@@ -6,16 +6,16 @@ mistake can become a Mechanical setup or solve failure later.
 
 ## Loop
 
-1. Inspect `sim inspect session.health`.
-2. Inspect `sim inspect workbench.project.identity`.
-3. Inspect `sim inspect workbench.systems.summary`.
-4. Before creating a system, inspect `sim inspect workbench.templates.visible`
-   and `sim inspect "workbench.templates.resolve:<workflow intent>"`.
+1. Inspect `uv run sim inspect session.health`.
+2. Inspect `uv run sim inspect workbench.project.identity`.
+3. Inspect `uv run sim inspect workbench.systems.summary`.
+4. Before creating a system, inspect `uv run sim inspect workbench.templates.visible`
+   and `uv run sim inspect "workbench.templates.resolve:<workflow intent>"`.
 5. For long-running update/refresh/open-model steps, capture a screenshot
    before the call and monitor with screenshots plus structured inspect data.
 6. Execute one bounded journal step using the resolved live template or an
    already-present system.
-7. Inspect `sim inspect last.result`.
+7. Inspect `uv run sim inspect last.result`.
 8. Re-inspect `workbench.systems.summary`.
 9. Save or update a project checkpoint before handoff or risky edits.
 10. Continue only when the system and cell state match the intended workflow.

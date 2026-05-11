@@ -1,5 +1,5 @@
 # Step 01: Smoke test — verify Workbench session is responsive.
-# Preconditions: sim connect --solver workbench succeeded.
+# Preconditions: uv run sim connect --solver workbench succeeded.
 # Acceptance: IronPython executes without error.
 
 import json, os, codecs

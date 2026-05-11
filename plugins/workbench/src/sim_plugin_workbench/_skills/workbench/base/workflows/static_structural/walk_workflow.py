@@ -4,7 +4,7 @@ Walks all 6 cells of a Static Structural system and reports what's
 reachable at the Workbench orchestration layer — without invoking
 Mechanical for the actual solve.
 
-Run as IronPython journal via sim exec (sends this entire file to
+Run as IronPython journal via uv run sim exec (sends this entire file to
 run_script_string).
 
 Result file: %TEMP%/sim_wb_result.json with:

@@ -1,6 +1,6 @@
 ---
 name: workbench-sim
-description: Use when driving Ansys Workbench via PyWorkbench SDK (ansys-workbench-core) or RunWB2 batch journals — project creation, analysis system management, IronPython journal execution, file transfer, and sub-solver (PyMechanical/PyFluent/PySherlock) integration through sim runtime.
+description: Use when driving Ansys Workbench via PyWorkbench SDK (ansys-workbench-core) or RunWB2 batch journals — project creation, analysis system management, IronPython journal execution, file transfer, and sub-solver (PyMechanical/PyFluent/PySherlock) integration through the sim runtime.
 ---
 
 # workbench-sim
@@ -93,7 +93,7 @@ After `/connect` succeeds: read `base/reference/pyworkbench_api.md`,
 `base/workflows/project_review_loop.md`. Inspect `session.health`,
 `workbench.project.identity`, `workbench.systems.summary`, and the relevant
 template resolver result before creating a system. Execute IronPython journals
-incrementally via `sim exec`, checking `last.result` and
+incrementally via `uv run sim exec`, checking `last.result` and
 `workbench.systems.summary` after every step. Use snippets from
 `base/snippets/` adapted to the user's task. Before handoff, read
 `base/workflows/mechanical_handoff.md` and confirm Workbench has a refreshed

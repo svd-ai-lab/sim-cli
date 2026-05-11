@@ -29,10 +29,10 @@ installation. See [LICENSE-NOTICE.md](LICENSE-NOTICE.md).
 Use this for repeatable agent-driven orchestration:
 
 ```powershell
-sim connect --solver workbench --ui-mode gui
-sim inspect session.health
-sim exec --file step.wbjn
-sim inspect workbench.systems.summary
+uv run sim connect --solver workbench --ui-mode gui
+uv run sim inspect session.health
+uv run sim exec --file step.wbjn
+uv run sim inspect workbench.systems.summary
 ```
 
 The SDK path is preferred because it keeps state across steps and lets the
@@ -43,7 +43,7 @@ agent inspect Workbench state between bounded journal snippets.
 Use this when the SDK is unavailable or incompatible:
 
 ```powershell
-sim run --solver workbench path/to/journal.wbjn
+uv run sim run --solver workbench path/to/journal.wbjn
 ```
 
 RunWB2 is reliable for one-shot journals, but it should not be treated as a
@@ -56,8 +56,8 @@ Use Workbench for cells 1-3: Engineering Data, Geometry, and Model. Use
 Mechanical for cells 4-6: setup, solution, and results. Before handoff, inspect:
 
 ```powershell
-sim inspect workbench.project.identity
-sim inspect workbench.systems.summary
+uv run sim inspect workbench.project.identity
+uv run sim inspect workbench.systems.summary
 ```
 
 The Workbench side should have a project checkpoint and a refreshed Model cell.
@@ -71,7 +71,7 @@ Install these before asking an agent to use this plugin:
 - Python 3.10 or newer.
 - [uv](https://docs.astral.sh/uv/) for Python environment and package installs.
 - [git](https://git-scm.com/) when installing from GitHub source refs.
-- sim-cli or a project environment where sim-cli can be installed.
+- A project Python environment where sim-cli-core can be installed.
 - A local Ansys Workbench installation compatible with PyWorkbench or RunWB2.
 
 The plugin does not include Workbench or vendor SDK binaries. It installs the
@@ -79,40 +79,48 @@ Python adapter and its Python dependencies only.
 
 ## Install
 
-For most users and agents, install the latest published PyPI version:
+For agent projects, install sim-cli-core and the Workbench plugin in the
+project environment:
 
 ```powershell
-uv pip install sim-plugin-workbench
+uv init  # only if this is not already a uv project
+uv add sim-cli-core sim-plugin-workbench
+uv run sim plugin sync-skills --target .agents/skills --copy
+uv run sim check workbench
+uv run sim plugin doctor workbench --deep
 ```
 
-PyPI releases are intentionally infrequent. For quick testing of the current
-source branch, install from GitHub:
+For Claude Code, sync the bundled skill to `.claude/skills` instead:
 
 ```powershell
-uv pip install "git+https://github.com/svd-ai-lab/sim-plugin-workbench.git@main"
+uv run sim plugin sync-skills --target .claude/skills --copy
 ```
 
 For a reproducible agent run, pin a commit SHA:
 
 ```powershell
-uv pip install "git+https://github.com/svd-ai-lab/sim-plugin-workbench.git@<commit-sha>"
+uv add sim-cli-core "git+https://github.com/svd-ai-lab/sim-plugin-workbench.git@<commit-sha>"
 ```
 
 If your environment uses SSH authentication:
 
 ```powershell
-uv pip install "git+ssh://git@github.com/svd-ai-lab/sim-plugin-workbench.git@<commit-sha>"
+uv add sim-cli-core "git+ssh://git@github.com/svd-ai-lab/sim-plugin-workbench.git@<commit-sha>"
 ```
+
+`uv run sim ...` runs sim from this project environment, so it sees this
+project's plugins. Without uv, create and activate a venv, then install
+`sim-cli-core` plus this plugin with `python -m pip`.
 
 ## Verify Install
 
 After installation, sim-cli should auto-discover the driver and bundled skill:
 
 ```powershell
-sim check workbench
+uv run sim check workbench
 ```
 
-If `sim check workbench` reports that Workbench itself is unavailable, first
+If `uv run sim check workbench` reports that Workbench itself is unavailable, first
 confirm the Python package installed correctly, then fix the local Workbench or
 SDK prerequisites.
 
@@ -121,16 +129,16 @@ SDK prerequisites.
 Use a visible Workbench session when an agent needs human-visible project state:
 
 ```powershell
-sim connect --solver workbench --ui-mode gui
-sim inspect session.health
-sim inspect workbench.project.identity
-sim inspect workbench.systems.summary
+uv run sim connect --solver workbench --ui-mode gui
+uv run sim inspect session.health
+uv run sim inspect workbench.project.identity
+uv run sim inspect workbench.systems.summary
 ```
 
 Use one-shot RunWB2 execution only for bounded journals:
 
 ```powershell
-sim run --solver workbench path/to/journal.wbjn
+uv run sim run --solver workbench path/to/journal.wbjn
 ```
 
 ## Common Agent Workflow
@@ -149,8 +157,8 @@ Workbench owns Engineering Data, Geometry, and Model cells. Mechanical owns
 setup, solve, and results. Before handoff:
 
 ```powershell
-sim inspect workbench.project.identity
-sim inspect workbench.systems.summary
+uv run sim inspect workbench.project.identity
+uv run sim inspect workbench.systems.summary
 ```
 
 Continue only when the expected Workbench system exists, the Model cell is
@@ -159,28 +167,29 @@ work.
 
 ## Update Or Uninstall
 
-Update to the latest published PyPI version:
+Update the published package:
 
 ```powershell
-uv pip install --upgrade sim-plugin-workbench
+uv add --upgrade sim-plugin-workbench
 ```
 
 Update from the latest GitHub `main` branch:
 
 ```powershell
-uv pip install --upgrade "git+https://github.com/svd-ai-lab/sim-plugin-workbench.git@main"
+uv add "git+https://github.com/svd-ai-lab/sim-plugin-workbench.git@main"
 ```
 
 Uninstall:
 
 ```powershell
-uv pip uninstall sim-plugin-workbench
+uv remove sim-plugin-workbench
 ```
 
 ## Troubleshooting
 
-- `sim` command not found: install sim-cli in the same Python environment.
-- Driver not discovered: reinstall the plugin and run `sim check workbench`.
+- `sim` command not found: run commands through `uv run sim ...` or activate
+  the venv that contains sim-cli-core.
+- Driver not discovered: reinstall the plugin and run `uv run sim check workbench`.
 - Workbench launch fails: inspect `session.health` and confirm local Workbench
   prerequisites outside sim-cli.
 - A journal appears to run but no system is created: inspect `last.result`; a
@@ -194,7 +203,7 @@ Give an agent this instruction when the task is about Workbench:
 Use the bundled Workbench skill from sim-plugin-workbench. First identify
 whether the task needs a persistent SDK session, a RunWB2 one-shot journal, or
 a Workbench-to-Mechanical handoff. For persistent work, connect with
-`sim connect --solver workbench --ui-mode gui`, then inspect `session.health`,
+`uv run sim connect --solver workbench --ui-mode gui`, then inspect `session.health`,
 `workbench.project.identity`, and `workbench.systems.summary`. Execute one
 bounded journal step at a time, inspect the result, and save or update a
 project checkpoint before handing the Model cell to Mechanical.

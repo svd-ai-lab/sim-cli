@@ -9,8 +9,8 @@ in an official example is visible on the user's machine.
 Before calling `GetTemplate(...)`, query the running Workbench session:
 
 ```bash
-sim inspect workbench.templates.visible
-sim inspect "workbench.templates.resolve:<workflow intent>"
+uv run sim inspect workbench.templates.visible
+uv run sim inspect "workbench.templates.resolve:<workflow intent>"
 ```
 
 The resolver is intentionally generic. It reads `GetAllVisibleTemplates()`,

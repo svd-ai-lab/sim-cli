@@ -12,17 +12,17 @@ the user expects the Workbench Model cell.
 3. Inspect:
 
    ```bash
-   sim inspect workbench.project.identity
-   sim inspect workbench.systems.summary
+   uv run sim inspect workbench.project.identity
+   uv run sim inspect workbench.systems.summary
    ```
 
 4. Save or update a project checkpoint before opening Mechanical.
 5. In Mechanical, inspect:
 
    ```bash
-   sim inspect session.health
-   sim inspect mechanical.project.identity
-   sim inspect mechanical.model.summary
+   uv run sim inspect session.health
+   uv run sim inspect mechanical.project.identity
+   uv run sim inspect mechanical.model.summary
    ```
 
 6. Continue only when Mechanical sees the expected analysis tree and non-empty

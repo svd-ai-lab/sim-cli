@@ -1,6 +1,6 @@
 # Debug failed Workbench exec
 
-When `sim exec` or `sim run --solver workbench` fails, stop sending large
+When `uv run sim exec` or `uv run sim run --solver workbench` fails, stop sending large
 journals. Inspect the failure and the current project state, then retry with the
 smallest focused journal.
 
@@ -9,10 +9,10 @@ smallest focused journal.
 1. Inspect structured state:
 
    ```bash
-   sim inspect session.health
-   sim inspect last.result
-   sim inspect workbench.project.identity
-   sim inspect workbench.systems.summary
+   uv run sim inspect session.health
+   uv run sim inspect last.result
+   uv run sim inspect workbench.project.identity
+   uv run sim inspect workbench.systems.summary
    ```
 
 2. Classify the failure:
