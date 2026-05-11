@@ -34,8 +34,7 @@ capture artifacts, and leave checkpoints for an engineer to review.
 
 ## Who this is for
 
-`sim` is for people and agents trying to get real simulation work done, not
-only for plugin developers.
+`sim` is for agents and people trying to get real simulation work done.
 
 - **CAE engineers who already script solvers** and want an agent to help
   automate COMSOL, Fluent, MATLAB, LTspice, Abaqus, HFSS, and similar tools
