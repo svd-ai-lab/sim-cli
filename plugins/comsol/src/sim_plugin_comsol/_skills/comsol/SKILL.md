@@ -28,7 +28,15 @@ Choose the control path first:
 |---|---|---|
 | sim runtime / JPype | Building, solving, inspecting, debugging, saving `.mph`, repeatable case generation, and reliable live GUI co-editing with `visual_mode=shared-desktop`. | Only avoid when the user explicitly refuses a server-backed/shared Desktop session. |
 | Desktop attach / Java Shell | Rare fallback for explicit small edits in an already-open ordinary COMSOL window when server-backed shared Desktop is not acceptable. | Default agent routing, long builders, heavy debugging, solves, validation, or anything that needs reliable structured exceptions or server-side inspect. |
+| **`comsolcompile` + `comsolbatch`** | **Sandboxed one-shot Java workflows: write a `.java` file with `public static Model run()`, compile to `.class`, run with `comsolbatch.exe -nosave`. Used by sim-benchmark trials when sim CLI isn't available.** | **Anything stateful or interactive — prefer sim runtime when available.** |
 | saved `.mph` inspection | Offline summaries, archive diffs, and artifact review without starting COMSOL. | Mutating live model state. |
+
+**Hard rule for the `comsolcompile` path** — Java code MUST use chain-style
+`model.X("tag").Y("tag2")...` calls. There is NO public `Component`,
+`Geometry`, `HeatTransfer`, etc. type — writing `Component comp = ...`
+gets `cannot be resolved to a type` from `comsolcompile`. Read
+[`base/reference/java_batch_patterns.md`](base/reference/java_batch_patterns.md)
+BEFORE writing your `.java`.
 
 For the sim runtime, start with `uv run sim check comsol`, then
 `uv run sim connect --solver comsol`, then inspect `session.health`. When the user
@@ -65,6 +73,7 @@ single `mph` line (1.2.x). Always read `base/`, then your active
 | `base/workflows/debug_failed_exec.md` | Failure triage loop for a failed `uv run sim exec`: inspect `last.result`, inspect live model state, inspect suspicious node properties, then retry with the smallest patch. |
 | `base/reference/runtime_introspection.md` | Live-session inspection contract: preferred `uv run sim inspect` targets, compatibility rules, partial results, and raw Java fallbacks. |
 | `base/reference/java_api_patterns.md` | Stable Java API probing patterns: tags first, properties before `set`, selection checks, and version-safe try/except snippets. |
+| `base/reference/java_batch_patterns.md` | **Read this BEFORE writing `.java` for `comsolcompile`.** Chain-style call rule, anti-patterns that fail to compile, source-property toggles (`<prop>_src`), study/sol skeleton, KPI extraction via stdout, error triage. |
 | `base/reference/mph_file_format.md` | `.mph` is a ZIP archive — internal layout, the three `nodeType` variants (compact/solved/preview), the Global Parameter `T="33"` contract, and the stdlib `mph_inspect` reader. Read this when you need to introspect a `.mph` *without* spinning up `comsolmphserver`. |
 | `base/reference/offline_postprocessing_exports.md` | Optional pattern for COMSOL-free/Python postprocessing after a solve. Use when the user asks for reusable result artifacts, full-domain VTU field exports, CSV tables, or postprocessing without keeping COMSOL open. |
 
