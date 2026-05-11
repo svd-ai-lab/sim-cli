@@ -28,7 +28,7 @@ def test_sim_specific_hard_constraints_are_scoped_to_live_sessions() -> None:
     scoped_heading = "Live Sim Session Constraints"
     assert scoped_heading in text
     scoped = text[text.index(scoped_heading):]
-    assert "Do not call `pyfluent.launch_fluent()` inside a `sim exec` snippet" in scoped
+    assert "Do not call `pyfluent.launch_fluent()` inside a `uv run sim exec` snippet" in scoped
     assert "For direct PyFluent scripts, launch the session normally" in text
 
 

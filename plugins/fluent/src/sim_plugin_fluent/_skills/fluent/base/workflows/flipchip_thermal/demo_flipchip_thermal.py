@@ -27,8 +27,8 @@ instead — done throughout this script.
 
 Tested with: ansys-fluent-core 0.38.1, Fluent 2025 R2 (v252)
 
-This is a reference script — NOT meant for sim exec (it calls launch_fluent).
-The sim-native version uses sim connect + sim exec steps; see README.md.
+This is a reference script — NOT meant for uv run sim exec (it calls launch_fluent).
+The sim-native version uses uv run sim connect + uv run sim exec steps; see README.md.
 """
 from __future__ import annotations
 

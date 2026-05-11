@@ -12,7 +12,7 @@ that fits the task, then load only the references needed for that path.
 
 | Path | Best for | Starting point |
 |---|---|---|
-| Live sim session | Stateful edits, GUI observation, incremental solver work, remote Windows diagnostics, version probes, and inspecting a running Fluent session | `sim connect --solver fluent --mode <solver|meshing> --ui-mode <gui|no_gui>` |
+| Live sim session | Stateful edits, GUI observation, incremental solver work, remote Windows diagnostics, version probes, and inspecting a running Fluent session | `uv run sim connect --solver fluent --mode <solver|meshing> --ui-mode <gui|no_gui>` |
 | Direct PyFluent script | Deterministic batch runs, reproducible examples, CI-friendly smoke scripts, and workflows that can own their process lifecycle | `from ansys.fluent.core import launch_fluent` in a normal Python script |
 | File-side artifact review | Case/data/mesh inventory, transcript tails, CSV/PNG/PDF outputs, and offline checks that do not need a live solver | Use Python file readers, text inspection, and Fluent artifact helpers before opening a session |
 
@@ -25,9 +25,9 @@ helpers when the question is about artifacts already on disk.
 After connecting, inspect:
 
 ```bash
-sim inspect session.versions
-sim inspect session.health
-sim inspect session.summary
+uv run sim inspect session.versions
+uv run sim inspect session.health
+uv run sim inspect session.summary
 ```
 
 The `session.versions` payload selects the active overlays. Always read
@@ -54,7 +54,7 @@ Useful live inspect targets:
 - `fluent.mesh.summary`
 - `fluent.files`
 
-Use `sim exec` snippets with the injected `session`, `solver`, or `meshing`
+Use `uv run sim exec` snippets with the injected `session`, `solver`, or `meshing`
 object. Keep snippets small enough that `last.result` can prove the current
 state before the next step.
 
@@ -120,7 +120,7 @@ local Ansys documentation tree rather than guessing names or defaults.
 These constraints apply only after sim has already created a live Fluent
 session:
 
-1. Do not call `pyfluent.launch_fluent()` inside a `sim exec` snippet. Use the
+1. Do not call `pyfluent.launch_fluent()` inside a `uv run sim exec` snippet. Use the
    injected `session`, `solver`, or `meshing` object.
 2. Do not switch between meshing and solver mode by assumption. The mode is
    selected at connect time unless a Fluent workflow explicitly returns a

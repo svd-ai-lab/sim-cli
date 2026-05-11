@@ -4,7 +4,7 @@ Versioned snapshots of PyFluent API documentation. Used by the agent skill for f
 
 **Live docs:** https://fluent.docs.pyansys.com/version/stable/index.html
 
-When docs disagree with the live session, trust the session. Use `sim exec "print(dir(...))"` to introspect.
+When docs disagree with the live session, trust the session. Use `uv run sim exec "print(dir(...))"` to introspect.
 
 ## Versions
 

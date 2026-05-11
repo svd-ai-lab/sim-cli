@@ -2,10 +2,10 @@
 PyFluent script support v0 demo: Watertight Geometry Meshing workflow.
 
 This is a standalone pyfluent script intended to be run via sim CLI:
-    sim lint src/sim/drivers/pyfluent/examples/demo_meshing_watertight.py
-    sim run  src/sim/drivers/pyfluent/examples/demo_meshing_watertight.py --solver=fluent --json
-    sim query last --json
-    sim log
+    uv run sim lint src/sim/drivers/pyfluent/examples/demo_meshing_watertight.py
+    uv run sim run  src/sim/drivers/pyfluent/examples/demo_meshing_watertight.py --solver=fluent --json
+    uv run sim inspect last.result
+    uv run sim logs
 
 Requirements:
   - Ansys Fluent 2024 R1 (AWP_ROOT241 set)
@@ -220,7 +220,7 @@ print("All steps passed - Watertight Geometry Meshing complete")
 print("Visually confirm mesh in the Fluent GUI window")
 print(f"{'='*60}")
 
-# Print structured JSON result for sim query last
+# Print structured JSON result for uv run sim inspect last.result
 print(json.dumps({
     "status": "ok",
     "workflow": "watertight-geometry",

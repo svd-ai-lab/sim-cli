@@ -121,11 +121,11 @@ pyfluent creates an internal temporary named expression and can't re-evaluate it
 ## Run
 
 ```
-sim run workflows/flipchip_thermal/demo_flipchip_thermal.py --solver=fluent --json
+uv run sim run workflows/flipchip_thermal/demo_flipchip_thermal.py --solver=fluent --json
 ```
 
 The script is a **reference script only** — it calls `pyfluent.launch_fluent()` directly.
-For the `sim exec`-friendly step-by-step snippets that work against a live `sim connect` session,
+For the `uv run sim exec`-friendly step-by-step snippets that work against a live `uv run sim connect` session,
 see `tmp/step{4,4b,5,6,6b,6c,7,7b,8,8b}_*.py` in the `sim-proj` repo.
 
 ## Skill migration path

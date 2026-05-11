@@ -12,7 +12,7 @@
     证明 driver 层逻辑和 runtime 日志写入（.sim/runs/*.json）可用。
 
   层次 B — sim CLI subprocess runtime（本脚本不验证）：
-    通过 `sim run <此脚本> --solver=fluent` 触发时，
+    通过 `uv run sim run <此脚本> --solver=fluent` 触发时，
     仅证明 sim CLI 可以用 subprocess 调用此脚本，
     不等于 sim 原生支持交互式 pyfluent runtime。
 
@@ -25,8 +25,8 @@
     python src/sim/drivers/pyfluent/examples/demo_watertight_via_driver.py
 
 运行方式（通过 sim CLI，验证 subprocess 调用层）：
-    sim check pyfluent   # 注：sim connect = 包可用性检查，不启动 session
-    sim run src/sim/drivers/pyfluent/examples/demo_watertight_via_driver.py --solver=fluent --json
+    uv run sim check pyfluent   # 注：uv run sim connect = 包可用性检查，不启动 session
+    uv run sim run src/sim/drivers/pyfluent/examples/demo_watertight_via_driver.py --solver=fluent --json
 
 参考文档：
   - specs/pyfluent_driver_v0.md  §11.3 Meshing Case 1

@@ -3,10 +3,10 @@ PyFluent script support v0 demo: Solver - exhaust system.
 
 Reads an existing case+data file and runs solver iterations.
 Standalone pyfluent script - run via sim CLI:
-    sim lint src/sim/drivers/pyfluent/examples/demo_solver_exhaust.py
-    sim run  src/sim/drivers/pyfluent/examples/demo_solver_exhaust.py --solver=fluent --json
-    sim query last --json
-    sim log
+    uv run sim lint src/sim/drivers/pyfluent/examples/demo_solver_exhaust.py
+    uv run sim run  src/sim/drivers/pyfluent/examples/demo_solver_exhaust.py --solver=fluent --json
+    uv run sim inspect last.result
+    uv run sim logs
 
 Requirements:
   - Ansys Fluent 2024 R1 (AWP_ROOT241 set)

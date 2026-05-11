@@ -44,7 +44,7 @@ match count per file.
 3. `AWP_ROOT{NNN}` env vars (e.g. `AWP_ROOT252`, `AWP_ROOT251`) — the
    standard Ansys-set variables. If several are present, the highest
    numeric suffix (latest release) wins.
-4. `sim check fluent --json` (reuses sim-cli's install discovery)
+4. `uv run sim check fluent --json` (reuses sim-cli's install discovery)
 5. Typical per-OS install paths:
    - Windows: `C:\Program Files\ANSYS Inc\v{NNN}`
    - Linux:   `/usr/ansys_inc/v{NNN}`, `/opt/ansys_inc/v{NNN}`,

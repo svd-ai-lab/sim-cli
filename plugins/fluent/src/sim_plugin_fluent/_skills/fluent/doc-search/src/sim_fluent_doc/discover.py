@@ -4,7 +4,7 @@ Priority:
   1. --ansys-root flag (caller's responsibility to pass)
   2. FLUENT_DOC_ROOT env var (points directly at the help dir)
   3. AWP_ROOT{NNN} env vars (e.g. AWP_ROOT252) — latest release wins
-  4. `sim check fluent --json` (reuses sim-cli's install discovery)
+  4. sim-cli check JSON output (reuses sim-cli's install discovery)
   5. Typical per-OS install paths
 
 The returned path is always the `commonfiles/help/en-us/help/` dir
@@ -85,7 +85,7 @@ def _from_env() -> Path | None:
 
 
 def _from_sim_check() -> Path | None:
-    """Shell out to `sim check fluent --json` and take the first install."""
+    """Shell out to sim-cli check JSON output and take the first install."""
     for binary in ("sim", "ion"):
         try:
             proc = subprocess.run(
@@ -177,6 +177,6 @@ def locate_doc_root(explicit: Path | None = None) -> Path:
 
     raise FileNotFoundError(
         "Could not locate Ansys Fluent documentation. Set FLUENT_DOC_ROOT or "
-        "AWP_ROOT{NNN}, install sim-cli so `sim check fluent` can find the install, "
+        "AWP_ROOT{NNN}, install sim-cli so its check command can find the install, "
         "or pass --ansys-root."
     )
