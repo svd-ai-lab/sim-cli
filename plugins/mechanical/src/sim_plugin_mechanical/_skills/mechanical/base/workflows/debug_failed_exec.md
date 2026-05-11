@@ -1,6 +1,6 @@
 # Debug failed Mechanical exec
 
-When `sim exec` fails, stop sending full setup scripts. Inspect the failure and
+When `uv run sim exec` fails, stop sending full setup scripts. Inspect the failure and
 the live Mechanical state, then retry with the smallest focused snippet.
 
 ## Triage
@@ -8,10 +8,10 @@ the live Mechanical state, then retry with the smallest focused snippet.
 1. Inspect structured state:
 
    ```bash
-   sim inspect session.health
-   sim inspect last.result
-   sim inspect mechanical.project.identity
-   sim inspect mechanical.model.summary
+   uv run sim inspect session.health
+   uv run sim inspect last.result
+   uv run sim inspect mechanical.project.identity
+   uv run sim inspect mechanical.model.summary
    ```
 
 2. Classify the failure:
@@ -24,18 +24,18 @@ the live Mechanical state, then retry with the smallest focused snippet.
 | Mesh failure | Mesh count missing or mesh generation fails | Inspect geometry validity and mesh controls. |
 | Solve failure | `Solution.Status` is `SolveRequired`, `NotSolved`, or `Failed`; solver output or `.err` file appears | Inspect `mechanical.messages`, solver files, and setup completeness before retry. |
 | Result failure | Result object exists but value extraction fails, or a GUI post-processing dialog appears | Inspect solution status, `mechanical.messages`, and live result methods from `mechanical.capabilities`. |
-| Long-running hang | `sim exec` is blocked, but the GUI may still be updating | Use `sim screenshot` from another terminal/thread to inspect progress, popups, or stalled solver startup. |
+| Long-running hang | `uv run sim exec` is blocked, but the GUI may still be updating | Use `uv run sim screenshot` from another terminal/thread to inspect progress, popups, or stalled solver startup. |
 | GUI mismatch | SDK state changes but no visible window is found | Inspect `session.health` and reconnect in GUI mode if needed. |
 
 3. Probe only the suspicious target:
 
    ```bash
-   sim inspect mechanical.object.properties:mesh
-   sim inspect mechanical.object.properties:geometry
-   sim inspect mechanical.object.properties:analysis:0
-   sim inspect mechanical.object.properties:solution:0
-   sim inspect mechanical.capabilities:analysis:0
-   sim inspect mechanical.messages
+   uv run sim inspect mechanical.object.properties:mesh
+   uv run sim inspect mechanical.object.properties:geometry
+   uv run sim inspect mechanical.object.properties:analysis:0
+   uv run sim inspect mechanical.object.properties:solution:0
+   uv run sim inspect mechanical.capabilities:analysis:0
+   uv run sim inspect mechanical.messages
    ```
 
 4. Retry with one bounded repair step. Do not rebuild the whole model unless

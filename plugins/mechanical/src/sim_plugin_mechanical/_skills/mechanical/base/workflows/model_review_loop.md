@@ -6,20 +6,20 @@ geometry, scoping, mesh, or boundary-condition state created earlier.
 
 ## Loop
 
-1. Inspect `sim inspect session.health`.
-2. Inspect `sim inspect mechanical.project.identity`.
-3. Inspect `sim inspect mechanical.model.summary`.
+1. Inspect `uv run sim inspect session.health`.
+2. Inspect `uv run sim inspect mechanical.project.identity`.
+3. Inspect `uv run sim inspect mechanical.model.summary`.
 4. For any non-routine analysis/load/result type, inspect
-   `sim inspect mechanical.capabilities` or
-   `sim inspect mechanical.capabilities:analysis:<index>` before writing setup
+   `uv run sim inspect mechanical.capabilities` or
+   `uv run sim inspect mechanical.capabilities:analysis:<index>` before writing setup
    code.
 5. Before a long-running solve/update/import, capture a screenshot and decide
    what out-of-band signal will be checked while the SDK call is blocked:
    screenshots, `mechanical.messages`, solver files, or visible progress.
 6. Execute one bounded IronPython snippet.
-7. Inspect `sim inspect last.result`.
+7. Inspect `uv run sim inspect last.result`.
 8. Re-inspect `mechanical.model.summary`; after solve/result failures also
-   inspect `sim inspect mechanical.messages`.
+   inspect `uv run sim inspect mechanical.messages`.
 9. In GUI mode, capture or review a screenshot after significant visible tree
    changes.
 10. Continue only when structured state and visual state match the intended

@@ -1,19 +1,19 @@
 # Observation commands and Mechanical
 
 This doc is the **contract** between sim's observation commands and the
-Mechanical session. Read this before using `sim inspect` or
-`sim screenshot` against a running Mechanical.
+Mechanical session. Read this before using `uv run sim inspect` or
+`uv run sim screenshot` against a running Mechanical.
 
 ## The coupling
 
-sim has four observation primitives:
+uv run sim has four observation primitives:
 
 | sim command | HTTP route | What it touches |
 |---|---|---|
-| `sim inspect session.summary` | `GET /inspect/session.summary` | Driver metadata (local, no SDK call). |
-| `sim inspect last.result` | `GET /inspect/last.result` | Last `run_python_script` return value, cached in `_state.runs[-1]`. |
-| `sim exec '<code>'` | `POST /exec` | Forwarded to `MechanicalDriver.run` → `mechanical.run_python_script(code)`. |
-| `sim screenshot -o shot.png` | `GET /screenshot` | `PIL.ImageGrab.grab()` of the sim-serve host desktop. |
+| `uv run sim inspect session.summary` | `GET /inspect/session.summary` | Driver metadata (local, no SDK call). |
+| `uv run sim inspect last.result` | `GET /inspect/last.result` | Last `run_python_script` return value, cached in `_state.runs[-1]`. |
+| `uv run sim exec '<code>'` | `POST /exec` | Forwarded to `MechanicalDriver.run` → `mechanical.run_python_script(code)`. |
+| `uv run sim screenshot -o shot.png` | `GET /screenshot` | `PIL.ImageGrab.grab()` of the sim-serve host desktop. |
 
 For these to work **coherently**, two invariants must hold:
 
@@ -25,14 +25,14 @@ make via `exec` is **immediately visible** in the window — Mechanical
 repaints within one frame. So:
 
 ```bash
-sim exec "Model.Analyses[0].AddFixedSupport()"
-sim screenshot -o after.png        # the Tree now shows "Fixed Support"
+uv run sim exec "Model.Analyses[0].AddFixedSupport()"
+uv run sim screenshot -o after.png        # the Tree now shows "Fixed Support"
 ```
 
 This invariant is **broken** if you launch embedded (`pm.App()`) — the
 embedded interpreter has no window. sim's driver refuses embedded mode
 for exactly this reason. Never pass `batch=True` unless you also accept
-that `sim screenshot` will only show an empty desktop.
+that `uv run sim screenshot` will only show an empty desktop.
 
 ### Invariant 2: `inspect` sees the same SDK the driver is talking to
 
@@ -59,9 +59,9 @@ tell the caller immediately.
 ### Pattern A: snapshot before + after
 
 ```bash
-sim screenshot -o before.png
-sim exec "Model.Analyses[0].AddPressure()"
-sim screenshot -o after.png
+uv run sim screenshot -o before.png
+uv run sim exec "Model.Analyses[0].AddPressure()"
+uv run sim screenshot -o after.png
 ```
 
 Diff the two to confirm the Tree changed. This is the canonical proof
@@ -70,7 +70,7 @@ that a scripting call "took".
 ### Pattern B: structured inspect via `exec` + JSON
 
 ```bash
-sim exec '
+uv run sim exec '
 import json
 result = {
     "analyses": len(Model.Analyses),
@@ -79,7 +79,7 @@ result = {
 }
 json.dumps(result)
 '
-sim inspect last.result
+uv run sim inspect last.result
 ```
 
 `last.result` will contain the parsed JSON. This is the **preferred way
@@ -92,16 +92,16 @@ For any operation expected to take more than a few seconds, set up an
 out-of-band observation loop before kicking it off:
 
 ```bash
-sim screenshot -o before_solve.png
+uv run sim screenshot -o before_solve.png
 
 # Terminal A: blocking operation
-sim exec "Model.Analyses[0].Solution.Solve(True)"
+uv run sim exec "Model.Analyses[0].Solution.Solve(True)"
 
 # Terminal B: independent observations while Terminal A is blocked
-sim screenshot -o progress_001.png
-sim inspect session.health
-sim inspect mechanical.messages
-sim inspect mechanical.files
+uv run sim screenshot -o progress_001.png
+uv run sim inspect session.health
+uv run sim inspect mechanical.messages
+uv run sim inspect mechanical.files
 ```
 
 Use screenshots to catch progress bars, modal dialogs, license prompts, and
@@ -144,7 +144,7 @@ Mechanical).
 
 ```
 ┌──────────┐  HTTP   ┌────────────┐  gRPC   ┌──────────────────┐
-│ sim CLI  │ ──────► │ sim serve  │ ──────► │ AnsysWBU.exe     │
+│ sim CLI  │ ──────► │ uv run sim serve  │ ──────► │ AnsysWBU.exe     │
 │ exec/    │         │ + Driver   │         │ (Mechanical GUI) │
 │ inspect  │ ◄────── │            │ ◄────── │                  │
 │ screen-  │         │            │         └──────────────────┘

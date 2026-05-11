@@ -1,6 +1,6 @@
 # Result extraction
 
-There are two extraction modes: live Mechanical result objects via `sim exec`,
+There are two extraction modes: live Mechanical result objects via `uv run sim exec`,
 and post-mortem `.rst` reads with DPF in normal CPython. Default to the
 post-mortem DPF path when the solve already finished and the result file is on
 disk; use the live path when you need to mutate or evaluate the current
@@ -101,7 +101,7 @@ stress = model.results.stress().eval()
 Pick this when: solve already finished, you only need to read results, and you
 do not need to add new result objects.
 
-Pick the live `sim exec` path above when: you need to add a new result type,
+Pick the live `uv run sim exec` path above when: you need to add a new result type,
 evaluate scoped results against a NamedSelection that is not computed yet, or
 the user wants the live Mechanical window to update.
 

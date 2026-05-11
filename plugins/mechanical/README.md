@@ -35,10 +35,10 @@ Use this when the user wants to watch or review the Mechanical tree while the
 agent works:
 
 ```powershell
-sim connect --solver mechanical --ui-mode gui
-sim inspect session.health
-sim exec --file setup_step.py
-sim inspect mechanical.model.summary
+uv run sim connect --solver mechanical --ui-mode gui
+uv run sim inspect session.health
+uv run sim exec --file setup_step.py
+uv run sim inspect mechanical.model.summary
 ```
 
 In GUI mode, Mechanical's visible window and PyMechanical client mutate the
@@ -50,7 +50,7 @@ inspect targets for acceptance decisions.
 Use `--ui-mode no_gui` only when visual confirmation is not needed:
 
 ```powershell
-sim connect --solver mechanical --ui-mode no_gui
+uv run sim connect --solver mechanical --ui-mode no_gui
 ```
 
 Headless mode is faster but screenshot confirmation is unavailable. Inspect
@@ -62,8 +62,8 @@ Workbench owns Engineering Data, Geometry, and Model. Mechanical owns setup,
 solve, and results. Before applying Mechanical loads or supports, inspect:
 
 ```powershell
-sim inspect mechanical.project.identity
-sim inspect mechanical.model.summary
+uv run sim inspect mechanical.project.identity
+uv run sim inspect mechanical.model.summary
 ```
 
 Continue only when the expected analysis exists and the geometry/body state is
@@ -76,7 +76,7 @@ Install these before asking an agent to use this plugin:
 - Python 3.10 or newer.
 - [uv](https://docs.astral.sh/uv/) for Python environment and package installs.
 - [git](https://git-scm.com/) when installing from GitHub source refs.
-- sim-cli or a project environment where sim-cli can be installed.
+- A project Python environment where sim-cli-core can be installed.
 - A local Ansys Mechanical installation compatible with PyMechanical.
 
 The plugin does not include Mechanical or vendor SDK binaries. It installs the
@@ -84,58 +84,66 @@ Python adapter and its Python dependencies only.
 
 ## Install
 
-For most users and agents, install the latest published PyPI version:
+For agent projects, install sim-cli-core and the Mechanical plugin in the
+project environment:
 
 ```powershell
-uv pip install sim-plugin-mechanical
+uv init  # only if this is not already a uv project
+uv add sim-cli-core sim-plugin-mechanical
+uv run sim plugin sync-skills --target .agents/skills --copy
+uv run sim check mechanical
+uv run sim plugin doctor mechanical --deep
 ```
 
-PyPI releases are intentionally infrequent. For quick testing of the current
-source branch, install from GitHub:
+For Claude Code, sync the bundled skill to `.claude/skills` instead:
 
 ```powershell
-uv pip install "git+https://github.com/svd-ai-lab/sim-plugin-mechanical.git@main"
+uv run sim plugin sync-skills --target .claude/skills --copy
 ```
 
 For a reproducible agent run, pin a commit SHA:
 
 ```powershell
-uv pip install "git+https://github.com/svd-ai-lab/sim-plugin-mechanical.git@<commit-sha>"
+uv add sim-cli-core "git+https://github.com/svd-ai-lab/sim-plugin-mechanical.git@<commit-sha>"
 ```
 
 If your environment uses SSH authentication:
 
 ```powershell
-uv pip install "git+ssh://git@github.com/svd-ai-lab/sim-plugin-mechanical.git@<commit-sha>"
+uv add sim-cli-core "git+ssh://git@github.com/svd-ai-lab/sim-plugin-mechanical.git@<commit-sha>"
 ```
+
+`uv run sim ...` runs sim from this project environment, so it sees this
+project's plugins. Without uv, create and activate a venv, then install
+`sim-cli-core` plus this plugin with `python -m pip`.
 
 ## Verify Install
 
 After installation, sim-cli should auto-discover the driver and bundled skill:
 
 ```powershell
-sim check mechanical
+uv run sim check mechanical
 ```
 
-If `sim check mechanical` reports that Mechanical itself is unavailable, first
-confirm the Python package installed correctly, then fix the local Mechanical or
-SDK prerequisites.
+If `uv run sim check mechanical` reports that Mechanical itself is unavailable,
+first confirm the Python package installed correctly, then fix the local
+Mechanical or SDK prerequisites.
 
 ## Connect And Inspect Health
 
 Use GUI mode for agent-visible Mechanical workflows:
 
 ```powershell
-sim connect --solver mechanical --ui-mode gui
-sim inspect session.health
-sim inspect mechanical.project.identity
-sim inspect mechanical.model.summary
+uv run sim connect --solver mechanical --ui-mode gui
+uv run sim inspect session.health
+uv run sim inspect mechanical.project.identity
+uv run sim inspect mechanical.model.summary
 ```
 
 Use headless mode only for non-visual smoke checks:
 
 ```powershell
-sim connect --solver mechanical --ui-mode no_gui
+uv run sim connect --solver mechanical --ui-mode no_gui
 ```
 
 ## Common Agent Workflow
@@ -156,8 +164,8 @@ Workbench owns Engineering Data, Geometry, and Model cells. Mechanical owns
 setup, solve, and results. Before applying loads or supports:
 
 ```powershell
-sim inspect mechanical.project.identity
-sim inspect mechanical.model.summary
+uv run sim inspect mechanical.project.identity
+uv run sim inspect mechanical.model.summary
 ```
 
 Continue only when the expected analysis exists and geometry/body state is
@@ -165,22 +173,22 @@ non-empty.
 
 ## Update Or Uninstall
 
-Update to the latest published PyPI version:
+Update the published package:
 
 ```powershell
-uv pip install --upgrade sim-plugin-mechanical
+uv add --upgrade sim-plugin-mechanical
 ```
 
 Update from the latest GitHub `main` branch:
 
 ```powershell
-uv pip install --upgrade "git+https://github.com/svd-ai-lab/sim-plugin-mechanical.git@main"
+uv add "git+https://github.com/svd-ai-lab/sim-plugin-mechanical.git@main"
 ```
 
 Uninstall:
 
 ```powershell
-uv pip uninstall sim-plugin-mechanical
+uv remove sim-plugin-mechanical
 ```
 
 ## Agent quickstart
@@ -189,7 +197,7 @@ Give an agent this instruction when the task is about Mechanical:
 
 ```text
 Use the bundled Mechanical skill from sim-plugin-mechanical. Connect with
-`sim connect --solver mechanical --ui-mode gui` unless the user explicitly
+`uv run sim connect --solver mechanical --ui-mode gui` unless the user explicitly
 wants headless mode. Before every setup, solve, or result step, inspect
 `session.health`, `mechanical.project.identity`, and
 `mechanical.model.summary`. Run one bounded IronPython snippet at a time,
@@ -235,7 +243,7 @@ driver reports a secure-transport launch failure.
 
 ### Screenshot captures no Mechanical window
 
-Use `sim inspect session.health`. If `ui_capabilities.screenshot_expected` is
+Use `uv run sim inspect session.health`. If `ui_capabilities.screenshot_expected` is
 false, the session is headless. If screenshot support is expected but no
 matching window is found, reconnect in GUI mode and inspect the health payload
 before mutating more state.

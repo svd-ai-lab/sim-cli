@@ -34,7 +34,7 @@ Before solving a workflow that differs from the local snippets, confirm the
 live analysis, setup, and result APIs:
 
 ```bash
-sim inspect mechanical.capabilities:analysis:0
+uv run sim inspect mechanical.capabilities:analysis:0
 ```
 
 ## Monitoring from outside the gRPC call
@@ -50,11 +50,11 @@ Pattern for progress polling (from a different process/terminal):
 
 ```bash
 # Terminal A: kick off solve
-sim exec "Model.Analyses[0].Solution.Solve(True)"   # blocks until done
+uv run sim exec "Model.Analyses[0].Solution.Solve(True)"   # blocks until done
 
 # Terminal B: poll
 while true; do
-  sim screenshot -o /tmp/solve_progress_$(date +%s).png
+  uv run sim screenshot -o /tmp/solve_progress_$(date +%s).png
   sleep 10
 done
 ```

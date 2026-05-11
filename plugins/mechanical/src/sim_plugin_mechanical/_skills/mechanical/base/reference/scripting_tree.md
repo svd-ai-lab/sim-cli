@@ -29,8 +29,8 @@ Before using a less familiar workflow, query the live surface instead of
 guessing:
 
 ```bash
-sim inspect mechanical.capabilities
-sim inspect mechanical.capabilities:analysis:0
+uv run sim inspect mechanical.capabilities
+uv run sim inspect mechanical.capabilities:analysis:0
 ```
 
 Use the returned `model_add_analysis_methods`, `analysis.add_methods`, and

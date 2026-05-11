@@ -10,17 +10,17 @@ the expected Workbench Model state.
 1. On the Workbench side:
 
    ```bash
-   sim inspect workbench.project.identity
-   sim inspect workbench.systems.summary
+   uv run sim inspect workbench.project.identity
+   uv run sim inspect workbench.systems.summary
    ```
 
 2. Confirm the expected system exists and the Model cell is refreshed or open.
 3. On the Mechanical side:
 
    ```bash
-   sim inspect session.health
-   sim inspect mechanical.project.identity
-   sim inspect mechanical.model.summary
+   uv run sim inspect session.health
+   uv run sim inspect mechanical.project.identity
+   uv run sim inspect mechanical.model.summary
    ```
 
 4. Continue only when Mechanical reports at least one expected analysis and a

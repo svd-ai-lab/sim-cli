@@ -9,18 +9,18 @@ session can do, then write a small setup step that fits that state.
 Run these against the live session:
 
 ```bash
-sim inspect mechanical.model.summary
-sim inspect mechanical.capabilities
-sim inspect mechanical.object.properties:geometry
-sim inspect mechanical.object.properties:mesh
+uv run sim inspect mechanical.model.summary
+uv run sim inspect mechanical.capabilities
+uv run sim inspect mechanical.object.properties:geometry
+uv run sim inspect mechanical.object.properties:mesh
 ```
 
 For a specific analysis, use:
 
 ```bash
-sim inspect mechanical.capabilities:analysis:0
-sim inspect mechanical.object.properties:analysis:0
-sim inspect mechanical.object.properties:solution:0
+uv run sim inspect mechanical.capabilities:analysis:0
+uv run sim inspect mechanical.object.properties:analysis:0
+uv run sim inspect mechanical.object.properties:solution:0
 ```
 
 Use the returned method lists to choose APIs such as `Model.Add...Analysis()`,

@@ -2,7 +2,7 @@
 
 Queries state that sim's observation commands need to be consistent
 with. The contract (see reference/observation_commands.md):
-    • sim inspect session.summary is LOCAL — no round-trip
+    • uv run sim inspect session.summary is LOCAL — no round-trip
     • this snippet's exec IS the round-trip — its return value proves
       the gRPC channel is live
     • sim screenshot should show a GUI window that matches these counts

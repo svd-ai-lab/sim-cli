@@ -1,6 +1,6 @@
 ---
 name: mechanical-sim
-description: Use when driving Ansys Mechanical via PyMechanical (ansys-mechanical-core) through the sim runtime, or reading solved `.rst` files with DPF on the agent side. Covers boundary conditions, loads, solver execution, and result extraction. This is the physics-layer counterpart to workbench-sim (which orchestrates cells 1-3); mechanical-sim owns cells 4-6 of the Static Structural workflow. Observation commands (sim screenshot / inspect) are tightly coupled with both the PyMechanical gRPC client *and* the Mechanical.exe GUI window — always launch with `batch=False` so the window is on the desktop for live sessions.
+description: Use when driving Ansys Mechanical via PyMechanical (ansys-mechanical-core) through the sim runtime, or reading solved `.rst` files with DPF on the agent side. Covers boundary conditions, loads, solver execution, and result extraction. This is the physics-layer counterpart to workbench-sim (which orchestrates cells 1-3); mechanical-sim owns cells 4-6 of the Static Structural workflow. Observation commands (`uv run sim screenshot` / `uv run sim inspect`) are tightly coupled with both the PyMechanical gRPC client *and* the Mechanical.exe GUI window — always launch with `batch=False` so the window is on the desktop for live sessions.
 ---
 
 # mechanical-sim
@@ -36,10 +36,10 @@ files.
    Solution / Results. Do not try to define boundary conditions via
    Workbench scripting — that belongs here.
 
-2. **Observation is SDK+GUI coupled.** Every `sim exec` is a
+2. **Observation is SDK+GUI coupled.** Every `uv run sim exec` is a
    `mechanical.run_python_script(code)` call that mutates Mechanical's
    in-memory model. Mechanical's window on the desktop redraws after each
-   call. Therefore `sim screenshot` (which grabs the desktop) always
+   call. Therefore `uv run sim screenshot` (which grabs the desktop) always
    reflects the current SDK state. This coupling **only works with
    `batch=False`** — so the driver defaults to GUI mode. Confirm both
    `ui_mode == "gui"` and `batch == false` from `inspect session.summary`
@@ -68,7 +68,7 @@ files.
 | `base/reference/bc_scoping.md` | Boundary condition scoping: creating `Selection` objects, `NamedSelection`, face IDs, `ISelectionInfo`. This is the #1 source of errors. |
 | `base/reference/solve_control.md` | Triggering solve (`analysis.Solution.Solve(True)`), monitoring state, reading solve messages. |
 | `base/reference/result_extraction.md` | Traversing `analysis.Solution` to pull deformation/stress values, exporting to CSV, using `.rst` files. |
-| `base/reference/observation_commands.md` | **How sim's observation commands couple with Mechanical.** Read this before using `sim inspect` / `sim screenshot` against a Mechanical session. |
+| `base/reference/observation_commands.md` | **How sim's observation commands couple with Mechanical.** Read this before using `uv run sim inspect` / `uv run sim screenshot` against a Mechanical session. |
 | `base/snippets/` | Numbered snippets (01_smoke through 06_extract_results). Each ends with a `json.dumps(...)` literal for structured output. |
 | `base/workflows/static_structural/` | End-to-end walk through cells 4-6, continuing where workbench-sim left off. |
 | `base/workflows/model_review_loop.md` | Required checkpoint loop: inspect health, project identity, model summary, then run one bounded snippet. |
