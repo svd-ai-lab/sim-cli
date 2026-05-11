@@ -91,6 +91,9 @@ will use the local runtime.
 Prerequisite: install [`uv`](https://docs.astral.sh/uv/) if you do not already
 have a Python tool manager.
 
+Use `.agents/skills` for Codex and GitHub Copilot projects. Use
+`.claude/skills` for Claude Code projects.
+
 ```bash
 # 1. Install the sim CLI.
 uv tool install sim-cli-core
@@ -101,7 +104,7 @@ sim plugin catalog
 # 3. Install the plugin for the solver you want.
 sim plugin install sim-plugin-comsol
 
-# 4. Make the plugin's bundled skill visible to Codex in this project.
+# 4. Make the plugin's bundled skill visible to Codex or Copilot in this project.
 sim plugin sync-skills --target .agents/skills --copy
 
 # 5. Check that sim can see the solver on this machine.
@@ -111,16 +114,21 @@ sim check comsol
 sim plugin doctor comsol --deep
 ```
 
-For **Claude Code**, the default skill target is already Claude-oriented:
+For **Claude Code**, use the project-local Claude target:
 
 ```bash
 sim plugin install sim-plugin-comsol
-sim plugin sync-skills
+sim plugin sync-skills --target .claude/skills --copy
 ```
 
+If you omit `--target`, the CLI uses Claude-oriented defaults:
+`./.claude/skills` when the project has a `./.claude/` directory, otherwise
+`~/.claude/skills`.
+
 `sim plugin install` runs skill sync automatically unless you pass
-`--no-sync`. For Codex, run the `sync-skills --target .agents/skills --copy`
-command after install when you want the skill materialized inside the project.
+`--no-sync`. For Codex or Copilot, run the
+`sync-skills --target .agents/skills --copy` command after install when you
+want the skill materialized inside the project.
 
 ## Hand this prompt to your agent
 
@@ -138,13 +146,12 @@ Report saved artifacts, numerical checks, warnings, and anything that still
 needs human engineering review.
 ```
 
-For Claude Code, replace `.agents/skills` with the synced Claude skill path if
-needed.
+For Claude Code, replace `.agents/skills` with `.claude/skills`.
 
 ## Example: COMSOL and Codex on one machine
 
 If COMSOL and Codex are on the same machine, start by installing the COMSOL
-plugin and syncing its bundled skill into the Codex project:
+plugin and syncing its bundled skill into the `.agents/skills` project target:
 
 ```bash
 uv tool install sim-cli-core
@@ -246,7 +253,13 @@ solver can be reached:
 
 ```bash
 sim plugin list
+
+# Codex or Copilot
 sim plugin sync-skills --target .agents/skills --copy
+
+# Claude Code
+sim plugin sync-skills --target .claude/skills --copy
+
 sim check <solver>
 sim plugin doctor <solver> --deep
 ```
@@ -281,7 +294,12 @@ Then a fresh checkout can run:
 ```bash
 sim setup --dry-run
 sim setup
+
+# Codex or Copilot
 sim plugin sync-skills --target .agents/skills --copy
+
+# Claude Code
+sim plugin sync-skills --target .claude/skills --copy
 ```
 
 ## Common commands
@@ -290,7 +308,8 @@ sim plugin sync-skills --target .agents/skills --copy
 |---|---|
 | `sim plugin catalog` | Discover solver plugins and copy-paste install strings. |
 | `sim plugin install <source>` | Install a solver plugin and sync its bundled skill. |
-| `sim plugin sync-skills --target .agents/skills --copy` | Materialize installed plugin skills for Codex. |
+| `sim plugin sync-skills --target .agents/skills --copy` | Materialize installed plugin skills for Codex or Copilot. |
+| `sim plugin sync-skills --target .claude/skills --copy` | Materialize installed plugin skills for Claude Code. |
 | `sim check <solver>` | Detect local or remote solver installs. |
 | `sim connect --solver <solver>` | Open a persistent solver session. |
 | `sim exec --file step.py` | Run one bounded step in the live session. |

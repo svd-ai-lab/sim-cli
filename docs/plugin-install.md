@@ -8,7 +8,7 @@ both:
 - a bundled `_skills/<solver>/` directory that an agent can read
 
 Use this reference to install plugins and expose their bundled skills to Codex,
-Claude Code, or another agent.
+GitHub Copilot, Claude Code, or another agent.
 
 ## TL;DR
 
@@ -22,8 +22,8 @@ Claude Code, or another agent.
 | Install from a local wheel | `sim plugin install ./sim_plugin_comsol-<version>-py3-none-any.whl` |
 | Install from a local plugin checkout | `sim plugin install ./sim-plugin-comsol` |
 | Editable install for plugin authors | `sim plugin install -e ./sim-plugin-comsol` |
-| Sync installed skills for Codex | `sim plugin sync-skills --target .agents/skills --copy` |
-| Sync installed skills for Claude Code | `sim plugin sync-skills` |
+| Sync installed skills for Codex or GitHub Copilot | `sim plugin sync-skills --target .agents/skills --copy` |
+| Sync installed skills for Claude Code | `sim plugin sync-skills --target .claude/skills --copy` |
 
 ## Install sources
 
@@ -50,16 +50,27 @@ copy-paste install strings.
 After a successful install, `sim plugin install` runs skill sync unless you
 pass `--no-sync`.
 
+Use the two common agent targets directly:
+
+- `.agents/skills` for Codex and GitHub Copilot projects
+- `.claude/skills` for Claude Code projects
+
 Default behavior is Claude-oriented:
 
 - if `./.claude/` exists, sync to `./.claude/skills/`
 - otherwise sync to `~/.claude/skills/`
 
-For Codex, explicitly sync into the project skill directory:
+For Codex or GitHub Copilot, explicitly sync into the project skill directory:
 
 ```bash
 sim plugin install sim-plugin-comsol
 sim plugin sync-skills --target .agents/skills --copy
+```
+
+For project-local Claude Code skills, use:
+
+```bash
+sim plugin sync-skills --target .claude/skills --copy
 ```
 
 Use `--copy` when symlinks are inconvenient or unsupported. Re-running
@@ -110,7 +121,12 @@ If a colleague or release page provides a wheel or sdist:
 
 ```bash
 sim plugin install ./sim_plugin_comsol-<version>-py3-none-any.whl
+
+# Codex or GitHub Copilot
 sim plugin sync-skills --target .agents/skills --copy
+
+# Claude Code
+sim plugin sync-skills --target .claude/skills --copy
 ```
 
 The skill ships inside the wheel, so the same artifact can provide both the
@@ -179,11 +195,11 @@ installs those plugins. It is idempotent for a fresh checkout workflow. After
 setup, sync skills to the agent target you use:
 
 ```bash
-# Codex
+# Codex or GitHub Copilot
 sim plugin sync-skills --target .agents/skills --copy
 
 # Claude Code
-sim plugin sync-skills
+sim plugin sync-skills --target .claude/skills --copy
 ```
 
 ## Verifying an install
