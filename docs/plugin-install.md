@@ -1,143 +1,215 @@
 # Installing sim plugins
 
-`sim` ships with no solver drivers built-in (since v1.0). Each driver +
-its skill lives in a separate `sim-plugin-<solver>` package. This doc
-covers every way to install one.
+`sim-cli-core` ships with no solver drivers built in. Each solver integration
+lives in a separate `sim-plugin-<solver>` package. A plugin normally provides
+both:
+
+- a driver entry point that `sim` can load
+- a bundled `_skills/<solver>/` directory that an agent can read
+
+This page is the detailed reference for installing those plugins and exposing
+their bundled skills to Codex, Claude Code, or another agent.
 
 ## TL;DR
 
 | Situation | Command |
 |---|---|
 | Discover available plugins | `sim plugin catalog` |
-| PyPI package | `sim plugin install sim-plugin-coolprop` |
-| Pinned PyPI package | `sim plugin install sim-plugin-coolprop==0.1.0` |
-| Private package index | `sim plugin install sim-plugin-mechanical --extra-index-url https://example.com/simple/` |
-| Direct URL | `sim plugin install https://example.com/sim_plugin_coolprop-0.1.0-py3-none-any.whl` |
-| Online, plugin you cloned locally | `sim plugin install ./sim-plugin-coolprop` |
-| Offline (you have a wheel file) | `sim plugin install ./sim_plugin_coolprop-0.1.0-py3-none-any.whl` |
-| Editable (you author plugins) | `sim plugin install -e ./sim-plugin-coolprop` |
+| Install a PyPI plugin | `sim plugin install sim-plugin-comsol` |
+| Install a pinned PyPI plugin | `sim plugin install sim-plugin-comsol==<version>` |
+| Install from a private package index | `sim plugin install sim-plugin-mechanical --extra-index-url https://example.com/simple/` |
+| Install from a direct artifact URL | `sim plugin install https://example.com/sim_plugin_comsol-<version>-py3-none-any.whl` |
+| Install from a local wheel | `sim plugin install ./sim_plugin_comsol-<version>-py3-none-any.whl` |
+| Install from a local plugin checkout | `sim plugin install ./sim-plugin-comsol` |
+| Editable install for plugin authors | `sim plugin install -e ./sim-plugin-comsol` |
+| Sync installed skills for Codex | `sim plugin sync-skills --target .agents/skills --copy` |
+| Sync installed skills for Claude Code | `sim plugin sync-skills` |
 
-## How `sim plugin install <source>` resolves
+## Install sources
 
-`<source>` accepts any of:
+`sim plugin install <source>` passes explicit install sources to pip or
+`uv pip`. It does not silently resolve short catalogue names.
 
-1. `sim-plugin-<name>` or `sim-plugin-<name>==<version>` — exact package
-   spec passed directly to pip/uv.
-2. `sim-plugin-<name> --extra-index-url https://.../simple/` — exact
-   package spec plus an additional private Python package index.
-3. `https://...whl` or `https://...tar.gz` — direct URL to a wheel or
-   sdist. Plain pip + HTTPS, works behind corporate proxies.
-4. `./path/to/dir` — local plugin source directory. `pip install <dir>`.
-5. `./path/to/wheel.whl` or `./path/to/sdist.tar.gz` — local artifact.
-   `pip install <path>`.
-6. `git+https://...` or `git+ssh://...` — git URL (when git is available).
+Supported sources:
 
-Bare short names such as `coolprop` or `ltspice` are catalogue names, not
-install sources. Run `sim plugin catalog` to see the official plugin list
-with the recommended explicit install command for each, then pass that
-command's argument to `sim plugin install`.
+1. `sim-plugin-<name>` or `sim-plugin-<name>==<version>` - exact package
+   specs.
+2. `sim-plugin-<name> --extra-index-url https://.../simple/` - package spec
+   plus a private Python package index.
+3. `https://...whl` or `https://...tar.gz` - direct wheel or sdist URL.
+4. `./path/to/dir` - local plugin source directory.
+5. `./path/to/wheel.whl` or `./path/to/sdist.tar.gz` - local artifact.
+6. `git+https://...` or `git+ssh://...` - Git source, when Git is available.
 
-After the package installs, `sim plugin install` runs `sync-skills`
-automatically so the plugin's bundled `_skills/<solver>/` becomes
-discoverable to Claude Code (or any consumer of `.claude/skills/`).
+Bare solver names such as `comsol` or `ltspice` are catalogue IDs, not install
+sources. Run `sim plugin catalog` to see available plugins and their
+copy-paste install strings.
+
+## Skill sync targets
+
+After a successful install, `sim plugin install` runs skill sync unless you
+pass `--no-sync`.
+
+Default behavior is Claude-oriented:
+
+- if `./.claude/` exists, sync to `./.claude/skills/`
+- otherwise sync to `~/.claude/skills/`
+
+For Codex, explicitly sync into the project skill directory:
+
+```bash
+sim plugin install sim-plugin-comsol
+sim plugin sync-skills --target .agents/skills --copy
+```
+
+Use `--copy` when symlinks are inconvenient or unsupported. Re-running
+`sync-skills` is idempotent.
 
 ## Discovery catalogue
 
-Agents can discover available plugins without installing anything:
+Agents can inspect available plugins before installing anything:
 
-```sh
+```bash
 sim plugin catalog
 sim --json plugin catalog
 ```
 
-The catalogue is for discovery only. Each entry includes a copy-paste
-`install` string that callers pass to `sim plugin install`. The catalogue
-is advisory metadata; `sim plugin install <short-name>` does not silently
-resolve a catalogue name into a URL or package.
+The catalogue is advisory metadata. It helps users and agents find official
+install strings, but the install command still requires an explicit package,
+URL, Git source, or local path.
 
-## Online
+## Online installs
 
-```sh
-sim plugin install sim-plugin-coolprop
+For a normal online install:
+
+```bash
+uv tool install sim-cli-core
+sim plugin install sim-plugin-comsol
+sim check comsol
+sim plugin doctor comsol --deep
 ```
 
-This is enough on a typical developer laptop. Requires:
+Requirements:
 
-- `sim-cli-core` already installed.
-- HTTPS access to the package index, direct URL, or git host you provide.
-- `pip` (it ships with Python).
+- `sim-cli-core` installed and on `PATH`
+- Python with `pip` available to the interpreter running `sim`
+- network access to the package index, direct URL, or Git host you provide
+- the underlying solver installed and licensed if `--deep` detection should
+  succeed
 
-## Offline (single artifact)
+If `sim` is on `PATH` but you need to install the plugin into a specific Python
+environment, pin the target interpreter:
 
-If you have a wheel or sdist file (downloaded from a release page, sent by
-a colleague, copied off a USB stick):
-
-```sh
-sim plugin install ./sim_plugin_coolprop-0.1.0-py3-none-any.whl
+```bash
+sim plugin install sim-plugin-comsol --python /path/to/venv/bin/python
 ```
 
-The skill ships *inside* the wheel under `_skills/<solver>/`, so this
-single command brings up both the driver and the skill. No network access
-is required.
+## Offline installs
 
-## Editable (plugin authors)
+If a colleague or release page provides a wheel or sdist:
 
-If you're authoring or debugging a plugin:
-
-```sh
-sim plugin install -e ./sim-plugin-coolprop
+```bash
+sim plugin install ./sim_plugin_comsol-<version>-py3-none-any.whl
+sim plugin sync-skills --target .agents/skills --copy
 ```
 
-Equivalent to `pip install -e ./sim-plugin-coolprop`, plus syncing skills.
-Code edits take effect on next process; you never need to reinstall during
-development.
+The skill ships inside the wheel, so the same artifact can provide both the
+driver and the agent instructions. No network access is required beyond the
+artifact you already have.
 
-## Commercial plugins
+## Private and commercial plugins
 
 Commercial plugin availability depends on third-party license conditions.
 Private wrappers should be distributed through explicit private repos, direct
-wheel URLs, or a standard private Python package index:
+wheel URLs, or standard private Python package indexes:
 
-```sh
+```bash
 sim plugin install sim-plugin-mechanical --extra-index-url https://example.com/simple/
+sim plugin install git+ssh://git@example.com/acme/sim-plugin-internal
+sim plugin install https://example.com/wheels/sim_plugin_internal-0.1.0-py3-none-any.whl
 ```
 
 Contact <contact@svd-ai-lab.com> to discuss commercial plugin access.
 
-## Surviving `uv sync`
+## Project manifests with sim.toml
 
-`uv sync` rebuilds the project venv from declared dependencies and wipes
-anything else. To keep installed plugins across `uv sync` invocations,
-`sim plugin install` writes the install record to a managed
-`[tool.sim.plugins]` table in your project's `pyproject.toml` (or to
-`~/.sim/plugins.toml` for `--global`):
+For a project that an agent should be able to bootstrap reproducibly, commit a
+`sim.toml` manifest.
+
+Create a starter file:
+
+```bash
+sim init
+```
+
+Example `sim.toml`:
 
 ```toml
-[tool.sim.plugins]
-coolprop = { package = "sim-plugin-coolprop", version = ">=0.1.0" }
-gmsh     = { git = "https://github.com/svd-ai-lab/sim-plugin-gmsh", rev = "v0.1.0" }
-local_plugin = { wheel = "./vendor/sim_plugin_local-1.2.0-py3-none-any.whl" }
+[sim]
+default_solver = "comsol"
+workspace = "./workspace"
+
+[[sim.plugins]]
+name = "comsol"
+package = "sim-plugin-comsol"
+
+[[sim.plugins]]
+name = "ltspice"
+package = "sim-plugin-ltspice"
+version = "==0.2.3"
+
+[[sim.plugins]]
+name = "internal"
+git = "ssh://git@example.com/acme/sim-plugin-internal"
+
+[[sim.plugins]]
+name = "offline"
+wheel = "./vendor/sim_plugin_offline-0.1.0-py3-none-any.whl"
 ```
 
-`sim setup` (or `uv sync && sim plugin install --reapply`) restores them
-on a fresh checkout.
+Then run:
 
-For one-shot installs that you don't want recorded:
-
-```sh
-sim plugin install <source> --no-record
+```bash
+sim setup --dry-run
+sim setup
 ```
 
-## Verifying
+`sim setup` reads `[[sim.plugins]]`, derives each explicit install source, and
+installs those plugins. It is idempotent for a fresh checkout workflow. After
+setup, sync skills to the agent target you use:
 
-After install, check the plugin loaded cleanly:
+```bash
+# Codex
+sim plugin sync-skills --target .agents/skills --copy
 
-```sh
-sim plugin list                  # one row per installed plugin
-sim plugin doctor coolprop       # detailed validation
-sim --json plugin doctor --all   # machine-readable
+# Claude Code
+sim plugin sync-skills
 ```
 
-`doctor` checks that the plugin's entry-points resolve, the driver
-instantiates, the skill directory exists, and the
-`compatibility.yaml`-declared `sim_cli_core` constraint is satisfied.
+## Verifying an install
+
+After installation, check the plugin and solver path:
+
+```bash
+sim plugin list
+sim plugin info comsol
+sim plugin doctor comsol
+sim plugin doctor comsol --deep
+sim check comsol
+```
+
+`plugin doctor` checks entry points, driver instantiation, bundled skills, and
+the plugin compatibility metadata. `--deep` also calls solver detection, so it
+can fail when the plugin is valid but the commercial solver is missing,
+unlicensed, or installed in an unsupported location.
+
+## Editable installs
+
+Plugin authors can install from a local checkout:
+
+```bash
+sim plugin install -e ./sim-plugin-comsol
+```
+
+That is equivalent to editable pip installation plus best-effort skill sync.
+Code edits take effect on the next Python process.
