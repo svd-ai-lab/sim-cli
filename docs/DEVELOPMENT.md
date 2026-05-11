@@ -43,43 +43,43 @@ src/sim/
                      import time
 tests/               unit tests + fixtures
 assets/              logo · banner · architecture (SVG)
-docs/                translated READMEs (de · ja · zh) + architecture docs
+docs/                user, plugin, and architecture docs
 ```
 
 ## Dev flags and utilities
 
-### `sim serve --reload`
+### `uv run sim serve --reload`
 
 Auto-restarts the server when source files change. Useful during driver development:
 
 ```bash
-sim serve --reload
+uv run sim serve --reload
 ```
 
 On Windows, prefer the module-execution form when you also need to run
 `uv sync` mid-iteration:
 
 ```bash
-python -m sim serve --reload
+uv run python -m sim serve --reload
 ```
 
 Both invocations reach the same Click group. The difference is only the
-running process's open file: `sim serve` holds `.venv\Scripts\sim.exe`,
-whereas `python -m sim serve` holds `.venv\Scripts\python.exe`. `uv sync`
-re-prepares the editable install on every sync, which means rewriting
-`Scripts/sim.exe`; on Windows that fails with `os error 32` if `sim.exe`
-is open as a process, and the entire sync aborts. Launching via
-`python -m sim` keeps `sim.exe` free, so `uv sync` can complete in-place
-while `--reload` continues to pick up source changes. End-user PyPI
-workflows aren't affected — they install `sim-cli-core` as a regular wheel
-and never re-prepare the editable.
+running process's open file: `uv run sim serve` holds
+`.venv\Scripts\sim.exe`, whereas `uv run python -m sim serve` holds
+`.venv\Scripts\python.exe`. `uv sync` re-prepares the editable install on
+every sync, which means rewriting `Scripts/sim.exe`; on Windows that fails
+with `os error 32` if `sim.exe` is open as a process, and the entire sync
+aborts. Launching via `uv run python -m sim` keeps `sim.exe` free, so
+`uv sync` can complete in-place while `--reload` continues to pick up source
+changes. End-user PyPI workflows aren't affected — they install
+`sim-cli-core` as a regular wheel and never re-prepare the editable.
 
 ### `sim disconnect --stop-server`
 
 Convenience flag that tears down the session *and* stops the server in one call (equivalent to `sim disconnect && sim stop`):
 
 ```bash
-sim disconnect --stop-server
+uv run sim disconnect --stop-server
 ```
 
 ### `SIM_DEV_MODE=1`
@@ -111,5 +111,5 @@ Cross-check: `verify_skills_layout(root, profiles)` in `compat.py` validates tha
 
 ## Architecture docs
 
-- [`docs/architecture/version-compat.md`](architecture/version-compat.md) — profile env design
+- [`docs/architecture/version-compat.md`](architecture/version-compat.md) — compatibility and plugin discovery contract
 - [`docs/architecture/skills-layering-plan.md`](architecture/skills-layering-plan.md) — layered skill composition design

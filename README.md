@@ -1,322 +1,349 @@
 <div align="center">
 
-<img src="assets/banner.svg" alt="sim — the container runtime for physics simulations" width="820">
+<img src="assets/banner.svg" alt="sim — agent runtime for physics simulations" width="820">
 
 <br>
 
-**Make CAD, CAE, and physics simulation software agent-native.**
+**Let AI agents operate real CAE and physics solvers step by step.**
 
-`sim` is an open-source CLI + HTTP runtime for automating engineering simulation tools with LLM agents. It gives agents a standard way to launch solvers, execute code step by step, inspect state, capture screenshots, and recover from errors across GUI-heavy tools like COMSOL, ANSYS, Abaqus, Fluent, Simulink, LTspice, and more.
-
-*Think of it as a container runtime for simulations: agents talk to `sim`, and `sim` talks to solvers.*
+`sim` is an open-source CLI and local runtime that lets Codex, Claude Code,
+GitHub Copilot, Gemini, and other agents work with simulation software through
+solver-specific plugins and bundled skills. An agent can check what is
+installed, connect to a solver, inspect live state, execute bounded steps,
+capture artifacts, and leave checkpoints for an engineer to review.
 
 <p align="center">
-  <a href="#-quick-start"><img src="https://img.shields.io/badge/Quick_Start-2_min-3b82f6?style=for-the-badge" alt="Quick Start"></a>
-  <a href="#-solver-registry"><img src="https://img.shields.io/badge/Solvers-growing_registry-22c55e?style=for-the-badge" alt="Growing solver registry"></a>
-  <a href="https://github.com/svd-ai-lab/sim-skills"><img src="https://img.shields.io/badge/Agent_Skills-sim--skills-8b5cf6?style=for-the-badge" alt="Companion skills"></a>
+  <a href="#quick-start-agent-setup"><img src="https://img.shields.io/badge/Quick_Start-agent_setup-3b82f6?style=for-the-badge" alt="Quick Start"></a>
+  <a href="#solver-plugins"><img src="https://img.shields.io/badge/Solvers-plugin_based-22c55e?style=for-the-badge" alt="Solver plugins"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-eab308?style=for-the-badge" alt="License"></a>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/python-3.10--3.12-3776AB?logo=python&logoColor=white" alt="Python">
+  <img src="https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/CLI-Click_8-blue" alt="Click">
   <img src="https://img.shields.io/badge/server-FastAPI-009688?logo=fastapi&logoColor=white" alt="FastAPI">
   <img src="https://img.shields.io/badge/transport-HTTP%2FJSON-orange" alt="HTTP/JSON">
   <img src="https://img.shields.io/badge/status-alpha-f97316" alt="Status: alpha">
 </p>
 
-**English** · [Deutsch](docs/README.de.md) · [日本語](docs/README.ja.md) · [中文](docs/README.zh.md)
-
-[Why sim](#-why-sim) · [Quick Start](#-quick-start) · [Solvers](#-solver-registry) · [Commands](#-commands) · [Skills](https://github.com/svd-ai-lab/sim-skills)
+[Quick Start](#quick-start-agent-setup) · [COMSOL + Codex](#example-comsol-and-codex-on-one-machine) · [Agent Loop](#the-agent-loop) · [Remote Solvers](#local-vs-remote-solvers) · [Plugins](#solver-plugins) · [Commands](#common-commands)
 
 </div>
 
 ---
 
-## 🤔 Why sim?
+## Who this is for
 
-LLM agents already know how to write simulation scripts — training data is full of them. What they *don't* have is a standard way to **launch a solver, drive it step by step, and observe what happened** before deciding the next move.
+`sim` is for agents and people trying to get real simulation work done.
 
-Today, the choices are awful:
+- **CAE engineers who already script solvers** and want an agent to help
+  automate COMSOL, Fluent, MATLAB, LTspice, Abaqus, HFSS, and similar tools
+  without losing inspection and recovery between steps.
+- **Design engineers and occasional simulation users** who have agent
+  experience and want a "vibe CAE" workflow: ask for a simulation, watch the
+  model evolve, review screenshots or plots, and keep final artifacts.
+- **AI agents** reading this repository to learn the safe setup and operating
+  loop before touching a solver.
+- **Engineering leaders** evaluating whether agent-assisted simulation can be
+  repeatable, reviewable, and compatible with existing solver installations.
 
-- **Fire-and-forget scripts** — agent writes 200 lines, runs the whole thing, an error at line 30 surfaces as garbage at line 200, no introspection, no recovery.
-- **Bespoke wrappers per solver** — every team rebuilds the same launch / exec / inspect / teardown loop in a different shape.
-- **Closed proprietary glue** — vendor SDKs that don't compose, don't share a vocabulary, and don't speak HTTP.
+Plugin authoring, runtime internals, and driver protocol details live in
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
-`sim` is the missing layer:
+## What sim gives an agent
 
-- **One CLI**, one HTTP protocol, **a growing driver registry** spanning CFD, multiphysics, thermal, pre-processing, and beyond.
-- **Persistent sessions** the agent introspects between every step.
-- **Remote-by-default** — the CLI client and the live solver can sit on different machines (LAN, Tailscale, HPC head node).
-- **Companion agent skills** that teach an LLM how to drive each backend safely.
+LLMs can often write solver scripts, but a one-shot script is a weak workflow:
+it hides intermediate state, fails late, and makes recovery difficult.
 
-> Like a container runtime standardized how Kubernetes talks to containers, **sim** standardizes how agents talk to solvers.
+`sim` gives an agent a small, repeatable control surface:
 
----
-
-## 🏛 Architecture
-
-<div align="center">
-  <img src="assets/architecture.svg" alt="sim architecture: CLI client over HTTP/JSON to a sim serve FastAPI process holding a live solver session" width="900">
-</div>
-
-Two execution modes from the same CLI, sharing the same `DriverProtocol`:
-
-| Mode | Command | When to use it |
-|---|---|---|
-| **Persistent session** | `sim serve` + `sim connect / exec / inspect` | Long, stateful workflows the agent inspects between steps |
-| **One-shot** | `sim run script.py --solver X` | Whole-script jobs you want stored as a numbered run in `.sim/runs/` |
-
-For the full driver protocol, server endpoints, and execution pipeline see [CLAUDE.md](CLAUDE.md).
-
----
-
-## 🚀 Quick Start
-
-> **Names at a glance:** repo `svd-ai-lab/sim-cli` · PyPI distribution `sim-cli-core` · console command `sim` · import `import sim`. Yes, three different strings — the repo name predates the PyPI publish; the rest follow Python packaging convention.
-
-Prereq: [`uv`](https://docs.astral.sh/uv/) — install with `curl -LsSf https://astral.sh/uv/install.sh | sh` (macOS / Linux) or `irm https://astral.sh/uv/install.ps1 | iex` (Windows PowerShell).
-
-**macOS / Linux:**
-
-```bash
-# 1. On the host that has the solver installed, install sim core only
-#    — no driver choice yet:
-uv pip install sim-cli-core
-
-# 2. Install the plugin for the solver you actually want:
-sim plugin install sim-plugin-ltspice
-
-# 3. Tell sim to look at this machine and pick the right SDK profile:
-sim check <solver>
-# → reports detected installs of <solver> and the profile they resolve to
-
-# 4. Bootstrap that profile env (creates .sim/envs/<profile>/ with the
-#    pinned SDK; or pass --auto-install to step 5 to do it inline):
-sim env install <profile>
-
-# 5. Start the server (only needed for remote / cross-machine workflows):
-sim serve --host 0.0.0.0          # FastAPI on :7600
-
-# 6. From the agent / your laptop / anywhere on the network:
-sim --host <server-ip> connect --solver <solver> --mode solver --ui-mode gui
-sim --host <server-ip> inspect session.versions   # ← always do this first
-sim --host <server-ip> exec "<solver-specific snippet>"
-sim --host <server-ip> screenshot -o shot.png
-sim --host <server-ip> disconnect
+```text
+check solver -> connect -> inspect -> execute one bounded step
+-> inspect result/state -> save artifact or checkpoint -> continue
 ```
 
-**Windows (PowerShell):**
+The solver-specific knowledge is not baked into the core CLI. It comes from
+plugins. A plugin can provide both:
+
+- a **driver**, so `sim` can launch or talk to the solver
+- a **skill**, so the agent knows the solver-specific workflow, pitfalls, and
+  inspection rules
+
+## Human-in-the-loop collaboration
+
+`sim` is designed for shared control, not unattended black-box automation.
+When a solver plugin exposes live state through `sim inspect`, the agent can
+re-read the current solver session after each meaningful step. That means an
+engineer can cut in through the solver GUI, change geometry, parameters,
+boundary conditions, plots, or saved artifacts, then ask the agent to inspect
+again and continue from the real current state.
+
+This is the collaboration model: the human can watch, correct, and steer; the
+agent keeps using inspection and checkpoints instead of assuming its previous
+script still matches the real solver state.
+
+## Quick Start: agent setup
+
+Use this path when the agent and solver are on the same machine. You do not
+need to start `sim serve` manually for the local happy path; `sim connect`
+will use the local runtime. The default docs use
+[`uv`](https://docs.astral.sh/uv/) so agents run the `sim` and plugins declared
+by the current project instead of guessing which executable is on `PATH`.
+
+`uv run sim ...` runs `sim` from this project environment, so it sees this
+project's installed solver plugins. Run from the project root:
+
+```bash
+uv init  # only if this is not already a uv project
+uv add sim-cli-core sim-plugin-comsol
+uv run sim plugin sync-skills --target .agents/skills --copy
+uv run sim check comsol
+uv run sim plugin doctor comsol --deep
+```
+
+Use `.agents/skills` for Codex and GitHub Copilot projects. For Claude Code,
+sync to `.claude/skills` instead:
+
+```bash
+uv run sim plugin sync-skills --target .claude/skills --copy
+```
+
+### Without uv
+
+If you cannot use `uv`, create a normal Python virtual environment, install
+`sim-cli-core` and the solver plugin into that environment, then run `sim`
+from the activated environment.
+
+macOS/Linux:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install sim-cli-core sim-plugin-comsol
+sim plugin sync-skills --target .agents/skills --copy
+sim check comsol
+sim plugin doctor comsol --deep
+```
+
+Windows PowerShell:
 
 ```powershell
-# 1. On the host that has the solver installed, install sim core only
-#    — no driver choice yet:
-uv pip install sim-cli-core
-
-# 2. Install the plugin for the solver you actually want:
-sim plugin install sim-plugin-ltspice
-
-# 3. Tell sim to look at this machine and pick the right SDK profile:
-sim check <solver>
-
-# 4. Bootstrap that profile env (or pass --auto-install to step 5):
-sim env install <profile>
-
-# 5. Start the server (only needed for remote / cross-machine workflows):
-sim serve --host 0.0.0.0          # FastAPI on :7600
-
-# 6. From the agent / your laptop / anywhere on the network:
-sim --host <server-ip> connect --solver <solver> --mode solver --ui-mode gui
-sim --host <server-ip> inspect session.versions   # ← always do this first
-sim --host <server-ip> exec "<solver-specific snippet>"
-sim --host <server-ip> screenshot -o shot.png
-sim --host <server-ip> disconnect
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install sim-cli-core sim-plugin-comsol
+sim plugin sync-skills --target .agents/skills --copy
+sim check comsol
+sim plugin doctor comsol --deep
 ```
 
-That's the full loop: **detect → bootstrap → launch → drive → observe → tear down** — with the engineer optionally watching the solver GUI in real time.
+## Hand this prompt to your agent
 
-> **Why the bootstrap step?** Each `(solver, SDK, driver, skill)` combo is
-> its own compatibility universe — different solver releases may want
-> different SDK versions, and those SDK versions can't always coexist in
-> one Python env. sim treats each combo as an isolated "profile env" so
-> you can keep multiple versions on one machine without dependency
-> conflicts. The contract is in
-> [`docs/architecture/version-compat.md`](docs/architecture/version-compat.md).
+After setup, give your coding agent a direct instruction like this:
 
----
+```text
+Use the installed solver skill. Run sim through this project with
+`uv run sim ...`. Check my local solver installation before connecting. Work
+one bounded step at a time: connect, inspect the session, execute a small step,
+inspect last.result and the live model state, then save or update a checkpoint
+before continuing. Do not guess solver API names; inspect the live model or the
+solver's local docs first. If I make manual changes in the solver UI,
+re-inspect the live state before continuing instead of assuming your previous
+script still matches the model. Report saved artifacts, numerical checks,
+warnings, and anything that still needs human engineering review.
+```
 
-## 📦 Plugin sources
+## Example: COMSOL and Codex on one machine
 
-`sim plugin install <source>` accepts explicit install sources only:
-
-- Exact package specs, such as `sim-plugin-ltspice` or `sim-plugin-ltspice==0.2.3`
-- Package specs plus private indexes, such as `sim-plugin-mechanical --extra-index-url https://example.com/simple/`
-- Direct wheel/sdist URLs, such as `https://example.com/sim_plugin_ltspice-0.2.3-py3-none-any.whl`
-- Git URLs, such as `git+https://github.com/<org>/sim-plugin-<name>`
-- Local plugin directories, wheels, and sdists
-
-Discovery is separate from installation:
+If COMSOL and Codex are on the same machine, start by installing the COMSOL
+plugin and syncing its bundled skill into the `.agents/skills` project target:
 
 ```bash
-sim plugin catalog              # official plugins (display + copy-paste install string)
-sim plugin list                 # installed/registered plugins on this machine
+uv add sim-cli-core sim-plugin-comsol
+uv run sim plugin sync-skills --target .agents/skills --copy
+uv run sim check comsol
+uv run sim plugin doctor comsol --deep
 ```
 
-Short solver aliases such as `ltspice` are catalogue names, not install sources. Run `sim plugin catalog` to find the recommended install string for each plugin, then pass it to `sim plugin install`.
+Then ask Codex:
 
----
+```text
+Use the installed COMSOL skill. Start by checking COMSOL through `uv run sim
+check comsol`. If you need a visible live COMSOL Desktop session, use:
 
-## 🧪 Solver registry
+uv run sim connect --solver comsol --ui-mode gui --driver-option visual_mode=shared-desktop
 
-`sim-cli` core is **fully solver-agnostic** — it ships with **zero built-in drivers**. Every solver is reached through a **plugin package** registered via the `sim.drivers` entry-point group. Adding a new backend is a ~200-LOC `DriverProtocol` implementation in its own `sim-plugin-<name>` repo.
+After connecting, inspect session.health and comsol.model.identity. Confirm the
+live model binding is healthy before treating the GUI as synchronized. For
+non-trivial work, establish a case folder and save .mph checkpoints after major
+layers. Build and solve one bounded step at a time.
+```
 
-`sim` is most useful for **GUI-heavy solvers** — COMSOL, ANSYS Mechanical, ANSYS Fluent, MATLAB Simulink, Abaqus, Flotherm — where every agent iteration would otherwise mean clicking through dialog boxes.
+For COMSOL-specific details such as shared Desktop mode, offline `.mph`
+inspection, Desktop attach fallback, model identity checks, and checkpoint
+policy, follow the bundled COMSOL skill.
 
-Install from a discovered package, then list what is installed locally:
+## The agent loop
+
+For any solver, the agent should prefer this loop over one large generated
+script:
+
+1. `uv run sim check <solver>` to detect installed solver versions and plugin
+   compatibility.
+2. `uv run sim connect --solver <solver> ...` for live stateful work, or
+   `uv run sim run` for a deterministic one-shot script.
+3. `uv run sim inspect session.versions` and the solver-specific health or
+   identity target before changing state.
+4. `uv run sim exec --file step.py --label <step>` for one bounded modeling
+   or analysis step.
+5. `uv run sim inspect last.result` and solver-specific state before
+   continuing.
+6. Save checkpoints and artifacts when the solver plugin or skill requires
+   them.
+7. `uv run sim disconnect` when the session is done.
+
+Screenshots and plots help humans review the result, but engineering
+acceptance should prefer numeric evidence when the solver skill defines it:
+mesh statistics, convergence, finite probes, conservation checks, tolerances,
+or expected trends.
+
+## Local vs remote solvers
+
+**Same machine:** install `sim-cli-core` and the solver plugin into the project
+environment, sync the skill to your agent, then use `uv run sim connect`. Do
+not add `--host` unless you are intentionally talking to a remote `sim serve`.
+
+**Remote solver workstation, lab box, or HPC login node:** install
+`sim-cli-core` and the solver plugin on the solver host, start `sim serve`
+there, then point the local agent at that host:
 
 ```bash
-sim plugin catalog              # discover what's available + install strings
-sim plugin install sim-plugin-ltspice
-sim plugin list                 # show installed plugins
+# On the solver host.
+uv run sim serve --host 0.0.0.0 --port 7600
+
+# On the agent/control machine.
+uv run sim --host <solver-host-ip> check <solver>
+uv run sim --host <solver-host-ip> connect --solver <solver>
+uv run sim --host <solver-host-ip> inspect session.summary
+uv run sim --host <solver-host-ip> disconnect
 ```
 
-Reference implementation to read for shape: [`sim-plugin-ltspice`](https://github.com/svd-ai-lab/sim-plugin-ltspice).
+Only bind `sim serve` to a trusted network such as a VPN, Tailscale, or a
+protected LAN. The runtime currently has no auth layer, and `/connect` plus
+`/exec` can execute solver-side code.
 
-**Private plugins** (vendor-IP-sensitive backends) install through explicit URLs, private repos, or private Python indexes — same `sim plugin install` flow:
+## Solver plugins
+
+`sim-cli-core` ships with no solver drivers built in. Each simulation solver is
+reached through an explicit plugin package.
+
+Ready-to-use plugins:
+
+| Solver | Package spec |
+| --- | --- |
+| COMSOL | `sim-plugin-comsol` |
+| MATLAB / Simulink | `git+https://github.com/svd-ai-lab/sim-plugin-matlab@main` |
+| Ansys Workbench | `sim-plugin-workbench` |
+| Ansys Mechanical | `sim-plugin-mechanical` |
+| Ansys Fluent | `sim-plugin-fluent` |
+| Ansys HFSS | `sim-plugin-hfss` |
+| Abaqus | `sim-plugin-abaqus` |
+| LTspice | `sim-plugin-ltspice` |
+| OpenFOAM | `git+https://github.com/svd-ai-lab/sim-plugin-openfoam@main` |
+
+Under development: Amesim, Dymola, and Flotherm.
+
+After adding any plugin package, sync its bundled skill and verify that the local
+solver can be reached:
 
 ```bash
-sim plugin install git+https://github.com/<org>/sim-plugin-<name>
-# (you need read-access to the repo; without it, git clone returns 401)
+uv run sim plugin list
 
-sim plugin install sim-plugin-mechanical --extra-index-url https://example.com/simple/
-# standard PEP 503/private-index path for commercial wrappers
+# Codex or Copilot
+uv run sim plugin sync-skills --target .agents/skills --copy
+
+# Claude Code
+uv run sim plugin sync-skills --target .claude/skills --copy
+
+uv run sim check <solver>
+uv run sim plugin doctor <solver> --deep
 ```
 
-Per-solver protocols, snippets, and demo workflows live in [`sim-skills`](https://github.com/svd-ai-lab/sim-skills) and the per-plugin repos.
+For direct wheel, Git, local checkout, or non-uv workflows, see
+[docs/plugin-install.md](docs/plugin-install.md).
 
----
+## Project setup with sim.toml
 
-## ✨ Features
+For reproducible Python packages, commit the `pyproject.toml` and `uv.lock`
+created by `uv add`. Use `sim.toml` for solver defaults and workspace settings:
 
-### 🧠 Built for agents
-- **Persistent sessions** that survive across snippets — never restart the solver mid-task
-- **Step-by-step introspection** with `sim inspect` between every action
-- **Pre-flight `sim lint`** catches missing imports and unsupported APIs before launch
-- **Numbered run history** in `.sim/runs/` for one-shot jobs, browsable via `sim logs`
+```bash
+uv run sim init
+```
 
-### 🔌 Solver-agnostic
-- **One protocol** (`DriverProtocol`) — every driver is ~200 LOC, shipped as its own `sim-plugin-<name>` package via Python entry points
-- **Persistent + one-shot** from the same CLI — no separate client per mode
-- **Plugin discovery + explicit installs** — `sim plugin catalog` discovers available plugins; `sim plugin install` accepts exact package specs, private indexes, direct URLs, git URLs, and local artifacts
-- **Companion skills** in [`sim-skills`](https://github.com/svd-ai-lab/sim-skills) so an LLM picks up each new backend without prior context
+Example:
 
-### 🌐 Remote-friendly
-- **HTTP/JSON transport** — runs anywhere `httpx` runs
-- **Client / server split** — agent on a laptop, solver on an HPC node, GUI on a workstation
-- **Tailscale-ready** — designed for cross-network mesh deployments
+```toml
+[sim]
+default_solver = "comsol"
+workspace = "./workspace"
 
----
+[[sim.plugins]]
+name = "comsol"
+package = "sim-plugin-comsol"
+```
 
-## ⚙️ Commands
+Then a fresh checkout can run:
 
-| Command | What it does | Analogy |
-|---|---|---|
-| `sim plugin catalog` | Discover available solver plugins | `npm search` |
-| `sim plugin list / install / uninstall` | Manage installed plugins from explicit install sources | `npm install` |
-| `sim check <solver>` | Detect installations + resolve a profile | `docker info` |
-| `sim env install <profile>` | Bootstrap a profile env (venv + pinned SDK) | `pyenv install` |
-| `sim env list [--catalogue]` | Show bootstrapped envs (and the full catalogue) | `pyenv versions` |
-| `sim env remove <profile>` | Tear down a profile env | `pyenv uninstall` |
-| `sim serve` | Start the HTTP server (for cross-machine use) | `ollama serve` |
-| `sim connect` | Launch a solver, open a session | `docker start` |
-| `sim exec` | Run a Python snippet inside the live session | `docker exec` |
-| `sim inspect` | Query live session state (incl. `session.versions`) | `docker inspect` |
-| `sim ps` | Show the active session and its profile | `docker ps` |
-| `sim screenshot` | Grab a PNG of the solver GUI | — |
-| `sim disconnect` | Tear down the session | `docker stop` |
-| `sim stop` | Stop the sim-server process | `docker rm -f` |
-| `sim run` | One-shot script execution | `docker run` |
-| `sim lint` | Pre-flight static check on a script | `ruff check` |
-| `sim logs` | Browse stored run history | `docker logs` |
+```bash
+uv sync
+uv run sim setup --dry-run
 
-Every command that touches a host (`check`, `env`, `connect`, `exec`, `inspect`, `disconnect`) accepts `--host <ip>` and runs against a remote `sim serve` instead of the local machine.
+# Codex or Copilot
+uv run sim plugin sync-skills --target .agents/skills --copy
 
-Environment: `SIM_HOST`, `SIM_PORT` for the client; `SIM_DIR` (default `.sim/`) for run storage and profile envs.
+# Claude Code
+uv run sim plugin sync-skills --target .claude/skills --copy
+```
 
-### Choosing a profile
+## Common commands
 
-You don't usually have to. `sim check <solver>` tells you which profile your installed solver maps to, and `sim connect ... --auto-install` will bootstrap it for you on first use. The escape hatches:
-
-- **Pin a specific profile:** `sim connect --solver <solver> --profile <profile>`
-- **Skip the profile env entirely (legacy / tests):** `sim connect --solver <solver> --inline`
-- **Power-user single-env install:** install the matching plugin package directly into your current venv (e.g. `pip install <plugin-package>`). Skips `sim env` entirely; OK when you only need one solver version on this machine.
-
-The full design is in [`docs/architecture/version-compat.md`](docs/architecture/version-compat.md).
-
----
-
-## 🆚 Why not just run scripts?
-
-| Fire-and-forget script | sim |
+| Command | Use it for |
 |---|---|
-| Write the whole thing, run, hope it converges | Connect → execute → observe → decide next step |
-| An error at step 2 surfaces at step 12 | Each step verified before the next is sent |
-| Agent has no view of solver state | `sim inspect` between every action |
-| Solver restarts on every iteration | One persistent session, snippets at will |
-| GUI invisible to the human | Engineer watches the GUI while the agent drives |
-| Output parsing reinvented per project | `driver.parse_output()` returns structured fields |
+| `uv run sim plugin list` | Show plugins visible in this project environment. |
+| `uv run sim plugin info <solver>` | Show plugin metadata and compatibility summary. |
+| `uv run sim plugin doctor <solver> --deep` | Check plugin wiring plus local solver detection. |
+| `uv run sim plugin sync-skills --target .agents/skills --copy` | Materialize installed plugin skills for Codex or Copilot. |
+| `uv run sim plugin sync-skills --target .claude/skills --copy` | Materialize installed plugin skills for Claude Code. |
+| `uv run sim check <solver>` | Detect local or remote solver installs. |
+| `uv run sim connect --solver <solver>` | Open a persistent solver session. |
+| `uv run sim exec --file step.py` | Run one bounded step in the live session. |
+| `uv run sim inspect <target>` | Query session, result, or solver-specific state. |
+| `uv run sim run script.py --solver <solver>` | Run a deterministic one-shot script. |
+| `uv run sim disconnect` | Tear down the active session. |
+| `uv run sim setup` | Apply plugin declarations from `sim.toml` when you use them. |
 
----
+Run `uv run sim describe` for a machine-readable command manifest, or
+`uv run sim <command> --help` for exact options.
 
-## 🛠 Development
+## Solver ownership
 
-See [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) for setup, project layout, adding drivers, dev flags, and the layered skill system.
+`sim-cli` does not bundle or redistribute simulation solvers or vendor SDKs.
+Install and operate each underlying solver according to its vendor terms. See
+[NOTICE](NOTICE) for optional SDK dependency notes.
 
----
+`sim-cli` is an independent open-source project and is not affiliated with,
+endorsed by, or sponsored by any solver vendor. Product, solver, and company
+names remain the property of their respective owners.
 
-## 🌐 Remote deployment
+## Developer docs
 
-When the solver lives on a different machine (an HPC login node, a lab box, or any host with the solver installed) and you want to drive it from your laptop, a notebook, or an LLM agent — install `sim-cli-core` on **both** ends and run `sim serve` on the remote.
+- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) - project setup, layout, driver
+  development, and architecture notes
+- [docs/plugin-install.md](docs/plugin-install.md) - plugin installation
+  reference
 
-```bash
-# On the solver host (the machine with the solver installed)
-ssh user@solver-host
-pip install sim-cli-core
-sim serve --host 0.0.0.0 --port 7600     # bind to all interfaces
+## License
 
-# On your local control machine
-sim --host <solver-host-ip> connect --solver <solver> --mode <mode>
-sim --host <solver-host-ip> exec "<solver-specific snippet>"
-sim --host <solver-host-ip> inspect session.summary
-sim --host <solver-host-ip> disconnect
-sim --host <solver-host-ip> stop          # shut down the remote server when done
-```
-
-That is the entire setup — same `sim-cli-core` package on both sides, same wire protocol whether it is talking to a local or a remote server. Bind `--host 0.0.0.0` only on networks you trust (Tailscale, VPN, LAN behind a firewall); there is **no auth layer** on `/connect` and `/exec` execute arbitrary Python.
-
----
-
-## 🔗 Related projects
-
-- **[`sim-skills`](https://github.com/svd-ai-lab/sim-skills)** — agent skills, snippets, and demo workflows for each supported solver
-- **[`sim-ltspice`](https://github.com/svd-ai-lab/sim-ltspice)** — standalone Python API for LTspice file formats (used by `sim-plugin-ltspice`)
-
----
-
-## 📄 License
-
-Apache-2.0 — see [LICENSE](LICENSE).
-
-### Third-party solver SDKs
-
-`sim-cli` is a thin wrapper/runtime — it does **not** bundle or redistribute any vendor solver or vendor SDK. Each solver backend is reached through a third-party SDK that the user installs separately via `sim env install` or as an optional extra.
-
-Users are responsible for obtaining a valid license for each underlying solver and for complying with the license, copyright, and EULA of every third-party SDK they choose to install alongside `sim-cli`. See [`NOTICE`](NOTICE) for the list of optional SDK dependencies and their upstream locations.
-
-### Trademarks
-
-`sim-cli` is an independent open-source project and is **not affiliated with, endorsed by, or sponsored by** any solver vendor. Product, solver, and company names referenced anywhere in this repository remain the property of their respective owners:
-
-- **OpenFOAM®** is a registered trademark of **OpenCFD Ltd.**
-- **ParaView®** is a trademark of **Kitware, Inc.**
-- All other solver and product names are trademarks of their respective owners.
+Apache-2.0 - see [LICENSE](LICENSE).
