@@ -7,16 +7,16 @@ works on the first try.
 
 ## Preferred inspect targets
 
-Run these after `sim connect --solver comsol` and after every meaningful
+Run these after `uv run sim connect --solver comsol` and after every meaningful
 model edit:
 
 ```bash
-sim inspect session.health
-sim inspect comsol.model.identity
-sim inspect last.result
-sim inspect comsol.model.describe_text
-sim inspect comsol.model.describe
-sim inspect comsol.node.properties:<tag-or-dot-path>
+uv run sim inspect session.health
+uv run sim inspect comsol.model.identity
+uv run sim inspect last.result
+uv run sim inspect comsol.model.describe_text
+uv run sim inspect comsol.model.describe
+uv run sim inspect comsol.node.properties:<tag-or-dot-path>
 ```
 
 Target meanings:
@@ -25,7 +25,7 @@ Target meanings:
 |---|---|
 | `session.health` | Check solver process, UI mode, COMSOL version, PIDs, logs, and whether a visible desktop is live. |
 | `comsol.model.identity` | Check active/bound model tag, title/label, saved file path or database location, model path, read-only state, and whether the session has enough durable identity to resume. |
-| `last.result` | Check the last `sim exec` result, artifacts, probes, diagnostics, and exceptions. |
+| `last.result` | Check the last `uv run sim exec` result, artifacts, probes, diagnostics, and exceptions. |
 | `comsol.model.describe_text` | Human-readable summary of components, physics, features, properties, and warnings. |
 | `comsol.model.describe` | Structured summary for programmatic comparison. |
 | `comsol.node.properties:<tag-or-dot-path>` | Inspect one suspicious node before calling `set(...)` on it. |
@@ -64,7 +64,7 @@ Inspect after each layer:
 
 ## Fallback pattern
 
-If an inspect target is unavailable, run a small `sim exec` snippet that
+If an inspect target is unavailable, run a small `uv run sim exec` snippet that
 reads only model state and writes `_result`. Keep it read-only.
 
 ```python

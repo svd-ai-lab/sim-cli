@@ -10,8 +10,8 @@ Use this path for saved artifacts and offline diffs. For the current
 JPype session, prefer live runtime introspection first:
 
 ```bash
-sim inspect comsol.model.describe_text
-sim inspect comsol.node.properties:<tag-or-dot-path>
+uv run sim inspect comsol.model.describe_text
+uv run sim inspect comsol.node.properties:<tag-or-dot-path>
 ```
 
 See `runtime_introspection.md` for the live-session workflow.
@@ -81,7 +81,7 @@ delta = mph_diff("before.mph", "after.mph")
 # → {entries_added, entries_removed, parameters_changed, tags_changed, ...}
 ```
 
-`MphFileProbe` is wired into the driver's default probe list, so `sim inspect last.result` after a `.mph`-producing step already includes the summary.
+`MphFileProbe` is wired into the driver's default probe list, so `uv run sim inspect last.result` after a `.mph`-producing step already includes the summary.
 
 ## When not to use this
 

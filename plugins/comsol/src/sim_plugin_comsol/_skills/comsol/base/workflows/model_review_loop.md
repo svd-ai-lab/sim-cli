@@ -8,12 +8,12 @@ or physics mistake created many steps earlier.
 
 0. Establish or verify model identity, workdir, and checkpoint target.
 1. Execute one bounded modeling step.
-2. Inspect `sim inspect last.result`.
-3. Inspect `sim inspect comsol.model.identity` when available.
-4. Inspect the live model with `sim inspect comsol.model.describe_text`
+2. Inspect `uv run sim inspect last.result`.
+3. Inspect `uv run sim inspect comsol.model.identity` when available.
+4. Inspect the live model with `uv run sim inspect comsol.model.describe_text`
    when available.
 5. Inspect suspicious nodes with
-   `sim inspect comsol.node.properties:<tag-or-dot-path>` or a raw Java
+   `uv run sim inspect comsol.node.properties:<tag-or-dot-path>` or a raw Java
    fallback snippet.
 6. Compare the live model to the intended state below.
 7. Save or update the checkpoint `.mph` after each passed major layer.

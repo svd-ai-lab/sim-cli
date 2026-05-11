@@ -10,8 +10,8 @@ models through the COMSOL Java API, run studies, check live-session health, and
 export results while the engineer can keep watching or intervening in COMSOL
 Desktop.
 
-The COMSOL solver and its `mph` Python binding are not bundled — you supply
-and license COMSOL yourself. See [LICENSE-NOTICE.md](LICENSE-NOTICE.md).
+COMSOL itself and its `mph` Python binding are not bundled. See
+[LICENSE-NOTICE.md](LICENSE-NOTICE.md).
 
 ## What an agent can do with COMSOL
 
@@ -35,9 +35,9 @@ Use this when the agent should build, inspect, solve, and debug a model across
 multiple steps while the engineer watches a live COMSOL Desktop client:
 
 ```powershell
-sim connect --solver comsol --ui-mode gui --driver-option visual_mode=shared-desktop
-sim inspect session.health
-sim exec --file step.py
+uv run sim connect --solver comsol --ui-mode gui --driver-option visual_mode=shared-desktop
+uv run sim inspect session.health
+uv run sim exec --file step.py
 ```
 
 `shared-desktop` starts `comsolmphserver`, attaches a full COMSOL Desktop
@@ -76,23 +76,26 @@ parameters, studies, meshes, and result nodes are in this `.mph`?"
 
 ## Install
 
-```bash
-pip install sim-plugin-comsol
+For agent projects, install sim-cli-core and the COMSOL plugin in the project
+environment:
+
+```powershell
+uv init  # only if this is not already a uv project
+uv add sim-cli-core sim-plugin-comsol
+uv run sim plugin sync-skills --target .agents/skills --copy
+uv run sim check comsol
+uv run sim plugin doctor comsol --deep
 ```
 
-You can also install through sim-cli's plugin command:
+For Claude Code, sync the bundled skill to `.claude/skills` instead:
 
-```bash
-sim plugin install sim-plugin-comsol
+```powershell
+uv run sim plugin sync-skills --target .claude/skills --copy
 ```
 
-After installation, sim-cli auto-discovers the COMSOL driver and bundled skill:
-
-```bash
-sim drivers | grep comsol
-sim check comsol
-sim run --solver comsol path/to/script.py
-```
+`uv run sim ...` runs sim from this project environment, so it sees this
+project's plugins. Without uv, create and activate a venv, then install
+`sim-cli-core` plus this plugin with `python -m pip`.
 
 ## Agent quickstart
 
@@ -153,7 +156,7 @@ discovery. `sim-comsol-attach` exposes the Desktop-first collaboration path.
 git clone https://github.com/svd-ai-lab/sim-plugin-comsol
 cd sim-plugin-comsol
 uv sync
-uv run sim drivers
+uv run sim plugin list
 uv run sim check comsol
 uv run pytest
 ```

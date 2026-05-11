@@ -1,6 +1,6 @@
 # Debug failed exec
 
-When `sim exec` fails, stop generating new full scripts. Inspect the
+When `uv run sim exec` fails, stop generating new full scripts. Inspect the
 failure and the live model state, then retry with the smallest patch.
 
 ## Triage
@@ -8,8 +8,8 @@ failure and the live model state, then retry with the smallest patch.
 1. Inspect the structured result:
 
    ```bash
-   sim inspect comsol.model.identity
-   sim inspect last.result
+   uv run sim inspect comsol.model.identity
+   uv run sim inspect last.result
    ```
 
 2. Classify the failure:
@@ -28,13 +28,13 @@ failure and the live model state, then retry with the smallest patch.
 3. Inspect live model state:
 
    ```bash
-   sim inspect comsol.model.describe_text
+   uv run sim inspect comsol.model.describe_text
    ```
 
 4. Inspect the suspicious node:
 
    ```bash
-   sim inspect comsol.node.properties:<tag-or-dot-path>
+   uv run sim inspect comsol.node.properties:<tag-or-dot-path>
    ```
 
 5. If the inspect target is unavailable, use the raw Java snippets in

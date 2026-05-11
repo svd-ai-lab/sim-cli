@@ -4,7 +4,7 @@ Priority:
   1. --comsol-root / --doc-root flag (caller's responsibility to pass)
   2. COMSOL_DOC_ROOT env var (points directly at the `doc/` dir)
   3. COMSOL_ROOT env var (points at the Multiphysics install dir)
-  4. `sim check comsol --json` (reuses sim-cli's install discovery)
+  4. sim-cli check JSON output (reuses sim-cli's install discovery)
   5. Typical per-OS install paths
 
 The returned path is always the `doc/help/wtpwebapps/ROOT/doc/` dir that
@@ -47,7 +47,7 @@ def _from_env() -> Path | None:
 
 
 def _from_sim_check() -> Path | None:
-    """Shell out to `sim check comsol --json` and take the first install."""
+    """Shell out to sim-cli check JSON output and take the first install."""
     for binary in ("sim", "ion"):
         try:
             proc = subprocess.run(
@@ -144,5 +144,5 @@ def locate_doc_root(explicit: Path | None = None) -> Path:
 
     raise FileNotFoundError(
         "Could not locate COMSOL documentation. Set COMSOL_DOC_ROOT or COMSOL_ROOT, "
-        "install sim-cli so `sim check comsol` can find the install, or pass --comsol-root."
+        "install sim-cli so its check command can find the install, or pass --comsol-root."
     )
