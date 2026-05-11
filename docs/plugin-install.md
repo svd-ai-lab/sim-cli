@@ -7,8 +7,8 @@ both:
 - a driver entry point that `sim` can load
 - a bundled `_skills/<solver>/` directory that an agent can read
 
-This page is the detailed reference for installing those plugins and exposing
-their bundled skills to Codex, Claude Code, or another agent.
+Use this reference to install plugins and expose their bundled skills to Codex,
+Claude Code, or another agent.
 
 ## TL;DR
 

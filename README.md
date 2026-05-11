@@ -80,7 +80,7 @@ again and continue from the real current state.
 
 This is the collaboration model: the human can watch, correct, and steer; the
 agent keeps using inspection and checkpoints instead of assuming its previous
-script is still the source of truth.
+script still matches the real solver state.
 
 ## Quick Start: agent setup
 
@@ -168,9 +168,9 @@ non-trivial work, establish a case folder and save .mph checkpoints after major
 layers. Build and solve one bounded step at a time.
 ```
 
-The COMSOL plugin skill owns the current details for shared Desktop mode,
-offline `.mph` inspection, Desktop attach fallback, model identity checks, and
-checkpoint policy.
+For COMSOL-specific details such as shared Desktop mode, offline `.mph`
+inspection, Desktop attach fallback, model identity checks, and checkpoint
+policy, follow the bundled COMSOL skill.
 
 ## The agent loop
 
@@ -299,7 +299,7 @@ names remain the property of their respective owners.
 ## Developer docs
 
 - [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) - project setup, layout, driver
-  development, and internal architecture notes
+  development, and architecture notes
 - [docs/plugin-install.md](docs/plugin-install.md) - plugin installation
   reference
 - [docs/architecture/version-compat.md](docs/architecture/version-compat.md) -
