@@ -7,8 +7,8 @@
 **Let AI agents operate real CAE and physics solvers step by step.**
 
 `sim` is an open-source CLI and local runtime that lets Codex, Claude Code,
-ChatGPT, Gemini, and other agents work with licensed simulation software
-through solver-specific plugins and bundled skills. An agent can check what is
+ChatGPT, Gemini, and other agents work with simulation software through
+solver-specific plugins and bundled skills. An agent can check what is
 installed, connect to a solver, inspect live state, execute bounded steps,
 capture artifacts, and leave checkpoints for an engineer to review.
 
@@ -46,8 +46,7 @@ only for plugin developers.
 - **AI agents** reading this repository to learn the safe setup and operating
   loop before touching a solver.
 - **Engineering leaders** evaluating whether agent-assisted simulation can be
-  repeatable, reviewable, and compatible with existing licensed solver
-  installations.
+  repeatable, reviewable, and compatible with existing solver installations.
 
 Plugin authoring, runtime internals, and driver protocol details live in
 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
