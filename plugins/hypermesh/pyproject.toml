@@ -1,0 +1,57 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sim-plugin-hypermesh"
+version = "0.2.0"
+description = "Private HyperMesh GUI collaboration plugin for sim-cli"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+authors = [{ name = "svd-ai-lab" }]
+keywords = ["hypermesh", "cae", "mesh", "sim-cli", "plugin"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: Microsoft :: Windows",
+    "Topic :: Scientific/Engineering",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: Apache Software License",
+]
+dependencies = [
+    "sim-cli-core>=0.3.5",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8",
+    "build>=1.0",
+]
+
+[project.entry-points."sim.drivers"]
+hypermesh = "sim_plugin_hypermesh:HyperMeshDriver"
+
+[project.entry-points."sim.skills"]
+hypermesh = "sim_plugin_hypermesh:skills_dir"
+
+[project.entry-points."sim.plugins"]
+hypermesh = "sim_plugin_hypermesh:plugin_info"
+
+[project.urls]
+Homepage = "https://github.com/svd-ai-lab/sim-plugin-hypermesh"
+Repository = "https://github.com/svd-ai-lab/sim-plugin-hypermesh"
+Issues = "https://github.com/svd-ai-lab/sim-plugin-hypermesh/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sim_plugin_hypermesh"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+  "integration: tests that build wheels or touch external tooling",
+]
