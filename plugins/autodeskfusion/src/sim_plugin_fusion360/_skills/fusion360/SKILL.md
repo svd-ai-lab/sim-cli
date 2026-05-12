@@ -26,8 +26,8 @@ human/AI co-working session rather than a headless batch solver.
 
 ## Cookbook pattern
 
-For reusable demonstrators, place scripts in `cookbook/`, make them valid
-Fusion Python files with explicit `import adsk.core` and `import adsk.fusion`,
-write structured JSON to `SIM_FUSION360_OUT` when present, and keep any cloud
-save as a human-owned follow-up unless the task explicitly asks to save. The
-Starship example uses this pattern and leaves the live document open for review.
+Runnable recipes belong in `sim-cookbook`, not this plugin repo. For reusable
+demonstrators, make scripts valid Fusion Python files with explicit
+`import adsk.core` and `import adsk.fusion`, write structured JSON to
+`SIM_FUSION360_OUT` when present, and keep any cloud save as a human-owned
+follow-up unless the task explicitly asks to save.

@@ -57,13 +57,14 @@ approximate iPhone 16 front/back model in the visible Fusion document.
 
 ## Cookbook
 
-Examples live in [`cookbook/`](cookbook/). The Starship stack example creates
-an approximate SpaceX Starship/Super Heavy model at `1 cm = 1 m` scale in the
-visible Fusion session:
+Runnable examples live in
+[`sim-cookbook`](https://github.com/svd-ai-lab/sim-cookbook). The Starship
+stack recipe creates an approximate SpaceX Starship/Super Heavy model at
+`1 cm = 1 m` scale in the visible Fusion session:
 
 ```powershell
 uv run sim connect --solver fusion360
-uv run sim exec --file cookbook/starship_stack.py --label starship-stack
+uv run sim exec --file fusion360/examples/starship_stack/00_create_starship_stack.py --label starship-stack
 ```
 
 ## One-time Fusion setup
