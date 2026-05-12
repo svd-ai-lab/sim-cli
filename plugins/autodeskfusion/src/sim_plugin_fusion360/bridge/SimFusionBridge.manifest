@@ -1,0 +1,11 @@
+{
+  "autodeskProduct": "Fusion",
+  "type": "addin",
+  "author": "svd-ai-lab",
+  "description": {
+    "": "File-backed bridge for sim to execute Python snippets inside a visible Fusion 360 session."
+  },
+  "supportedOS": "windows|mac",
+  "version": "0.1.0",
+  "runOnStartup": false
+}

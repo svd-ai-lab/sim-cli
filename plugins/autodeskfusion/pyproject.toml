@@ -1,0 +1,60 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sim-plugin-fusion360"
+version = "0.1.0"
+description = "Autodesk Fusion 360 live-session driver and bundled skill for sim"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+authors = [{ name = "Weiqi Ji", email = "jiweiqi10@gmail.com" }]
+keywords = ["fusion360", "cad", "cae", "simulation", "sim-cli"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "Topic :: Scientific/Engineering",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "License :: OSI Approved :: Apache Software License",
+]
+dependencies = [
+    "sim-cli-core>=0.3.5",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7",
+    "build>=1.0",
+]
+
+[project.entry-points."sim.drivers"]
+fusion360 = "sim_plugin_fusion360:Fusion360Driver"
+
+[project.entry-points."sim.skills"]
+fusion360 = "sim_plugin_fusion360:skills_dir"
+
+[project.entry-points."sim.plugins"]
+fusion360 = "sim_plugin_fusion360:plugin_info"
+
+[project.urls]
+Homepage = "https://github.com/svd-ai-lab/sim-plugin-fusion360"
+Repository = "https://github.com/svd-ai-lab/sim-plugin-fusion360"
+Issues = "https://github.com/svd-ai-lab/sim-plugin-fusion360/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sim_plugin_fusion360"]
+include = ["src/sim_plugin_fusion360/**"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+  "integration: requires Autodesk Fusion 360 running with the sim bridge",
+]
