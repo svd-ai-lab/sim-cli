@@ -1,6 +1,6 @@
 ---
 name: abaqus-sim
-description: Use when driving Dassault Systemes SIMULIA Abaqus via input decks (.inp), Abaqus/CAE Python scripts, or iterative CAE authoring sessions for modeling, debugging, and reporting.
+description: Use when the user asks Codex, Claude Code, ChatGPT-style coding agents, or another AI agent to automate, inspect, run, or debug Abaqus through sim-cli. Supports Abaqus/CAE noGUI workflows, batch jobs, model inspection, ODB diagnostics, bounded execution, artifact reporting, and troubleshooting. Requires a user-owned Abaqus installation.
 ---
 
 # abaqus-sim
