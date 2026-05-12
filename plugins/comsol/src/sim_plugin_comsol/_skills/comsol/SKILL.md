@@ -1,6 +1,6 @@
 ---
 name: comsol-sim
-description: Use when working with COMSOL Multiphysics through the sim runtime, shared-desktop client-server GUI collaboration, or saved `.mph` artifacts — building/debugging/solving stateful COMSOL models through the JPype Java API when structured runtime inspection is needed, and performing offline `.mph` introspection without a JVM. Includes a fragile Java Shell Desktop attach fallback only for explicit small edits in an already-open ordinary Desktop session.
+description: Use when the user asks Codex, Claude Code, ChatGPT-style coding agents, or another AI agent to connect to COMSOL, COMSOL Desktop, or COMSOL Multiphysics through sim-cli. Supports solver checks, live session connection, .mph inspection, bounded execution, checkpointing, artifact reporting, and troubleshooting. Do not use for generic COMSOL theory.
 ---
 
 # comsol-sim
