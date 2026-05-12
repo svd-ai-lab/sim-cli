@@ -251,6 +251,7 @@ Ready-to-use plugins:
 | Abaqus | `sim-plugin-abaqus` | [sim-plugin-abaqus](https://github.com/svd-ai-lab/sim-plugin-abaqus) |
 | LTspice | `sim-plugin-ltspice` | [sim-plugin-ltspice](https://github.com/svd-ai-lab/sim-plugin-ltspice) |
 | OpenFOAM | `sim-plugin-openfoam` | [sim-plugin-openfoam](https://github.com/svd-ai-lab/sim-plugin-openfoam) |
+| Blender | `sim-plugin-blender @ https://github.com/svd-ai-lab/sim-plugin-blender/releases/download/v0.1.0/sim_plugin_blender-0.1.0-py3-none-any.whl` | [sim-plugin-blender](https://github.com/svd-ai-lab/sim-plugin-blender) |
 
 Under development: Amesim, Dymola, and Flotherm.
 
