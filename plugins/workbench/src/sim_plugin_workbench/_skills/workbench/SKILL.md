@@ -1,6 +1,6 @@
 ---
 name: workbench-sim
-description: Use when driving Ansys Workbench via PyWorkbench SDK (ansys-workbench-core) or RunWB2 batch journals — project creation, analysis system management, IronPython journal execution, file transfer, and sub-solver (PyMechanical/PyFluent/PySherlock) integration through the sim runtime.
+description: Use when the user asks Codex, Claude Code, ChatGPT-style coding agents, or another AI agent to connect to Ansys Workbench through sim-cli. Supports Workbench journal execution, project inspection, persistent sessions, Mechanical handoff, bounded execution, artifact reporting, and troubleshooting. Requires a user-owned Ansys installation.
 ---
 
 # workbench-sim
