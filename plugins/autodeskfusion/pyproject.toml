@@ -22,7 +22,6 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
     "License :: OSI Approved :: Apache Software License",
 ]
 dependencies = [
@@ -48,6 +47,7 @@ fusion360 = "sim_plugin_fusion360:plugin_info"
 Homepage = "https://github.com/svd-ai-lab/sim-plugin-fusion360"
 Repository = "https://github.com/svd-ai-lab/sim-plugin-fusion360"
 Issues = "https://github.com/svd-ai-lab/sim-plugin-fusion360/issues"
+Changelog = "https://github.com/svd-ai-lab/sim-plugin-fusion360/blob/main/CHANGELOG.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/sim_plugin_fusion360"]

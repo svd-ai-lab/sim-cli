@@ -7,8 +7,8 @@ human/AI co-working session rather than a headless batch solver.
 ## Workflow
 
 1. Ask the human to keep Fusion visible when one-time dialogs appear.
-2. Use `sim connect fusion360` / `launch()` to install the `SimFusionBridge`
-   add-in resources.
+2. Use `uv run sim connect fusion360` from the project environment, or
+   `launch()` from Python, to install the `SimFusionBridge` add-in resources.
 3. If the bridge is not running, tell the human exactly once: open **Scripts
    and Add-Ins**, select `SimFusionBridge`, and press **Run**.
 4. Execute short, reviewable Python snippets or scripts.

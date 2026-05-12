@@ -18,6 +18,6 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python }}
-      - run: uv sync --extra test
-      - run: uv run --extra test python -m pytest -q
+      - run: uv run python -c "from pathlib import Path; Path('.pytest_basetemp').mkdir(exist_ok=True)"
+      - run: uv run --extra test pytest --basetemp .pytest_basetemp/ci -q
       - run: uv build

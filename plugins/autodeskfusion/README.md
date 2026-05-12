@@ -12,15 +12,29 @@ activation material; users must install and license Fusion separately. See
 
 ## Install
 
-```bash
-pip install git+https://github.com/svd-ai-lab/sim-plugin-fusion360@main
+For agent projects, install sim-cli-core and the Fusion 360 plugin in the
+project environment:
+
+```powershell
+uv init  # only if this is not already a uv project
+uv add sim-cli-core "sim-plugin-fusion360 @ git+https://github.com/svd-ai-lab/sim-plugin-fusion360@main"
+uv run sim plugin sync-skills --target .agents/skills --copy
+uv run sim check fusion360
+uv run sim plugin doctor fusion360 --deep
 ```
 
-After install, sim discovers the plugin through Python entry points:
+For Claude Code, sync the bundled skill to `.claude/skills` instead:
 
-```bash
-sim drivers
-sim connect fusion360
+```powershell
+uv run sim plugin sync-skills --target .claude/skills --copy
+```
+
+`uv run sim ...` runs sim from this project environment, so it sees this
+project's plugins. Without uv, create and activate a venv, then install
+`sim-cli-core` plus this plugin with `python -m pip`:
+
+```powershell
+python -m pip install sim-cli-core "sim-plugin-fusion360 @ git+https://github.com/svd-ai-lab/sim-plugin-fusion360@main"
 ```
 
 ## Scope
@@ -43,16 +57,20 @@ approximate iPhone 16 front/back model in the visible Fusion document.
 
 ## One-time Fusion setup
 
-Run `sim connect fusion360` or call `Fusion360Driver().launch()` to install the
-bridge files. In Fusion, open **Scripts and Add-Ins**, select
+Run `uv run sim connect fusion360` or call `Fusion360Driver().launch()` to
+install the bridge files. In Fusion, open **Scripts and Add-Ins**, select
 `SimFusionBridge`, and run it once. The bridge writes a status heartbeat under
 the session directory so the host driver can enqueue work.
 
 ## Develop
 
 ```bash
+git clone https://github.com/svd-ai-lab/sim-plugin-fusion360
+cd sim-plugin-fusion360
 uv sync --extra test
-uv run --extra test python -m pytest -q
+uv run sim plugin list
+uv run sim check fusion360
+uv run --extra test pytest --basetemp .pytest_basetemp/local -q
 uv build
 ```
 
