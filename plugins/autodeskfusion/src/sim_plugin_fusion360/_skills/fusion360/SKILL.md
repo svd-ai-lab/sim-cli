@@ -26,8 +26,9 @@ human/AI co-working session rather than a headless batch solver.
 
 ## Cookbook pattern
 
-Runnable recipes belong in `sim-cookbook`, not this plugin repo. For reusable
-demonstrators, make scripts valid Fusion Python files with explicit
+Runnable recipes belong in the project-owned recipe/docs repository, not this
+plugin repo. For reusable demonstrators, make scripts valid Fusion Python files
+with explicit
 `import adsk.core` and `import adsk.fusion`, write structured JSON to
 `SIM_FUSION360_OUT` when present, and keep any cloud save as a human-owned
 follow-up unless the task explicitly asks to save.
