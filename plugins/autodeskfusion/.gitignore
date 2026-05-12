@@ -9,3 +9,5 @@ dist/
 .ruff_cache/
 .uv/
 .tmp/
+.sim/
+.sim-e2e/

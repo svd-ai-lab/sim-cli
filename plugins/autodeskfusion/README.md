@@ -55,9 +55,20 @@ Initial smoke target:
 The first live probe created a box in Fusion. The richer live proof created an
 approximate iPhone 16 front/back model in the visible Fusion document.
 
+## Cookbook
+
+Examples live in [`cookbook/`](cookbook/). The Starship stack example creates
+an approximate SpaceX Starship/Super Heavy model at `1 cm = 1 m` scale in the
+visible Fusion session:
+
+```powershell
+uv run sim connect --solver fusion360
+uv run sim exec --file cookbook/starship_stack.py --label starship-stack
+```
+
 ## One-time Fusion setup
 
-Run `uv run sim connect fusion360` or call `Fusion360Driver().launch()` to
+Run `uv run sim connect --solver fusion360` or call `Fusion360Driver().launch()` to
 install the bridge files. In Fusion, open **Scripts and Add-Ins**, select
 `SimFusionBridge`, and run it once. The bridge writes a status heartbeat under
 the session directory so the host driver can enqueue work.

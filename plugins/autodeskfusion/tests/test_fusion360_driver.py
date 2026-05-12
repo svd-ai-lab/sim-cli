@@ -11,6 +11,7 @@ from sim_plugin_fusion360 import Fusion360Driver, plugin_info, skills_dir
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
+COOKBOOK = Path(__file__).parent.parent / "cookbook"
 
 
 def test_plugin_metadata_exports():
@@ -33,6 +34,13 @@ class TestLint:
     def test_good_script(self):
         result = Fusion360Driver().lint(FIXTURES / "good_fusion_script.py")
         assert result.ok is True
+
+    def test_starship_cookbook_script_is_detected_and_lints(self):
+        script = COOKBOOK / "starship_stack.py"
+        driver = Fusion360Driver()
+
+        assert driver.detect(script) is True
+        assert driver.lint(script).ok is True
 
     def test_plain_python_warns_but_is_valid_python(self):
         result = Fusion360Driver().lint(FIXTURES / "not_fusion.py")
