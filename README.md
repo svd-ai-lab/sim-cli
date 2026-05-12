@@ -4,7 +4,7 @@
 
 <br>
 
-**Let AI agents operate real CAE and physics solvers step by step.**
+**sim-cli is a CLI-first runtime for Codex, Claude Code, and other AI coding agents to operate CAE solvers through plugins and skills.**
 
 `sim` is an open-source CLI and local runtime that lets Codex, Claude Code,
 GitHub Copilot, Gemini, and other agents work with simulation software through
@@ -40,8 +40,8 @@ capture artifacts, and leave checkpoints for an engineer to review.
   automate COMSOL, Fluent, MATLAB, LTspice, Abaqus, HFSS, and similar tools
   without losing inspection and recovery between steps.
 - **Design engineers and occasional simulation users** who have agent
-  experience and want a "vibe CAE" workflow: ask for a simulation, watch the
-  model evolve, review screenshots or plots, and keep final artifacts.
+  experience and want an agent-assisted workflow: ask for a simulation, watch
+  the model evolve, review screenshots or plots, and keep final artifacts.
 - **AI agents** reading this repository to learn the safe setup and operating
   loop before touching a solver.
 - **Engineering leaders** evaluating whether agent-assisted simulation can be
@@ -194,6 +194,31 @@ layers. Build and solve one bounded step at a time.
 For COMSOL-specific details such as shared Desktop mode, offline `.mph`
 inspection, Desktop attach fallback, model identity checks, and checkpoint
 policy, follow the bundled COMSOL skill.
+
+## Why CLI-first?
+
+sim-cli is CLI-first because engineering simulation is file-based,
+scriptable, local, artifact-heavy, and long-running.
+
+CAE agents need to work with solver executables, model files,
+Python/Java/journal scripts, shell commands, logs, checkpoints, plots,
+and artifacts. A CLI command surface composes with all of that and
+matches how Codex CLI, Claude Code, and other coding agents already
+operate.
+
+MCP is useful for API-style integrations and remote tool discovery,
+but a broad MCP surface can add context overhead and wrapper
+maintenance. For COMSOL, Abaqus, Ansys Workbench, OpenFOAM, LTspice,
+and similar solvers, sim-cli keeps the source of truth as a small,
+auditable command loop:
+
+```text
+check → connect → inspect → execute one bounded step → verify → save artifacts
+```
+
+Solver plugins provide solver-specific behavior. Agent skills teach
+Codex, Claude Code, and other agents when and how to use the CLI
+safely.
 
 ## The agent loop
 
