@@ -807,110 +807,6 @@ def screenshot(ctx, output):
     click.echo(f"[sim] screenshot saved: {out_path} ({w}x{h})")
 
 
-# ── context ──────────────────────────────────────────────────────────────────
-
-
-def _context_error(ctx, error_code: str, message: str, status_code: int | None = None) -> None:
-    out = {
-        "ok": False,
-        "error_code": error_code,
-        "message": message,
-        "status_code": status_code,
-        "fallback": "Continue without hosted context, or configure SIM_CONTEXT_API_KEY and retry.",
-    }
-    if ctx.obj["json"]:
-        click.echo(json_mod.dumps(out, indent=2))
-    else:
-        click.echo(f"[sim] context: {message}", err=True)
-        click.echo("  fallback: continue without hosted context, or configure SIM_CONTEXT_API_KEY and retry.", err=True)
-
-
-def _redact_config_for_display(config: dict) -> dict:
-    import copy
-
-    redacted = copy.deepcopy(config)
-    context = redacted.get("context")
-    if isinstance(context, dict) and context.get("api_key"):
-        context["api_key"] = "***configured***"
-    return redacted
-
-
-def _render_context_pack(pack: dict) -> None:
-    domain = pack.get("domain", "?")
-    mode = pack.get("mode", "context_only")
-    llm = pack.get("llm_used", False)
-    usage = pack.get("usage", {})
-    click.echo(f"[sim] context: {domain} ({mode}, llm_used={llm})")
-    click.echo(f"  returned: {usage.get('returned_example_count', 0)} example(s), "
-               f"{usage.get('context_block_count', 0)} block(s), "
-               f"~{usage.get('estimated_returned_tokens', 0)} tokens")
-
-    examples = pack.get("recommended_examples", [])
-    if examples:
-        click.echo("\n  recommended examples:")
-        for item in examples[:5]:
-            click.echo(f"  - {item.get('title', item.get('id'))} [{item.get('source_kind')}]")
-            summary = item.get("summary")
-            if summary:
-                click.echo(f"    {summary}")
-            pointer = item.get("source_pointer", {})
-            source = pointer.get("url") or pointer.get("local_application_library_path")
-            if source:
-                click.echo(f"    source: {source}")
-
-    hints = pack.get("agent_hints", {})
-    if hints:
-        click.echo("\n  agent hints:")
-        for category, values in list(hints.items())[:6]:
-            click.echo(f"  {category}:")
-            for value in values[:3]:
-                click.echo(f"    - {value}")
-
-
-@main.group(name="context")
-def context_group():
-    """Fetch hosted engineering context packs for agents."""
-
-
-@context_group.command("get")
-@click.argument("query", nargs=-1, required=True)
-@click.option("--domain", default="comsol", show_default=True, help="Engineering context domain.")
-@click.option("--max-tokens", default=4000, type=int, show_default=True,
-              help="Approximate token budget for returned context blocks.")
-@click.option("--source-preference", default="any", type=click.Choice(["any", "local", "online"]),
-              show_default=True, help="Prefer local Application Library or online Gallery examples.")
-@click.option("--solver-version", default=None, help="Optional solver version hint, e.g. 6.4.")
-@click.option("--api-base-url", default=None, help="Override the Engineering Context API base URL.")
-@click.option("--timeout", default=20.0, type=float, show_default=True, help="HTTP timeout in seconds.")
-@click.pass_context
-def context_get(ctx, query, domain, max_tokens, source_preference, solver_version, api_base_url, timeout):
-    """Request an agent-ready context pack from sim.svdailab.com."""
-    from sim import context_client as _context_client
-
-    query_text = " ".join(query).strip()
-    try:
-        pack = _context_client.get_context(
-            domain=domain,
-            query=query_text,
-            max_tokens=max_tokens,
-            source_preference=source_preference,
-            solver_version=solver_version,
-            api_base_url=api_base_url,
-            timeout=timeout,
-        )
-    except _context_client.MissingContextApiKey as exc:
-        _context_error(ctx, "CONTEXT_API_KEY_MISSING", str(exc))
-        sys.exit(2)
-    except _context_client.ContextApiError as exc:
-        _context_error(ctx, exc.error_code, exc.message, exc.status_code)
-        sys.exit(1)
-
-    if ctx.obj["json"]:
-        click.echo(json_mod.dumps(pack, indent=2, default=str))
-    else:
-        _render_context_pack(pack)
-
-
 # ── config ───────────────────────────────────────────────────────────────────
 
 
@@ -951,17 +847,13 @@ def config_show(ctx):
     merged = _cfg.load_config()
     if ctx.obj["json"]:
         click.echo(json_mod.dumps({
-            "merged": _redact_config_for_display(merged),
+            "merged": merged,
             "server_port": _cfg.resolve_server_port(),
             "server_host": _cfg.resolve_server_host(),
-            "context_api_base_url": _cfg.resolve_context_api_base_url(),
-            "context_api_key_configured": bool(_cfg.resolve_context_api_key()),
         }, indent=2))
     else:
         click.echo(f"  server.host: {_cfg.resolve_server_host()}")
         click.echo(f"  server.port: {_cfg.resolve_server_port()}")
-        click.echo(f"  context.api_base_url: {_cfg.resolve_context_api_base_url()}")
-        click.echo(f"  context.api_key: {'configured' if _cfg.resolve_context_api_key() else '(none)'}")
         solvers = _cfg.list_solver_pins()
         if solvers:
             click.echo("  solver pins:")
