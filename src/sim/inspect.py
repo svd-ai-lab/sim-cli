@@ -486,7 +486,7 @@ class StdoutJsonTailProbe:
         return ProbeResult(diagnostics=[Diagnostic(
             severity="info",
             message=f"parsed {found_from}: {preview}",
-            source=f"stdout:json",
+            source="stdout:json",
             code="sim.stdout.json_tail",
             extra={
                 "source_kind": found_from,
@@ -604,7 +604,7 @@ class SdkAttributeProbe:
 #
 # Deliberately empty — solver-specific exception→domain-code mapping is a
 # semantic judgement ("this Python exception means a Fluent RPC timeout")
-# and that belongs to the agent / sim-skills layer, not the driver layer.
+# and that belongs to the agent skill layer, not the driver layer.
 # The class remains available so a skill or agent can pass its own rules
 # explicitly via DomainExceptionMapProbe(rules=[...]).
 _EXC_MAP_RULES: list[dict] = []

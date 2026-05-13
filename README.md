@@ -299,7 +299,7 @@ uv run sim check <solver>
 uv run sim plugin doctor <solver> --deep
 ```
 
-For direct wheel, Git, local checkout, or non-uv workflows, see
+For direct wheel, Git, local checkout, or non-uv package workflows, see
 [docs/plugin-install.md](docs/plugin-install.md).
 
 ## Project setup with sim.toml
@@ -351,7 +351,7 @@ uv run sim plugin sync-skills --target .claude/skills --copy
 | `uv run sim inspect <target>` | Query session, result, or solver-specific state. |
 | `uv run sim run script.py --solver <solver>` | Run a deterministic one-shot script. |
 | `uv run sim disconnect` | Tear down the active session. |
-| `uv run sim setup` | Apply plugin declarations from `sim.toml` when you use them. |
+| `uv run sim setup` | Validate `sim.toml` and report declared plugin package specs. |
 
 Run `uv run sim describe` for a machine-readable command manifest, or
 `uv run sim <command> --help` for exact options.

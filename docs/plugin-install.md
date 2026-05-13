@@ -105,30 +105,24 @@ Skills are different from Python packages. The plugin package lives in Python's
 site-packages; the bundled skill is synced into an agent-readable directory such
 as `.agents/skills` or `.claude/skills`.
 
-## sim plugin install
+## Direct sources
 
-`sim plugin install <source>` is still available for direct wheel, Git, local
-checkout, or non-uv workflows. It installs into the Python interpreter running
-`sim` unless you pass `--python`.
+Use `uv add` for direct wheel, Git, or local checkout sources too. Keep the
+plugin dependency in `pyproject.toml` so another agent can reproduce the same
+environment with `uv sync`.
 
 Examples:
 
 ```bash
-sim plugin install sim-plugin-comsol
-sim plugin install sim-plugin-comsol==<version>
-sim plugin install https://example.com/sim_plugin_comsol-<version>-py3-none-any.whl
-sim plugin install ./sim_plugin_comsol-<version>-py3-none-any.whl
-sim plugin install ./sim-plugin-comsol
-sim plugin install -e ./sim-plugin-comsol
-sim plugin install git+https://github.com/svd-ai-lab/sim-plugin-comsol
+uv add sim-cli-core sim-plugin-comsol==<version>
+uv add sim-cli-core https://example.com/sim_plugin_comsol-<version>-py3-none-any.whl
+uv add sim-cli-core ./sim_plugin_comsol-<version>-py3-none-any.whl
+uv add sim-cli-core ./sim-plugin-comsol
+uv add sim-cli-core git+https://github.com/svd-ai-lab/sim-plugin-comsol
 ```
 
-Only use `--python` when you intend to run `sim` from that same Python
-environment or otherwise know that the plugin will be discoverable there:
-
-```bash
-sim plugin install sim-plugin-comsol --python /path/to/venv/bin/python
-```
+After changing dependencies, run `uv run sim plugin sync-skills` and
+`uv run sim check <solver>` again from the same project.
 
 ## Skill sync targets
 
@@ -178,13 +172,17 @@ uv run sim plugin sync-skills --target .agents/skills --copy
 uv run sim check comsol
 ```
 
-`sim setup` remains useful when a project chooses to declare plugin sources in
-`sim.toml`; the uv project dependency list remains the clearest place to pin
-the Python environment.
+`sim setup` validates `sim.toml` and reports declared plugin package specs. It
+does not mutate the Python environment. Use `uv add sim-cli-core
+<plugin-package-spec>` to add packages and commit the resulting
+`pyproject.toml` / `uv.lock`.
 
 ## Discovery
 
-A curated plugin list lives in the [sim-plugin-index](https://github.com/svd-ai-lab/sim-plugin-index) README — a markdown table with the install string for each plugin. Agents and humans read it directly.
+A curated plugin list lives in the
+[sim-plugin-index](https://github.com/svd-ai-lab/sim-plugin-index) README — a
+markdown table with package specs and `uv add` commands for each plugin.
+Agents and humans read it directly.
 
 ## Verifying an install
 

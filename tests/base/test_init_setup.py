@@ -184,7 +184,7 @@ def test_cli_setup_missing_sim_toml_errors_cleanly(runner: CliRunner, tmp_path: 
     assert data["error_code"] == "PLUGIN_NOT_FOUND"
 
 
-def test_cli_setup_dry_run_lists_what_would_install(runner: CliRunner, tmp_path: Path, monkeypatch):
+def test_cli_setup_lists_declared_plugin_package_specs(runner: CliRunner, tmp_path: Path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     (tmp_path / "sim.toml").write_text("""
 [sim]
@@ -200,4 +200,5 @@ version = "==0.1.0"
     assert len(data["plugins"]) == 1
     assert data["plugins"][0]["name"] == "coolprop"
     assert data["plugins"][0]["source"] == "sim-plugin-coolprop==0.1.0"
-    assert data["plugins"][0]["action"] == "would-install"
+    assert data["plugins"][0]["action"] == "declared"
+    assert data["plugins"][0]["install"] == "uv add sim-cli-core sim-plugin-coolprop==0.1.0"

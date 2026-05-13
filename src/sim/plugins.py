@@ -20,9 +20,8 @@ This module exposes:
   plugin_info_for(name)     -> dict | None
   skills_dir_for(name)      -> Traversable | None
 
-It deliberately does **not** install / uninstall plugins — that's
-``sim plugin install``'s concern, in :mod:`sim._plugin_install`. Discovery
-is read-only and side-effect-free.
+It deliberately does **not** install / uninstall plugins. Package mutation
+belongs to uv; discovery is read-only and side-effect-free.
 """
 from __future__ import annotations
 
@@ -37,6 +36,7 @@ from typing import Any
 _GROUP_DRIVERS = "sim.drivers"
 _GROUP_SKILLS = "sim.skills"
 _GROUP_PLUGINS = "sim.plugins"
+_RUNTIME_SKILLS_NAME = "sim-cli"
 
 
 # ── Data shapes ─────────────────────────────────────────────────────────────
@@ -193,6 +193,17 @@ def skills_dir_for(name: str):
         return candidate
     # Otherwise treat it as the leaf already.
     return traversable
+
+
+def runtime_skills_dir():
+    """Return sim-cli's bundled shared runtime skill directory, if present."""
+    try:
+        skills = _resources.files("sim").joinpath("_skills", _RUNTIME_SKILLS_NAME)
+        if skills.joinpath("SKILL.md").is_file():
+            return skills
+    except Exception:  # noqa: BLE001
+        return None
+    return None
 
 
 def list_installed_plugins() -> list[InstalledPlugin]:
@@ -399,15 +410,14 @@ def doctor_all(deep: bool = False) -> list[DoctorReport]:
 
 
 def sync_skills_to(target_dir, *, copy: bool = False) -> dict[str, Any]:
-    """Materialize every installed plugin's ``_skills/<name>/`` under ``target_dir``.
+    """Materialize sim-cli and plugin ``_skills/<name>/`` dirs under ``target_dir``.
 
     Default mode is symlink (idempotent, near-free); ``copy=True`` falls
     back to recursive copy for environments where symlinks are blocked
     (Windows without developer mode).
 
     Returns ``{"ok": bool, "linked": [...], "copied": [...], "skipped": [...]}``.
-    Skips drivers without a ``sim.skills`` entry-point (built-ins, OSS plugins
-    that haven't shipped skills yet).
+    Skips drivers without a ``sim.skills`` entry-point.
     """
     from pathlib import Path
 
@@ -418,20 +428,12 @@ def sync_skills_to(target_dir, *, copy: bool = False) -> dict[str, Any]:
     copied: list[str] = []
     skipped: list[str] = []
 
-    for plugin in list_installed_plugins():
-        if not plugin.has_skills:
-            skipped.append(plugin.name)
-            continue
-        skills = skills_dir_for(plugin.name)
-        if skills is None:
-            skipped.append(plugin.name)
-            continue
-
+    def sync_one(name: str, skills) -> None:
         # Resolve the Traversable to a real filesystem path. importlib.resources
         # returns a MultiplexedPath / PosixPath / WindowsPath depending on the
         # install type. _resources.as_file() yields a real path.
         with _resources.as_file(skills) as src_path:
-            dest = target / plugin.name
+            dest = target / name
             if dest.is_symlink() or dest.exists():
                 try:
                     if dest.is_symlink():
@@ -442,22 +444,36 @@ def sync_skills_to(target_dir, *, copy: bool = False) -> dict[str, Any]:
                     else:
                         dest.unlink()
                 except OSError:
-                    skipped.append(plugin.name)
-                    continue
+                    skipped.append(name)
+                    return
 
             if copy:
                 import shutil
                 shutil.copytree(src_path, dest)
-                copied.append(plugin.name)
+                copied.append(name)
             else:
                 try:
                     dest.symlink_to(src_path, target_is_directory=True)
-                    linked.append(plugin.name)
+                    linked.append(name)
                 except (OSError, NotImplementedError):
                     # Windows / no privilege — fall back to copy.
                     import shutil
                     shutil.copytree(src_path, dest)
-                    copied.append(plugin.name)
+                    copied.append(name)
+
+    runtime_skills = runtime_skills_dir()
+    if runtime_skills is not None:
+        sync_one(_RUNTIME_SKILLS_NAME, runtime_skills)
+
+    for plugin in list_installed_plugins():
+        if not plugin.has_skills:
+            skipped.append(plugin.name)
+            continue
+        skills = skills_dir_for(plugin.name)
+        if skills is None:
+            skipped.append(plugin.name)
+            continue
+        sync_one(plugin.name, skills)
 
     return {
         "ok": True,

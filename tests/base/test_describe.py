@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import json
 
-import click
 import pytest
 from click.testing import CliRunner
 
@@ -44,6 +43,14 @@ def test_manifest_includes_nested_config_subcommands():
     names = {c["name"] for c in m["commands"]}
     for required in ("config show", "config path", "config init"):
         assert required in names
+
+
+def test_manifest_excludes_retired_plugin_mutation_commands():
+    m = _describe.build_manifest(main, version="0")
+    names = {c["name"] for c in m["commands"]}
+    assert "plugin install" not in names
+    assert "plugin uninstall" not in names
+    assert "plugin bundle" not in names
 
 
 def test_every_command_has_summary_and_help():
