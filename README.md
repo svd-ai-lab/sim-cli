@@ -271,22 +271,17 @@ protected LAN. The runtime currently has no auth layer, and `/connect` plus
 `sim-cli-core` ships with no solver drivers built in. Each simulation solver is
 reached through an explicit plugin package.
 
-Ready-to-use plugins:
+A few representative plugins:
 
 | Solver | Package spec | Plugin repo |
 | --- | --- | --- |
 | COMSOL | `sim-plugin-comsol` | [sim-plugin-comsol](https://github.com/svd-ai-lab/sim-plugin-comsol) |
-| MATLAB / Simulink | `sim-plugin-matlab` | [sim-plugin-matlab](https://github.com/svd-ai-lab/sim-plugin-matlab) |
-| Ansys Workbench | `sim-plugin-workbench` | [sim-plugin-workbench](https://github.com/svd-ai-lab/sim-plugin-workbench) |
-| Ansys Mechanical | `sim-plugin-mechanical` | [sim-plugin-mechanical](https://github.com/svd-ai-lab/sim-plugin-mechanical) |
-| Ansys Fluent | `sim-plugin-fluent` | [sim-plugin-fluent](https://github.com/svd-ai-lab/sim-plugin-fluent) |
-| Ansys HFSS | `sim-plugin-hfss` | [sim-plugin-hfss](https://github.com/svd-ai-lab/sim-plugin-hfss) |
 | Abaqus | `sim-plugin-abaqus` | [sim-plugin-abaqus](https://github.com/svd-ai-lab/sim-plugin-abaqus) |
+| Ansys Workbench | `sim-plugin-workbench` | [sim-plugin-workbench](https://github.com/svd-ai-lab/sim-plugin-workbench) |
+| Autodesk Fusion 360 | _in development_ | [sim-plugin-fusion360](https://github.com/svd-ai-lab/sim-plugin-fusion360) |
 | LTspice | `sim-plugin-ltspice` | [sim-plugin-ltspice](https://github.com/svd-ai-lab/sim-plugin-ltspice) |
-| OpenFOAM | `sim-plugin-openfoam` | [sim-plugin-openfoam](https://github.com/svd-ai-lab/sim-plugin-openfoam) |
-| Blender | `sim-plugin-blender @ https://github.com/svd-ai-lab/sim-plugin-blender/releases/download/v0.1.0/sim_plugin_blender-0.1.0-py3-none-any.whl` | [sim-plugin-blender](https://github.com/svd-ai-lab/sim-plugin-blender) |
 
-Under development: Amesim, Dymola, and Flotherm.
+For the curated full list, see [sim-plugin-index](https://github.com/svd-ai-lab/sim-plugin-index).
 
 After adding any plugin package, sync its bundled skill and verify that the local
 solver can be reached:
