@@ -184,7 +184,7 @@ the Python environment.
 
 ## Discovery
 
-The list of plugins lives in [sim-plugin-index](https://github.com/svd-ai-lab/sim-plugin-index)'s README — a markdown table with the install string for each plugin. Agents and humans read the README directly; sim-cli no longer fetches a JSON catalogue.
+A curated plugin list lives in the [sim-plugin-index](https://github.com/svd-ai-lab/sim-plugin-index) README — a markdown table with the install string for each plugin. Agents and humans read it directly.
 
 ## Verifying an install
 
