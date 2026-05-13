@@ -52,10 +52,10 @@ _VERSION_PIN_RE = re.compile(r"(?:==|!=|~=|>=|<=|>|<)\s*(.+)$")
 def _short_name_error(name: str) -> str:
     return (
         f"{name!r} is not an explicit plugin install source. "
-        "See 'sim plugin catalog' for the official plugin list, or pass an "
-        "explicit pip-installable source: a local wheel/sdist path, a direct "
-        "wheel/sdist URL, a git URL, or a package spec such as "
-        f"'sim-plugin-{name}'."
+        "See https://github.com/svd-ai-lab/sim-plugin-index for the official "
+        "plugin list, or pass an explicit pip-installable source: a local "
+        "wheel/sdist path, a direct wheel/sdist URL, a git URL, or a package "
+        f"spec such as 'sim-plugin-{name}'."
     )
 
 
@@ -318,9 +318,9 @@ def bundle_plugins(names: list[str], output_dir: Path, *,
                     index_url: str | None = None) -> dict[str, Any]:
     """The install-resolver-backed bundle flow was removed.
 
-    Use the discovery catalogue to find plugins, then download explicit wheel
-    URLs or install exact package specs. The catalogue itself is not an
-    install-time resolver.
+    See https://github.com/svd-ai-lab/sim-plugin-index for the plugin list,
+    then download explicit wheel URLs or install exact package specs. There
+    is no install-time resolver to map short names to wheels.
     """
     _ = (names, output_dir, index_url)
     return {
@@ -331,10 +331,10 @@ def bundle_plugins(names: list[str], output_dir: Path, *,
             {
                 "name": name,
                 "error": (
-                    "bundle no longer resolves catalogue names; use "
-                    "sim plugin catalog to discover plugins, then pass "
-                    "explicit wheel URLs, local artifacts, git URLs, or exact "
-                    "package specs"
+                    "bundle no longer resolves short plugin names; see "
+                    "https://github.com/svd-ai-lab/sim-plugin-index for the "
+                    "plugin list, then pass explicit wheel URLs, local "
+                    "artifacts, git URLs, or exact package specs"
                 ),
             }
             for name in names

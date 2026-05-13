@@ -1003,47 +1003,6 @@ def plugin():
     """
 
 
-@plugin.command("catalog")
-@click.option("--offline", is_flag=True,
-              help="Use the cached discovery catalogue only.")
-@click.option("--refresh", is_flag=True,
-              help="Refresh the cached discovery catalogue.")
-@click.option("--catalog-url", default=None,
-              help="Override the discovery catalogue URL.")
-@click.pass_context
-def plugin_catalog_cmd(ctx, offline, refresh, catalog_url):
-    """List available plugins from the discovery catalogue.
-
-    This is discovery only. Install commands remain explicit and pip-native;
-    the catalogue is not used to silently resolve short names during install.
-    """
-    from sim.plugin_catalog import DEFAULT_CATALOG_URL, list_catalog
-
-    rows = list_catalog(
-        url=catalog_url or DEFAULT_CATALOG_URL,
-        offline=offline,
-        force=refresh,
-    )
-    if ctx.obj["json"]:
-        click.echo(json_mod.dumps([r.to_dict() for r in rows], indent=2))
-        return
-
-    if not rows:
-        click.echo("[sim] plugin catalog: no available plugins found")
-        return
-
-    click.echo(f"[sim] {len(rows)} available plugin(s) in catalog:")
-    for r in rows:
-        ver = f" {r.version}" if r.version else ""
-        license_class = f" ({r.license_class})" if r.license_class else ""
-        dist = f" [{r.distribution}]" if r.distribution else ""
-        click.echo(f"  {r.id:20s} {r.name}{ver}{dist}{license_class}")
-        if r.summary:
-            click.echo(f"    {r.summary}")
-        if r.install:
-            click.echo(f"    install: sim plugin install {r.install}")
-
-
 @plugin.command("list")
 @click.pass_context
 def plugin_list(ctx):

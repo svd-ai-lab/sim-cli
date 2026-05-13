@@ -119,10 +119,6 @@ _EXAMPLES: dict[str, list[dict[str, str]]] = {
         {"cmd": "sim --json plugin list",
          "summary": "List every registered plugin (built-in + external)."},
     ],
-    "plugin catalog": [
-        {"cmd": "sim --json plugin catalog",
-         "summary": "List available plugins from the discovery catalogue."},
-    ],
     "plugin info": [
         {"cmd": "sim plugin info coolprop",
          "summary": "Show one plugin's metadata and compatibility profiles."},

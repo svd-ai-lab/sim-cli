@@ -97,7 +97,7 @@ def test_resolve_bare_short_name_rejected(name: str):
         resolve_source(name)
     msg = str(exc.value)
     assert "explicit plugin install source" in msg
-    assert "sim plugin catalog" in msg
+    assert "sim-plugin-index" in msg
     assert f"sim-plugin-{name}" in msg
 
 
@@ -112,7 +112,7 @@ def test_bundle_plugins_is_disabled_without_index(tmp_path: Path):
     assert result["ok"] is False
     assert result["fetched"] == []
     assert result["errors"][0]["name"] == "ltspice"
-    assert "bundle no longer resolves catalogue names" in result["errors"][0]["error"]
+    assert "sim-plugin-index" in result["errors"][0]["error"]
 
 
 def test_install_bare_short_name_returns_helpful_error(monkeypatch):
