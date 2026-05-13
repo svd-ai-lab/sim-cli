@@ -182,15 +182,9 @@ uv run sim check comsol
 `sim.toml`; the uv project dependency list remains the clearest place to pin
 the Python environment.
 
-## Discovery catalogue
+## Discovery
 
-The catalogue is advisory metadata. It helps users and agents find plugin
-package specs, but install commands remain standard Python package operations.
-
-```bash
-uv run sim plugin catalog
-uv run sim --json plugin catalog
-```
+A curated plugin list lives in the [sim-plugin-index](https://github.com/svd-ai-lab/sim-plugin-index) README — a markdown table with the install string for each plugin. Agents and humans read it directly.
 
 ## Verifying an install
 
