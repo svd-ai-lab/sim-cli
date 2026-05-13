@@ -4,13 +4,14 @@
 
 <br>
 
-**sim-cli is a CLI-first runtime for Codex, Claude Code, and other AI coding agents to operate CAE solvers through plugins and skills.**
+**sim-cli lets AI agents operate CAE solvers one verified step at a time.**
 
 `sim` is an open-source CLI and local runtime that lets Codex, Claude Code,
 GitHub Copilot, Gemini, and other agents work with simulation software through
 solver-specific plugins and bundled skills. An agent can check what is
-installed, connect to a solver, inspect live state, execute bounded steps,
-capture artifacts, and leave checkpoints for an engineer to review.
+installed, connect to a solver, inspect live state, execute bounded modeling
+or analysis steps, verify result/state, and save checkpoints/artifacts for
+engineering review.
 
 <p align="center">
   <a href="#quick-start-agent-setup"><img src="https://img.shields.io/badge/Quick_Start-agent_setup-3b82f6?style=for-the-badge" alt="Quick Start"></a>
@@ -58,9 +59,15 @@ it hides intermediate state, fails late, and makes recovery difficult.
 `sim` gives an agent a small, repeatable control surface:
 
 ```text
-check solver -> connect -> inspect -> execute one bounded step
--> inspect result/state -> save artifact or checkpoint -> continue
+check readiness → attach to live session → inspect model state
+→ run one bounded CAE step → verify result/state → save checkpoint/artifacts
 ```
+
+A bounded CAE step is one small modeling, meshing, solving, or postprocessing
+action that can be inspected and verified before continuing. Examples: create a
+geometry feature, assign a material, apply a boundary condition, generate a
+mesh, run one study, extract a probe value, create a plot, or export a result
+table.
 
 The solver-specific knowledge is not baked into the core CLI. It comes from
 plugins. A plugin can provide both:
@@ -202,7 +209,8 @@ and similar solvers, sim-cli keeps the source of truth as a small,
 auditable command loop:
 
 ```text
-check → connect → inspect → execute one bounded step → verify → save artifacts
+check readiness → attach to live session → inspect model state
+→ run one bounded CAE step → verify result/state → save checkpoint/artifacts
 ```
 
 Solver plugins provide solver-specific behavior. Agent skills teach
@@ -222,11 +230,11 @@ script:
    identity target before changing state.
 4. `uv run sim exec --file step.py --label <step>` for one bounded modeling
    or analysis step.
-5. `uv run sim inspect last.result` and solver-specific state before
-   continuing.
-6. Save checkpoints and artifacts when the solver plugin or skill requires
+5. `uv run sim inspect last.result` and solver-specific state.
+6. Verify the result/state using solver-specific numerical evidence when available.
+7. Save checkpoints and artifacts when the solver plugin or skill requires
    them.
-7. `uv run sim disconnect` when the session is done.
+8. `uv run sim disconnect` when the session is done.
 
 Screenshots and plots help humans review the result, but engineering
 acceptance should prefer numeric evidence when the solver skill defines it:
