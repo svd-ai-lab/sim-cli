@@ -339,7 +339,7 @@ def connect(req: ConnectRequest):
     tool_refs: dict[str, str] = {}
     if getattr(driver, "_gui", None) is not None:
         tools.append("gui")
-        tool_refs["gui"] = "sim-skills/sim-cli/gui/SKILL.md"
+        tool_refs["gui"] = "sim-cli/_skills/sim-cli/gui/SKILL.md"
 
     return {
         "ok": True,

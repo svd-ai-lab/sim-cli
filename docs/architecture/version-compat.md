@@ -61,8 +61,8 @@ profiles:
   - name: <stable-identifier>
     sdk: ">=X.Y,<Z.W"                          # PEP 440 specifier, optional
     solver_versions: [...]                     # concrete solver versions tested
-    active_sdk_layer: <slug>                   # optional, for sim-skills overlays
-    active_solver_layer: <slug>                # optional, for sim-skills overlays
+    active_sdk_layer: <slug>                   # optional, for skill overlays
+    active_solver_layer: <slug>                # optional, for skill overlays
     notes: |
       Free-form notes surfaced in `sim check` output.
 
@@ -81,8 +81,8 @@ Field rules:
 | `profiles[].name` | yes | Stable identifier — never rename, agents and skill folders reference it. |
 | `profiles[].sdk` | no | PEP 440 specifier for the SDK version range. |
 | `profiles[].solver_versions` | no | Concrete solver versions tested against this profile. |
-| `profiles[].active_sdk_layer` | no | Slug of the matching `sim-skills/<driver>/sdk/<slug>/` layer. |
-| `profiles[].active_solver_layer` | no | Slug of the matching `sim-skills/<driver>/solver/<slug>/` layer. |
+| `profiles[].active_sdk_layer` | no | Slug of the matching `<skills-root>/<driver>/sdk/<slug>/` layer. |
+| `profiles[].active_solver_layer` | no | Slug of the matching `<skills-root>/<driver>/solver/<slug>/` layer. |
 | `profiles[].notes` | no | Surfaced in `sim check`. |
 | `deprecated[]` | no | Old profile names + migration hints. |
 
@@ -114,8 +114,8 @@ manage their own subprocesses, but plugin discovery itself is in-process.
 ## 5. Possible future profile environments
 
 The following remains a design direction for plugins that need strong SDK
-isolation. It is not the current behavior of `sim plugin install` or
-`sim connect`.
+isolation. It is not the current behavior of package installation or
+`sim connect`; add plugin packages to the uv project with `uv add`.
 
 When a driver opts into a profile env, its layout is:
 

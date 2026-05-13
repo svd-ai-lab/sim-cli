@@ -177,9 +177,9 @@ def _render_check(data: dict) -> None:
         click.echo(f"      source:  {inst['source']}")
         simulink = inst.get("extra", {}).get("simulink_installed")
         if simulink is True:
-            click.echo(f"      simulink: installed")
+            click.echo("      simulink: installed")
         elif simulink is False:
-            click.echo(f"      simulink: not found on disk")
+            click.echo("      simulink: not found on disk")
         if profile is None:
             if compat is None:
                 click.echo("      profile: (driver has no compatibility.yaml yet)")
@@ -341,8 +341,9 @@ def lint(ctx, script):
                 level="error",
                 message=(
                     f"No registered driver claims {script_path.name!r}. "
-                    "Install the matching plugin (e.g. `sim plugin install sim-plugin-<solver>`) "
-                    "or pass `sim run` if you want to attempt execution anyway."
+                    "Add the matching plugin package to this uv project, e.g. "
+                    "`uv add sim-cli-core sim-plugin-<solver>`, then run "
+                    "`uv run sim check <solver>`."
                 ),
             )],
         )
@@ -921,19 +922,16 @@ def init(ctx, force):
 @click.option("--config", "config_path", type=click.Path(exists=True, dir_okay=False, path_type=Path),
               default=None, help="Override the sim.toml location.")
 @click.option("--offline", is_flag=True,
-              help="Accepted for compatibility; plugin install no longer uses an index.")
+              help="Accepted for compatibility; setup no longer installs plugin packages.")
 @click.option("--dry-run", is_flag=True,
-              help="Print what would happen without installing anything.")
+              help="Print declared plugin package specs without changing anything.")
 @click.pass_context
 def setup(ctx, config_path, offline, dry_run):
-    """Read sim.toml and install / verify everything it declares.
+    """Read sim.toml and report the plugin packages it declares.
 
-    Idempotent: re-running after a successful setup is a no-op modulo plugin
-    upgrades. Designed to be the *one* command an agent runs to bring a
-    fresh checkout into a runnable state.
+    Package installation belongs to uv. This command validates sim.toml and
+    shows the uv-addable package specs agents should use.
     """
-    from sim._plugin_install import install_plugin
-
     path = config_path or _cfg.project_sim_toml_path()
     errors = _cfg.validate_sim_toml(path) if path.is_file() else ["sim.toml not found"]
     if errors:
@@ -945,7 +943,6 @@ def setup(ctx, config_path, offline, dry_run):
                    err=not ctx.obj["json"])
         sys.exit(2)
 
-    import sys as _sys
     if sys.version_info >= (3, 11):
         import tomllib as _tomllib
     else:
@@ -954,25 +951,19 @@ def setup(ctx, config_path, offline, dry_run):
 
     plugins = (data.get("sim") or {}).get("plugins") or []
     actions: list[dict] = []
-    fail = False
+    _ = offline
 
     for entry in plugins:
         source = _cfg.derive_install_source(entry)
-        if dry_run:
-            actions.append({"name": entry.get("name"), "source": source, "action": "would-install"})
-            continue
-        report = install_plugin(source, offline=offline)
         actions.append({
             "name": entry.get("name"),
             "source": source,
-            "ok": report.ok,
-            "message": report.message,
+            "action": "declared",
+            "install": f"uv add sim-cli-core {source}",
         })
-        if not report.ok:
-            fail = True
 
     summary = {
-        "ok": not fail,
+        "ok": True,
         "path": str(path),
         "dry_run": dry_run,
         "plugins": actions,
@@ -980,14 +971,12 @@ def setup(ctx, config_path, offline, dry_run):
     if ctx.obj["json"]:
         click.echo(json_mod.dumps(summary, indent=2))
     else:
-        verb = "would install" if dry_run else "installed"
-        click.echo(f"[sim] setup: {verb} {len(actions)} plugin(s) from {path}")
+        click.echo(f"[sim] setup: {len(actions)} plugin declaration(s) in {path}")
+        click.echo("[sim] setup: package installation is handled by uv")
         for a in actions:
-            mark = "OK" if a.get("ok", True) else "FAIL"
-            click.echo(f"  [{mark}] {a['name']} ← {a['source']}")
-            if a.get("message") and not a.get("ok", True):
-                click.echo(f"        {a['message']}")
-    sys.exit(0 if not fail else 4)
+            click.echo(f"  - {a['name']} ← {a['source']}")
+            click.echo(f"    {a['install']}")
+    sys.exit(0)
 
 
 # ── plugin (manage installed sim plugins) ────────────────────────────────────
@@ -995,11 +984,10 @@ def setup(ctx, config_path, offline, dry_run):
 
 @main.group()
 def plugin():
-    """Manage installed sim plugins (drivers + bundled skills).
+    """Inspect installed sim plugins and sync bundled skills.
 
-    Plugins extend sim with additional solvers. Each plugin ships its
-    driver + skill in one wheel; see docs/plugin-install.md for the install
-    flows (package spec, direct URL, local wheel, git URL, etc.).
+    Plugins extend sim with additional solvers. Add plugin packages with uv;
+    use this group to inspect registered drivers, run doctor, and sync skills.
     """
 
 
@@ -1081,7 +1069,7 @@ def plugin_info_cmd(ctx, name):
         click.echo(f"  profiles:      {', '.join(p.name for p in compat.profiles)}")
 
 
-@plugin.command("install")
+@plugin.command("install", hidden=True)
 @click.argument("source")
 @click.option("-e", "--editable", is_flag=True,
               help="Editable install (pip install -e). For plugin authors.")
@@ -1091,7 +1079,7 @@ def plugin_info_cmd(ctx, name):
                    "Default: enabled. Use --no-upgrade to keep an existing "
                    "install if one is already present.")
 @click.option("--offline", is_flag=True,
-              help="Accepted for compatibility; plugin install no longer uses an index.")
+              help="Accepted for compatibility; retired installer no longer uses an index.")
 @click.option("--no-sync", "no_sync", is_flag=True,
               help="Skip sync-skills after install.")
 @click.option("--target", "sync_target", type=click.Path(file_okay=False, path_type=Path),
@@ -1103,22 +1091,11 @@ def plugin_info_cmd(ctx, name):
                    "when sim is on PATH but the desired venv isn't activated.")
 @click.option("--extra-index-url", "extra_index_urls", multiple=True,
               help="Additional Python package index for private plugins. "
-                   "Passed through to pip/uv pip install.")
+                   "Accepted for compatibility by the retired installer.")
 @click.pass_context
 def plugin_install(ctx, source, editable, upgrade, offline, no_sync, sync_target,
                     python_exe, extra_index_urls):
-    """Install a plugin from any supported source.
-
-    \b
-    Examples:
-      sim plugin install sim-plugin-coolprop               # exact package spec
-      sim plugin install sim-plugin-coolprop==0.1.0        # pinned package spec
-      sim plugin install ./sim_plugin_coolprop-0.1.0-py3-none-any.whl
-      sim plugin install ./sim-plugin-coolprop -e          # editable, for authors
-      sim plugin install git+https://github.com/svd-ai-lab/sim-plugin-coolprop
-      sim plugin install sim-plugin-coolprop --python /path/to/venv/bin/python
-      sim plugin install sim-plugin-mechanical --extra-index-url https://example.com/simple/
-    """
+    """Retired compatibility shim. Add plugin packages with uv."""
     from sim._plugin_install import install_plugin
 
     report = install_plugin(
@@ -1132,55 +1109,36 @@ def plugin_install(ctx, source, editable, upgrade, offline, no_sync, sync_target
     if ctx.obj["json"]:
         click.echo(json_mod.dumps(report.to_dict(), indent=2))
     else:
-        if report.ok:
-            click.echo(f"[sim] plugin install: ok ({report.source_kind} → {report.pip_target})")
-            if report.sync_skills:
-                if report.sync_skills.get("ok"):
-                    linked = len(report.sync_skills.get("linked", []))
-                    copied = len(report.sync_skills.get("copied", []))
-                    if linked or copied:
-                        click.echo(f"[sim] sync-skills: {linked} linked, {copied} copied")
-        else:
-            click.echo(f"[sim] plugin install: FAIL — {report.message}", err=True)
-            if report.pip_stderr:
-                click.echo(report.pip_stderr.rstrip(), err=True)
+        click.echo(report.message, err=True)
 
     sys.exit(0 if report.ok else 4)
 
 
-@plugin.command("uninstall")
+@plugin.command("uninstall", hidden=True)
 @click.argument("name")
 @click.option("--python", "python_exe", default=None,
               help="Pin the target Python interpreter for the uninstall.")
 @click.pass_context
 def plugin_uninstall(ctx, name, python_exe):
-    """Uninstall a plugin and remove its synced skill directory."""
+    """Retired compatibility shim. Remove plugin packages with uv."""
     from sim._plugin_install import uninstall_plugin
 
     result = uninstall_plugin(name, python=python_exe)
     if ctx.obj["json"]:
         click.echo(json_mod.dumps(result, indent=2))
     else:
-        if result["ok"]:
-            click.echo(f"[sim] plugin uninstall: removed {result['package']}")
-        else:
-            click.echo(f"[sim] plugin uninstall: FAIL — {result.get('message')}", err=True)
+        click.echo(result.get("message"), err=True)
     sys.exit(0 if result.get("ok") else 4)
 
 
-@plugin.command("bundle")
+@plugin.command("bundle", hidden=True)
 @click.argument("names", nargs=-1, required=True)
 @click.option("--output", "-o", type=click.Path(file_okay=False, path_type=Path),
               default=Path("./plugins-bundle"),
               help="Output directory for wheels + filtered index.json.")
 @click.pass_context
 def plugin_bundle(ctx, names, output):
-    """Deprecated: index-backed plugin bundles are no longer supported.
-
-    \b
-    Examples:
-      sim plugin install ./vendor/sim_plugin_coolprop-0.1.0-py3-none-any.whl
-    """
+    """Retired compatibility shim. Add plugin packages with uv."""
     from sim._plugin_install import bundle_plugins
 
     result = bundle_plugins(list(names), output)
@@ -1201,12 +1159,12 @@ def plugin_bundle(ctx, names, output):
 
 @plugin.command("sync-skills")
 @click.option("--target", type=click.Path(file_okay=False, path_type=Path), default=None,
-              help="Where to materialize plugin _skills/ dirs (default: per-project .claude/skills/).")
+              help="Where to materialize sim-cli/plugin _skills/ dirs (default: per-project .claude/skills/).")
 @click.option("--copy", "copy_mode", is_flag=True,
               help="Copy instead of symlink (Windows-friendly).")
 @click.pass_context
 def plugin_sync_skills(ctx, target, copy_mode):
-    """Materialize every installed plugin's bundled skill into a target dir.
+    """Materialize sim-cli and installed plugin skills into a target dir.
 
     Idempotent. Symlinks where supported; ``--copy`` on environments where
     symlinks aren't available (Windows without dev mode).
@@ -1241,8 +1199,8 @@ def plugin_doctor(ctx, name, all_plugins, deep):
     """Validate that a plugin loads, conforms to DriverProtocol, and has skills.
 
     Exit code is the count of FAILed checks; 0 means clean. Use this in CI
-    to catch plugin-side regressions, and in `sim setup` to verify a fresh
-    install.
+    to catch plugin-side regressions, and after `uv add` to verify a fresh
+    project environment.
     """
     from sim import plugins as _plugins
 

@@ -9,15 +9,14 @@ Three groups:
   TestSkillsBlockForProfile   — `skills_block_for_profile()` builds the
                                 dict that /connect returns to the agent
 
-All tests use synthetic temp trees so they do NOT depend on the sibling
-sim-skills repo being present.
+All tests use synthetic temp trees so they do NOT depend on external skill
+repositories being present.
 """
 from __future__ import annotations
 
 import os
 import shutil
 import tempfile
-import textwrap
 import unittest
 from pathlib import Path
 from unittest.mock import patch

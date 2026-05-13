@@ -6,9 +6,9 @@ module parses that file into a small typed surface (`Profile`,
 
   1. Given a detected solver version, which profile applies?
   2. What profiles does sim-cli know about across all drivers?
-  3. For a given profile, which sim-skills overlay layers are active?
+  3. For a given profile, which skill overlay layers are active?
 
-It is intentionally a **metadata catalogue**, not a runtime. sim-cli
+It is intentionally a metadata index, not a runtime. sim-cli
 runs every driver in its own process — compat.yaml exists so the CLI
 can tell users which profile applies to a detected solver version and
 so the skills layer can resolve a profile to its (sdk, solver)
@@ -57,7 +57,7 @@ class Profile:
     `sdk` is optional: solvers like OpenFOAM have no Python SDK to pin.
 
     `active_sdk_layer` and `active_solver_layer` declare which sub-folders
-    under `<sim-skills>/<driver>/sdk/` and `<sim-skills>/<driver>/solver/`
+    under `<skills-root>/<driver>/sdk/` and `<skills-root>/<driver>/solver/`
     apply to this profile. Both are optional — SDK-less drivers leave
     `active_sdk_layer` unset, drivers with no version-sensitive solver
     content leave `active_solver_layer` unset. The `base/` overlay is
@@ -298,28 +298,25 @@ def load_compatibility(driver_dir: str | Path) -> Compatibility:
 
 
 _SKILLS_HINT = (
-    "set SIM_SKILLS_ROOT or place sim-skills/ next to sim-cli/"
+    "set SIM_SKILLS_ROOT or install/sync the plugin's bundled skills"
 )
 
 
 def find_skills_root() -> Path | None:
-    """Locate the sim-skills root.
+    """Locate an external skills root for local development overrides.
 
     Probe order:
-      1. ``SIM_SKILLS_ROOT`` env var (authoritative when set)
-      2. ``../sim-skills`` sibling of the sim-cli checkout
+      1. ``SIM_SKILLS_ROOT`` env var
 
-    Returns None when neither succeeds. The function never raises —
-    callers degrade gracefully by returning a hint to the user.
+    Returns None when it is unset or invalid. The function never raises —
+    callers degrade gracefully by returning a hint to the user or falling
+    back to plugin-bundled skills.
     """
     raw = os.environ.get("SIM_SKILLS_ROOT")
     if raw:
         p = Path(raw)
         return p.resolve() if p.is_dir() else None
-
-    # this file lives at <sim-cli>/src/sim/compat.py
-    sibling = Path(__file__).resolve().parents[2].parent / "sim-skills"
-    return sibling.resolve() if sibling.is_dir() else None
+    return None
 
 
 def verify_skills_layout(
@@ -396,9 +393,9 @@ def skills_block_for_profile(driver: str, profile: "Profile | None") -> dict:
 
     if driver_dir is None or not driver_dir.is_dir():
         # Out-of-tree plugins can bundle skills through the ``sim.skills``
-        # entry-point. Prefer the external sim-skills tree when present so
-        # local development overlays win, then fall back to the installed
-        # plugin bundle.
+        # entry-point. Prefer the explicit SIM_SKILLS_ROOT override when
+        # present so local development overlays win, then fall back to the
+        # installed plugin bundle.
         try:
             from sim.plugins import skills_dir_for
             plugin_dir = skills_dir_for(driver)

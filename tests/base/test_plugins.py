@@ -3,9 +3,8 @@
 Post-Phase-3b ``_BUILTIN_REGISTRY`` is empty. The conftest synthetic
 ``coolprop`` driver (autouse fixture, ``tests/base/`` only) is what makes
 these tests find anything at all — when it's active, plugin/list/doctor
-see a single registered driver named "coolprop". Tests for actually
-installing external plugins (`sim plugin install <wheel>`) live in
-test_plugin_install.py.
+see a single registered driver named "coolprop". Retired installer shims
+are covered in test_plugin_install.py.
 """
 from __future__ import annotations
 
@@ -152,7 +151,9 @@ def test_sync_skills_creates_target_dir_and_returns_dict(tmp_path):
     out = _plugins.sync_skills_to(target, copy=True)
     assert out["ok"] is True
     assert target.exists()
-    # Built-ins don't ship sim.skills entry-points, so all are skipped.
+    assert (target / "sim-cli" / "SKILL.md").is_file()
+    assert "sim-cli" in out["copied"]
+    # Built-in drivers don't ship sim.skills entry-points, so they are skipped.
     assert isinstance(out["skipped"], list)
     assert isinstance(out["linked"], list)
     assert isinstance(out["copied"], list)

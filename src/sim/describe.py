@@ -14,7 +14,6 @@ sync with their documentation.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any
 
 import click
@@ -103,9 +102,9 @@ _EXAMPLES: dict[str, list[dict[str, str]]] = {
     ],
     "setup": [
         {"cmd": "sim setup --dry-run",
-         "summary": "Print what plugins sim would install from sim.toml."},
+         "summary": "Print plugin package specs declared in sim.toml."},
         {"cmd": "sim setup",
-         "summary": "Install every plugin declared in sim.toml."},
+         "summary": "Validate sim.toml and report declared plugin packages."},
     ],
     "describe": [
         {"cmd": "sim describe --json",
@@ -123,25 +122,9 @@ _EXAMPLES: dict[str, list[dict[str, str]]] = {
         {"cmd": "sim plugin info coolprop",
          "summary": "Show one plugin's metadata and compatibility profiles."},
     ],
-    "plugin install": [
-        {"cmd": "sim plugin install sim-plugin-coolprop",
-         "summary": "Install from an exact package spec."},
-        {"cmd": "sim plugin install ./sim_plugin_coolprop-0.1.0-py3-none-any.whl",
-         "summary": "Install from a local wheel (offline-friendly)."},
-        {"cmd": "sim plugin install ./sim-plugin-coolprop -e",
-         "summary": "Editable install for plugin authors."},
-    ],
-    "plugin uninstall": [
-        {"cmd": "sim plugin uninstall coolprop",
-         "summary": "Remove a plugin and its synced skill dir."},
-    ],
-    "plugin bundle": [
-        {"cmd": "sim plugin bundle coolprop simpy gmsh -o ./plugins-bundle/",
-         "summary": "Fetch wheels into a directory for offline install."},
-    ],
     "plugin sync-skills": [
         {"cmd": "sim plugin sync-skills",
-         "summary": "Materialize installed plugins' _skills into .claude/skills/."},
+         "summary": "Materialize sim-cli and installed plugin _skills into .claude/skills/."},
     ],
     "plugin doctor": [
         {"cmd": "sim --json plugin doctor --all",
@@ -168,9 +151,9 @@ ERROR_CODES: dict[str, str] = {
     "SESSION_NOT_FOUND":
         "--session <id> does not match any active session on the server.",
     "PLUGIN_NOT_FOUND":
-        "sim plugin install received an invalid explicit source, or a plugin name is not installed.",
-    "PLUGIN_INSTALL_FAILED":
-        "pip install for a plugin returned non-zero.",
+        "A requested plugin name is not registered in this environment.",
+    "PLUGIN_INSTALL_RETIRED":
+        "A retired plugin package mutation command was invoked; use uv add/remove instead.",
     "PROTOCOL_VIOLATION":
         "A driver returned a value that doesn't match DriverProtocol.",
     "NONINTERACTIVE_INPUT_REQUIRED":
@@ -311,6 +294,8 @@ def _walk(group: click.Group, prefix: str = "") -> list[dict[str, Any]]:
     """
     entries: list[dict[str, Any]] = []
     for sub_name, sub_cmd in sorted(group.commands.items()):
+        if getattr(sub_cmd, "hidden", False):
+            continue
         full = f"{prefix}{sub_name}" if prefix else sub_name
         if isinstance(sub_cmd, click.Group):
             # Describe the group itself plus walk into it.
@@ -343,4 +328,6 @@ def build_command_entry(app: click.Group, command_path: str) -> dict[str, Any] |
         if not isinstance(cur, click.Group) or part not in cur.commands:
             return None
         cur = cur.commands[part]
+        if getattr(cur, "hidden", False):
+            return None
     return _describe_command(command_path, cur)

@@ -35,7 +35,8 @@ src/sim/
   driver.py          DriverProtocol + result dataclasses
   compat.py          Version-compat profiles + layered skill resolution
   plugins.py         Plugin discovery, listing, info
-  _plugin_install.py Explicit install / uninstall sources
+  _plugin_install.py Migration shim for retired package mutation commands
+  _skills/           sim-cli shared runtime skills bundled with the wheel
   drivers/
     __init__.py      Plugin registry — discovers external plugins
                      via the `sim.drivers` entry-point group at
@@ -90,10 +91,11 @@ execute even when the directive is present in the input file.
 
 ## Layered skill composition
 
-Skills in [`sim-skills`](https://github.com/svd-ai-lab/sim-skills) use a layered directory structure to handle SDK and solver version differences:
+Plugin-bundled skills can use a layered directory structure to handle SDK and
+solver version differences:
 
 ```
-sim-skills/<driver>/
+_skills/<driver>/
   base/                     shared — always loaded
   sdk/<sdk_version>/        override when SDK API differs
   solver/<solver_version>/  override when solver behavior differs

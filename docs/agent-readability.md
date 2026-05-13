@@ -58,8 +58,8 @@ top-level keys (`stdout`, `stderr`); never inside `message`.
 | `LINT_FAILED` | `sim lint` produced at least one error-level diagnostic. |
 | `RUN_FAILED` | The solver returned non-zero or the driver detected an error in the output. |
 | `SESSION_NOT_FOUND` | `--session <id>` does not match any active session on the server. |
-| `PLUGIN_NOT_FOUND` | `sim plugin install` received an invalid explicit source, or a plugin name is not installed. |
-| `PLUGIN_INSTALL_FAILED` | `pip install` for a plugin returned non-zero. |
+| `PLUGIN_NOT_FOUND` | A requested plugin name is not registered in this environment. |
+| `PLUGIN_INSTALL_RETIRED` | A retired plugin package mutation command was invoked; use `uv add` / `uv remove` instead. |
 | `PROTOCOL_VIOLATION` | A driver returned a value that doesn't match `DriverProtocol`. |
 | `NONINTERACTIVE_INPUT_REQUIRED` | `--no-interactive` is set and the command would otherwise prompt. |
 
@@ -74,7 +74,7 @@ and the JSON schema emitted by `sim describe --error-codes`.
 | 1 | Run-level failure (solver returned non-zero, lint produced diagnostics). |
 | 2 | User error (bad args, unknown command). |
 | 3 | Environment error (solver not installed). |
-| 4 | Plugin error (`sim plugin install` failed, plugin doctor FAIL). |
+| 4 | Plugin error (retired mutation command invoked, plugin doctor FAIL). |
 
 `sim plugin doctor --all` exits with a count of FAILed plugins (so it works
 in `&&` chains).
@@ -106,10 +106,11 @@ name = "local_plugin"
 wheel = "./vendor/sim_plugin_local-1.2.0-py3-none-any.whl"   # local, air-gapped
 ```
 
-`sim init` creates a starter `sim.toml`. `sim setup` reads it and ensures
-plugins/server config/workspace are in place. `sim config show --json`
-prints the resolved config; `sim config validate <file>` checks a file
-against the schema without applying it.
+`sim init` creates a starter `sim.toml`. `sim setup` reads it, validates it,
+and reports declared plugin package specs; package installation belongs to
+the uv project (`uv add sim-cli-core <plugin-package-spec>`). `sim config
+show --json` prints the resolved config; `sim config validate <file>` checks
+a file against the schema without applying it.
 
 ### Resolution order (later overrides earlier)
 
