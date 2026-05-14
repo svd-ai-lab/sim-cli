@@ -11,7 +11,7 @@ The runtime supports two execution modes:
 - **One-shot** (`sim run script --solver=X`): subprocess execution, result stored as a numbered run, `sim logs` to browse.
 - **Persistent session** (`sim serve` + `sim connect/exec/inspect/disconnect`): a long-lived HTTP server holds a live solver session; agents send code snippets and inspect state without restarting the solver.
 
-The companion repo `sim-skills/` contains per-solver agent skills, reference docs, demo workflows, and integration tests that drive this runtime.
+The shared runtime skill is bundled at `src/sim/_skills/sim-cli/` and synced into agent skill directories by `sim plugin sync-skills`. Per-solver agent skills ship inside their own `sim-plugin-<solver>` packages.
 
 ## Commands
 
@@ -137,7 +137,7 @@ Solver plugin tests live in their own plugin repos. Tests in this repo cover the
 - Global run history lives in `~/.sim/history.jsonl` (append-only; override dir via `SIM_HOME`); git-ignored
 - The server supports multiple concurrent sessions keyed by `X-Sim-Session` header; a solver name can only be live once per server process (driver instances are module-level singletons)
 - Project uses `uv` for dependency locking (`uv.lock`)
-- Companion knowledge / skills / workflows live in the sibling `sim-skills/` tree, one folder per solver
+- The shared runtime skill lives at `src/sim/_skills/sim-cli/`; per-solver skills ship in their `sim-plugin-<solver>` packages (synced via `sim plugin sync-skills`)
 
 ## Releases
 
