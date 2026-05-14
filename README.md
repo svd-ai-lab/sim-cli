@@ -56,12 +56,9 @@ Plugin authoring, runtime internals, and driver protocol details live in
 LLMs can often write solver scripts, but a one-shot script is a weak workflow:
 it hides intermediate state, fails late, and makes recovery difficult.
 
-`sim` gives an agent a small, repeatable control surface:
-
-```text
-check readiness → attach to live session → inspect model state
-→ run one bounded CAE step → verify result/state → save checkpoint/artifacts
-```
+`sim` gives an agent a small, repeatable control surface — check readiness,
+attach to a live session, inspect state, run one bounded step, verify, and
+checkpoint. See [The agent loop](#the-agent-loop) for the full sequence.
 
 A bounded CAE step is one small modeling, meshing, solving, or postprocessing
 action that can be inspected and verified before continuing. Examples: create a
@@ -108,36 +105,19 @@ uv run sim check comsol
 uv run sim plugin doctor comsol --deep
 ```
 
-Use `.agents/skills` for Codex and GitHub Copilot projects. For Claude Code,
-sync to `.claude/skills` instead:
-
-```bash
-uv run sim plugin sync-skills --target .claude/skills --copy
-```
+The `sync-skills` target depends on your agent: use `.agents/skills` for Codex
+and GitHub Copilot, or `.claude/skills` for Claude Code. Substitute that path in
+any `sync-skills` command shown below.
 
 ### Without uv
 
 If you cannot use `uv`, create a normal Python virtual environment, install
 `sim-cli-core` and the solver plugin into that environment, then run `sim`
-from the activated environment.
-
-macOS/Linux:
+from the activated environment:
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install sim-cli-core sim-plugin-comsol
-sim plugin sync-skills --target .agents/skills --copy
-sim check comsol
-sim plugin doctor comsol --deep
-```
-
-Windows PowerShell:
-
-```powershell
-py -m venv .venv
-.\.venv\Scripts\Activate.ps1
+source .venv/bin/activate   # Windows PowerShell: .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 python -m pip install sim-cli-core sim-plugin-comsol
 sim plugin sync-skills --target .agents/skills --copy
@@ -163,28 +143,21 @@ warnings, and anything that still needs human engineering review.
 
 ## Example: COMSOL and Codex on one machine
 
-If COMSOL and Codex are on the same machine, start by installing the COMSOL
-plugin and syncing its bundled skill into the `.agents/skills` project target:
-
-```bash
-uv add sim-cli-core sim-plugin-comsol
-uv run sim plugin sync-skills --target .agents/skills --copy
-uv run sim check comsol
-uv run sim plugin doctor comsol --deep
-```
-
+Follow [Quick Start](#quick-start-agent-setup) to install `sim-cli-core` and
+`sim-plugin-comsol` and sync the skill — those commands already use COMSOL.
 Then ask Codex:
 
 ```text
-Use the installed COMSOL skill. Start by checking COMSOL through `uv run sim
-check comsol`. If you need a visible live COMSOL Desktop session, use:
+Follow the agent instructions above, with these COMSOL specifics. Check with
+`uv run sim check comsol`. For a visible live COMSOL Desktop session, connect
+with:
 
 uv run sim connect --solver comsol --ui-mode gui --driver-option visual_mode=shared-desktop
 
-After connecting, inspect session.health and comsol.model.identity. Confirm the
-live model binding is healthy before treating the GUI as synchronized. For
+After connecting, inspect session.health and comsol.model.identity and confirm
+the live model binding is healthy before treating the GUI as synchronized. For
 non-trivial work, establish a case folder and save .mph checkpoints after major
-layers. Build and solve one bounded step at a time.
+layers.
 ```
 
 For COMSOL-specific details such as shared Desktop mode, offline `.mph`
@@ -193,29 +166,16 @@ policy, follow the bundled COMSOL skill.
 
 ## Why CLI-first?
 
-sim-cli is CLI-first because engineering simulation is file-based,
-scriptable, local, artifact-heavy, and long-running.
+Engineering simulation is file-based, scriptable, local, artifact-heavy, and
+long-running. CAE agents work with solver executables, model files,
+Python/Java/journal scripts, shell commands, logs, checkpoints, and plots — a
+CLI command surface composes with all of that and matches how Codex CLI, Claude
+Code, and other coding agents already operate.
 
-CAE agents need to work with solver executables, model files,
-Python/Java/journal scripts, shell commands, logs, checkpoints, plots,
-and artifacts. A CLI command surface composes with all of that and
-matches how Codex CLI, Claude Code, and other coding agents already
-operate.
-
-MCP is useful for API-style integrations and remote tool discovery,
-but a broad MCP surface can add context overhead and wrapper
-maintenance. For COMSOL, Abaqus, Ansys Workbench, OpenFOAM, LTspice,
-and similar solvers, sim-cli keeps the source of truth as a small,
-auditable command loop:
-
-```text
-check readiness → attach to live session → inspect model state
-→ run one bounded CAE step → verify result/state → save checkpoint/artifacts
-```
-
-Solver plugins provide solver-specific behavior. Agent skills teach
-Codex, Claude Code, and other agents when and how to use the CLI
-safely.
+MCP is useful for API-style integrations and remote tool discovery, but a broad
+MCP surface adds context overhead and wrapper maintenance. For COMSOL, Abaqus,
+Ansys Workbench, OpenFOAM, LTspice, and similar solvers, sim-cli keeps the
+source of truth as a small, auditable command loop.
 
 ## The agent loop
 
@@ -288,13 +248,7 @@ solver can be reached:
 
 ```bash
 uv run sim plugin list
-
-# Codex or Copilot
-uv run sim plugin sync-skills --target .agents/skills --copy
-
-# Claude Code
-uv run sim plugin sync-skills --target .claude/skills --copy
-
+uv run sim plugin sync-skills --target .agents/skills --copy  # or .claude/skills for Claude Code
 uv run sim check <solver>
 uv run sim plugin doctor <solver> --deep
 ```
@@ -328,12 +282,7 @@ Then a fresh checkout can run:
 ```bash
 uv sync
 uv run sim setup --dry-run
-
-# Codex or Copilot
-uv run sim plugin sync-skills --target .agents/skills --copy
-
-# Claude Code
-uv run sim plugin sync-skills --target .claude/skills --copy
+uv run sim plugin sync-skills --target .agents/skills --copy  # or .claude/skills for Claude Code
 ```
 
 ## Common commands
@@ -343,8 +292,7 @@ uv run sim plugin sync-skills --target .claude/skills --copy
 | `uv run sim plugin list` | Show plugins visible in this project environment. |
 | `uv run sim plugin info <solver>` | Show plugin metadata and compatibility summary. |
 | `uv run sim plugin doctor <solver> --deep` | Check plugin wiring plus local solver detection. |
-| `uv run sim plugin sync-skills --target .agents/skills --copy` | Materialize installed plugin skills for Codex or Copilot. |
-| `uv run sim plugin sync-skills --target .claude/skills --copy` | Materialize installed plugin skills for Claude Code. |
+| `uv run sim plugin sync-skills --target .agents/skills --copy` | Materialize installed plugin skills for your agent (`.claude/skills` for Claude Code). |
 | `uv run sim check <solver>` | Detect local or remote solver installs. |
 | `uv run sim connect --solver <solver>` | Open a persistent solver session. |
 | `uv run sim exec --file step.py` | Run one bounded step in the live session. |
