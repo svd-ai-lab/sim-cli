@@ -38,7 +38,7 @@ engineering review.
 `sim` is for agents and people trying to get real simulation work done.
 
 - **CAE engineers who already script solvers** and want an agent to help
-  automate COMSOL, Fluent, MATLAB, LTspice, Abaqus, HFSS, and similar tools
+  automate COMSOL, Abaqus, HFSS, Fluent, MATLAB, LTspice, and similar tools
   without losing inspection and recovery between steps.
 - **Design engineers and occasional simulation users** who have agent
   experience and want an agent-assisted workflow: ask for a simulation, watch
@@ -56,9 +56,10 @@ Plugin authoring, runtime internals, and driver protocol details live in
 LLMs can often write solver scripts, but a one-shot script is a weak workflow:
 it hides intermediate state, fails late, and makes recovery difficult.
 
-`sim` gives an agent a small, repeatable control surface — check readiness,
-attach to a live session, inspect state, run one bounded step, verify, and
-checkpoint. See [The agent loop](#the-agent-loop) for the full sequence.
+`sim` gives an agent a small, repeatable control surface — detect the
+environment, attach to a live session, inspect state, run one bounded step,
+verify, and checkpoint. See [The agent loop](#the-agent-loop) for the full
+sequence.
 
 A bounded CAE step is one small modeling, meshing, solving, or postprocessing
 action that can be inspected and verified before continuing. Examples: create a
@@ -125,40 +126,39 @@ sim check comsol
 sim plugin doctor comsol --deep
 ```
 
-## Hand this prompt to your agent
+## Hand the task to your agent
 
-After setup, give your coding agent a direct instruction like this:
+After setup, give your agent the **engineering goal in plain language** — the
+simulation you want and the quantity you want reported. You do not need to
+recite the operating loop: the bundled solver skill already enforces the
+inspect / verify / checkpoint discipline once the agent loads it.
 
-```text
-Use the installed solver skill. Run sim through this project with
-`uv run sim ...`. Check my local solver installation before connecting. Work
-one bounded step at a time: connect, inspect the session, execute a small step,
-inspect last.result and the live model state, then save or update a checkpoint
-before continuing. Do not guess solver API names; inspect the live model or the
-solver's local docs first. If I make manual changes in the solver UI,
-re-inspect the live state before continuing instead of assuming your previous
-script still matches the model. Report saved artifacts, numerical checks,
-warnings, and anything that still needs human engineering review.
-```
+Two things are still worth telling the agent explicitly:
+
+- Run `sim` through this project with `uv run sim ...` so it sees the project's
+  installed plugins.
+- Don't guess solver API names — inspect the live model or the solver's local
+  docs first. If you change something manually in the solver GUI, ask the agent
+  to re-inspect live state before continuing.
+
+A concrete example follows below.
 
 ## Example: COMSOL and Codex on one machine
 
 Follow [Quick Start](#quick-start-agent-setup) to install `sim-cli-core` and
 `sim-plugin-comsol` and sync the skill — those commands already use COMSOL.
-Then ask Codex:
+Then ask Codex for the actual task:
 
 ```text
-Follow the agent instructions above, with these COMSOL specifics. Check with
-`uv run sim check comsol`. For a visible live COMSOL Desktop session, connect
-with:
-
-uv run sim connect --solver comsol --ui-mode gui --driver-option visual_mode=shared-desktop
-
-After connecting, inspect session.health and comsol.model.identity and confirm
-the live model binding is healthy before treating the GUI as synchronized. For
-non-trivial work, establish a case folder and save .mph checkpoints after major
-layers.
+Simulate the natural-convection cooling of attached `pcb.mph` and report the
+maximum junction temperature. Use the installed COMSOL skill. Check COMSOL with
+`uv run sim check comsol` first. If you need a visible live COMSOL Desktop
+session, connect with `--ui-mode gui`.
 ```
+
+The prompt names a goal and a quantity to report — not a list of `sim`
+sub-steps. The COMSOL skill supplies the rest: session health and model
+identity checks, checkpoint policy, and step-by-step build/solve discipline.
 
 For COMSOL-specific details such as shared Desktop mode, offline `.mph`
 inspection, Desktop attach fallback, model identity checks, and checkpoint

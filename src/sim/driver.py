@@ -128,7 +128,7 @@ class DriverProtocol(Protocol):
         Must be safe to call when nothing is installed (returns []).
         Should be cheap (≤ a few hundred ms) — runs in interactive paths.
 
-        See docs/architecture/version-compat.md §7 for the contract.
+        See docs/architecture/version-compat.md §4 for the contract.
         Drivers that have not yet implemented this should return [] so the
         protocol stays runtime_checkable for partial migrations.
         """
