@@ -1,6 +1,6 @@
 # Version Compatibility & Plugin Discovery
 
-> **Status:** stub.
+> **Status:** current.
 > **Audience:** sim-cli maintainers, plugin authors.
 > **Last reviewed:** 2026-05-11.
 
