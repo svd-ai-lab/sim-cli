@@ -1,18 +1,20 @@
 ---
 name: comsol-sim
-description: Use when the user asks Codex, Claude Code, ChatGPT-style coding agents, or another AI agent to connect to COMSOL, COMSOL Desktop, or COMSOL Multiphysics through sim-cli. Supports solver checks, shared-desktop server-client GUI collaboration, live session connection, .mph inspection, bounded execution, checkpointing, artifact reporting, and troubleshooting. Do not use for generic COMSOL theory. Do not use Java Shell / ordinary Desktop attach for COMSOL automation; it is a deprecated legacy fallback only.
+description: Use when the user asks Codex, Claude Code, ChatGPT-style coding agents, or another AI agent to work with COMSOL, COMSOL Desktop, or COMSOL Multiphysics via sim-cli. Supports solver checks, shared-desktop server-client GUI collaboration, live session connection, one-shot `comsolcompile`/`comsolbatch` Java execution, .mph inspection, bounded execution, checkpointing, artifact reporting, and troubleshooting. Do not use for generic COMSOL theory. Do not use Java Shell / ordinary Desktop attach for COMSOL automation; it is a deprecated legacy fallback only.
 ---
 
 # comsol-sim
 
-This file is the **COMSOL Multiphysics** index. Use the sim runtime/JPype path
-for serious model building, solving, inspection, saved `.mph` artifacts, and
-reliable live GUI collaboration through `visual_mode=shared-desktop`. Do not
-use Java Shell / ordinary Desktop attach for COMSOL automation. It is a
-deprecated legacy fallback because GUI automation around Java Shell is unstable
-and cannot provide structured execution verification.
-Use the offline `.mph` inspection path for saved artifacts when no live COMSOL
-session is needed.
+This file is the **COMSOL Multiphysics** index. COMSOL has several real
+execution paths; pick the one that fits the task. Use the sim runtime/JPype
+path for stateful model building, solving, live introspection, and reliable
+live GUI collaboration through `visual_mode=shared-desktop`. Use the
+`comsolcompile` + `comsolbatch` one-shot Java path for settled, deterministic
+build→solve→extract recipes and reproducible/CI/fan-out runs. Use the offline
+`.mph` inspection path for saved artifacts when no live COMSOL session is
+needed. Do not use Java Shell / ordinary Desktop attach for COMSOL automation —
+it is a deprecated legacy fallback because GUI automation around Java Shell is
+unstable and cannot provide structured execution verification.
 
 This skill is self-contained for COMSOL work. Do not require a separate skill
 checkout or an external sim-cli skill. Use this file for the COMSOL workflow,
@@ -32,14 +34,18 @@ structured verification, start or attach through the sim runtime in
 screenshots or reference, but it is not the live server-client model unless
 `session.health` confirms `effective_ui_mode="shared-desktop"`,
 `ui_capabilities.model_builder_live=true`, and a valid `active_model_tag`.
+Batch (`comsolcompile` + `comsolbatch`) is a valid third path — not a
+fallback — for settled, deterministic one-shot work that needs no live
+introspection; see the decision table and "Choosing between live session and
+batch" below.
 If the user explicitly refuses server-client mode, pause and explain that the
 Java Shell fallback is deprecated and not accepted evidence for serious
 automation.
 
 | Path | Use it for | Avoid it for |
 |---|---|---|
-| sim runtime / JPype | Building, solving, inspecting, debugging, saving `.mph`, repeatable case generation, and reliable live GUI co-editing with `visual_mode=shared-desktop`. | Only avoid when the user explicitly refuses a server-backed/shared Desktop session. |
-| **`comsolcompile` + `comsolbatch`** | **Sandboxed one-shot Java workflows: write a `.java` file with `public static Model run()`, compile to `.class`, run with `comsolbatch.exe -nosave`. Used by sim-benchmark trials when sim CLI isn't available.** | **Anything stateful or interactive — prefer sim runtime when available.** |
+| sim runtime / JPype | Stateful/incremental model building, live introspection (discovering tags and property names before editing), debugging, checkpointing across a long build, and reliable live GUI co-editing with `visual_mode=shared-desktop`. | Settled deterministic recipes that need no live introspection — batch is lighter-weight and more reproducible there (see the batch row). Also when the user explicitly refuses a server-backed/shared Desktop session. |
+| `comsolcompile` + `comsolbatch` | One-shot Java execution against COMSOL's own batch executables — write a `.java` with `public static Model run()`, compile with `comsolcompile.exe`, run with `comsolbatch.exe`; or run a saved model directly with `comsolbatch.exe -inputfile in.mph -outputfile out.mph`. Settled/known-good deterministic recipes (build→solve→extract KPIs, or run-saved-model→get-outputs); reproducibility and isolation (fresh process per run, no session-state drift — regression runs, CI, deterministic artifacts); fan-out over many independent cases; minimal lifecycle (no `comsolmphserver` to start/monitor/leak; works from files on disk even when `sim serve` is down); unattended runs with no human watching and no GUI co-editing. | Stateful/incremental model building, debugging, or anything needing introspection of intermediate live model state (e.g. discovering property names before editing — see the hard rule below); GUI co-editing / shared-desktop; checkpointing across a long exploratory build. Use a live session for those. |
 | saved `.mph` inspection | Offline summaries, archive diffs, and artifact review without starting COMSOL. | Mutating live model state. |
 
 **Hard rule for the `comsolcompile` path** — Java code MUST use chain-style
@@ -48,6 +54,23 @@ automation.
 gets `cannot be resolved to a type` from `comsolcompile`. Read
 [`base/reference/java_batch_patterns.md`](base/reference/java_batch_patterns.md)
 BEFORE writing your `.java`.
+
+### Choosing between live session and batch
+
+These are not either/or — they compose. The natural arc is **explore live →
+solidify → graduate to batch**:
+
+1. **Explore live.** Use a sim runtime / JPype session to discover the model:
+   inspect tags, read property names before setting them, debug, iterate.
+2. **Solidify.** Once the workflow is settled and known-good, capture it as a
+   batch `.java` file (`comsolcompile` + `comsolbatch`) or, for a saved model,
+   a `comsolbatch -inputfile` run.
+3. **Graduate to batch.** Run the captured recipe headless for
+   reproducible/CI/fan-out execution — fresh process each run, no session-state
+   drift, no `comsolmphserver` lifecycle, parallelizable across cases.
+
+Quick test: if you still need to *ask the live model questions*, stay in a
+session. If you are *executing a recipe you already trust*, run it as batch.
 
 For the sim runtime, start with `uv run sim check comsol`, then
 `uv run sim connect --solver comsol`, then inspect `session.health`. When the user
@@ -93,9 +116,10 @@ plugin-owned content focused on the driver protocol, live introspection,
 debug loops, and the smallest smoke/reference workflow.
 
 Each numbered step is a self-contained snippet for the sim runtime after
-`uv run sim connect --solver comsol`. Do not translate these steps to Java
-Shell; use the sim runtime so execution status, inspect targets, and saved
-artifacts are available.
+`uv run sim connect --solver comsol`. This workflow is incremental and
+inspect-after-each-step, so a live session is the right path for it; do not
+translate these steps to Java Shell. Once a model build is settled, the batch
+path is the better choice for re-running it — see the decision table above.
 
 Before running a new or complex workflow, read
 [`base/reference/runtime_introspection.md`](base/reference/runtime_introspection.md)
@@ -224,14 +248,25 @@ for the optional bundle layout and headless export snippets.
 
 ---
 
-## Headless `comsolbatch` (not yet implemented)
+## Headless `comsolbatch -inputfile`: direct saved-model execution
 
 `comsolbatch.exe -inputfile in.mph -outputfile out.mph -batchlog log.txt`
-is the canonical non-interactive entry point and would let an agent
-run saved models without the long-lived `comsolmphserver` setup. The
-driver currently always goes through `comsolmphserver` + JPype. When a
-one-shot `comsolbatch` path is available, prefer it for deterministic saved
-model batch runs that do not need Desktop collaboration or live introspection.
+is COMSOL's canonical non-interactive entry point for running a saved
+model — it is a real capability you can invoke **today**, directly, with
+no `comsolmphserver` and no `sim serve`. Prefer it when a one-shot
+saved-model run is what you need: deterministic batch runs that do not need
+Desktop collaboration or live introspection, regression/CI runs, and
+fan-out over many `.mph` files.
+
+What is *not yet implemented* is a **sim-cli driver wrapper** around this
+path: `sim connect --solver comsol` currently always goes through
+`comsolmphserver` + JPype, so there is no `sim`-managed batch lifecycle yet.
+That wrapper gap does not block you — call `comsolbatch.exe` directly for
+saved-model runs, and use `comsolcompile` + `comsolbatch` directly for
+one-shot `.java` recipes (see
+[`base/reference/java_batch_patterns.md`](base/reference/java_batch_patterns.md)).
+Use the sim runtime when you need live introspection, incremental building,
+or shared-desktop collaboration.
 
 ---
 
@@ -337,13 +372,16 @@ assignment.
    solved/unsolved state, mesh size), use `inspect_mph(path)` first — no
    JVM and no `uv run sim connect` needed. Skip to step 1 only if the model needs
    to be mutated or solved.
-1. Choose the control path. Default to the sim runtime for reliable model
-   building, solving, and live GUI collaboration:
-   - Use `uv run sim connect --solver comsol --ui-mode gui --driver-option
-     visual_mode=shared-desktop` when the user wants real-time Model Builder
-     visibility and the agent needs structured `uv run sim inspect`/JPype state.
-   - Use plain `uv run sim connect --solver comsol` for no-GUI/server execution,
-     driver-managed artifacts, and existing sim runtime workflows.
+1. Choose the control path. Match it to the task:
+   - **Live sim runtime** for stateful/incremental building, live introspection,
+     debugging, or GUI collaboration. Use `uv run sim connect --solver comsol
+     --ui-mode gui --driver-option visual_mode=shared-desktop` when the user
+     wants real-time Model Builder visibility and the agent needs structured
+     `uv run sim inspect`/JPype state; use plain `uv run sim connect --solver
+     comsol` for no-GUI/server execution and driver-managed artifacts.
+   - **Batch** (`comsolcompile` + `comsolbatch`, or `comsolbatch -inputfile`)
+     for a settled, deterministic one-shot recipe that needs no live
+     introspection — see "Choosing between live session and batch" above.
    - If the user says COMSOL is already open, treat that as visual context only.
      Do not infer that Java Shell is preferred; ask whether to preserve unsaved
      standalone Desktop edits only if needed, then proceed with

@@ -1,9 +1,12 @@
 # Java batch patterns — `comsolcompile` + `comsolbatch`
 
 Use this reference when the task is **write a `.java` file → compile with
-`comsolcompile.exe` → run with `comsolbatch.exe`** (the sim-benchmark
-runtime path). This is different from the JPype runtime path in
-`java_api_patterns.md` (which targets a live Python-driven session).
+`comsolcompile.exe` → run with `comsolbatch.exe`**. This is COMSOL's own
+one-shot Java execution path — a first-class execution mode, not a fallback.
+Prefer it for settled deterministic recipes and reproducible/CI/fan-out runs
+(see the decision table in `SKILL.md`). It is different from the JPype runtime
+path in `java_api_patterns.md`, which targets a live Python-driven session for
+stateful building and introspection.
 
 ## Skeleton
 
