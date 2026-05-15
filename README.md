@@ -27,7 +27,7 @@ engineering review.
   <img src="https://img.shields.io/badge/status-alpha-f97316" alt="Status: alpha">
 </p>
 
-[Quick Start](#quick-start-agent-setup) · [COMSOL + Codex](#example-comsol-and-codex-on-one-machine) · [Agent Loop](#the-agent-loop) · [Remote Solvers](#local-vs-remote-solvers) · [Plugins](#solver-plugins) · [Commands](#common-commands)
+[Quick Start](#quick-start-agent-setup) · [COMSOL + Codex](#example-comsol-and-codex-on-one-machine) · [Composability](#composable-not-a-universal-wrapper) · [Agent Loop](#the-agent-loop) · [Remote Solvers](#local-vs-remote-solvers) · [Plugins](#solver-plugins) · [Commands](#common-commands)
 
 </div>
 
@@ -60,6 +60,10 @@ it hides intermediate state, fails late, and makes recovery difficult.
 environment, attach to a live session, inspect state, run one bounded step,
 verify, and checkpoint. See [The agent loop](#the-agent-loop) for the full
 sequence.
+
+That surface is intentionally small. Agents should use `sim` where it improves
+control and observability, and compose solver-native commands directly when
+those are the better execution primitive.
 
 A bounded CAE step is one small modeling, meshing, solving, or postprocessing
 action that can be inspected and verified before continuing. Examples: create a
@@ -177,17 +181,41 @@ MCP surface adds context overhead and wrapper maintenance. For COMSOL, Abaqus,
 Ansys Workbench, OpenFOAM, LTspice, and similar solvers, sim-cli keeps the
 source of truth as a small, auditable command loop.
 
+## Composable, not a universal wrapper
+
+sim-cli does **not** try to wrap every solver operation, executable flag,
+vendor batch mode, or post-processing script. Agents should compose the best
+available tools for the job.
+
+Use `sim` when it adds a stable control plane: solver discovery and profile
+checks, live sessions, bounded `exec` / `inspect` loops, history and log
+capture, parsing, screenshots, or shared agent discipline. If the artifact is
+already a solver-native deck/script and the solver's own batch command is the
+right execution primitive, call that native command directly instead of forcing
+it through `sim run`. Preserve stdout/stderr, generated files, and acceptance
+evidence just as carefully.
+
+`sim run` remains useful when a plugin intentionally wraps a one-shot workflow
+and provides linting, profile-aware parsing, history, or safer invocation. The
+point is not that every action must pass through `sim`; the point is that
+agents have a small, auditable runtime where it helps and stay free to use
+solver-native tools where those are better.
+
 ## The agent loop
 
-For any solver, the agent should prefer this loop over one large generated
-script:
+For any solver, the agent should prefer a bounded
+inspect / execute / evaluate loop over one large generated script. When `sim`
+is the chosen control plane, the loop is:
 
 1. `uv run sim check <solver>` to detect installed solver versions and plugin
    compatibility.
-2. `uv run sim connect --solver <solver> ...` for live stateful work, or
-   `uv run sim run` for a deterministic one-shot script.
-3. `uv run sim inspect session.versions` and the solver-specific health or
-   identity target before changing state.
+2. `uv run sim connect --solver <solver> ...` for live stateful work. For
+   one-shot work, use `uv run sim run` only when the plugin wrapper adds value
+   such as linting, history, parsing, profile-aware invocation, or safer
+   execution. Otherwise, run the solver-native batch command or project script
+   directly and keep the resulting logs/artifacts/evidence.
+3. In a persistent `sim` session, `uv run sim inspect session.versions` and
+   the solver-specific health or identity target before changing state.
 4. `uv run sim exec --file step.py --label <step>` for one bounded modeling
    or analysis step.
 5. `uv run sim inspect last.result` and solver-specific state.
@@ -195,6 +223,11 @@ script:
 7. Save checkpoints and artifacts when the solver plugin or skill requires
    them.
 8. `uv run sim disconnect` when the session is done.
+
+For native one-shot work, keep the same discipline — explicit inputs, version
+or profile check, one bounded execution, preserved artifacts, and numerical
+acceptance evidence — but use the solver's own command surface as the execution
+primitive.
 
 Screenshots and plots help humans review the result, but engineering
 acceptance should prefer numeric evidence when the solver skill defines it:
