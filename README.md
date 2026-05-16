@@ -56,10 +56,10 @@ Plugin authoring, runtime internals, and driver protocol details live in
 LLMs can often write solver scripts, but a one-shot script is a weak workflow:
 it hides intermediate state, fails late, and makes recovery difficult.
 
-`sim` gives an agent a small, repeatable control surface — detect the
+`sim` gives an agent a small, composable control surface: detect the
 environment, attach to a live session, inspect state, run one bounded step,
-verify, and checkpoint. See [The agent loop](#the-agent-loop) for the full
-sequence.
+verify, and checkpoint. Use solver-native batch commands directly when they are
+the right execution primitive.
 
 A bounded CAE step is one small modeling, meshing, solving, or postprocessing
 action that can be inspected and verified before continuing. Examples: create a
@@ -184,8 +184,8 @@ script:
 
 1. `uv run sim check <solver>` to detect installed solver versions and plugin
    compatibility.
-2. `uv run sim connect --solver <solver> ...` for live stateful work, or
-   `uv run sim run` for a deterministic one-shot script.
+2. `uv run sim connect --solver <solver> ...` for live work, `uv run sim run`
+   when its wrapper adds value, or a solver-native batch command when better.
 3. `uv run sim inspect session.versions` and the solver-specific health or
    identity target before changing state.
 4. `uv run sim exec --file step.py --label <step>` for one bounded modeling
