@@ -1,0 +1,56 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sim-plugin-starccm"
+version = "0.1.0"
+description = "Simcenter STAR-CCM+ driver for sim-cli, distributed as an out-of-tree plugin"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+authors = [{ name = "Weiqi Ji", email = "jiweiqi10@gmail.com" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: Apache Software License",
+]
+# STAR-CCM+ has no pip-installable Python SDK. Automation is via Java macros
+# executed through the `starccm+ -batch` CLI, which the user must install
+# and license separately. No vendor SDK dependency.
+dependencies = [
+    "sim-cli-core>=0.3",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7",
+    "build>=1.0",
+]
+
+[project.entry-points."sim.drivers"]
+starccm = "sim_plugin_starccm:StarccmDriver"
+
+[project.entry-points."sim.skills"]
+starccm = "sim_plugin_starccm:skills_dir"
+
+[project.entry-points."sim.plugins"]
+starccm = "sim_plugin_starccm:plugin_info"
+
+[project.urls]
+Homepage = "https://github.com/svd-ai-lab/sim-plugin-starccm"
+Issues = "https://github.com/svd-ai-lab/sim-plugin-starccm/issues"
+
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sim_plugin_starccm"]
+
+[tool.pytest.ini_options]
+markers = [
+  "integration: tests that build wheels or touch external tooling",
+]
