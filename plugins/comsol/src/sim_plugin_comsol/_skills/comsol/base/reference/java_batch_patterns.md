@@ -8,6 +8,52 @@ Prefer it for settled deterministic recipes and reproducible/CI/fan-out runs
 path in `java_api_patterns.md`, which targets a live Python-driven session for
 stateful building and introspection.
 
+## Exporting an existing `.mph` as Java source
+
+Do not rely on `comsolbatch -inputfile model.mph -outputfile model.java` for
+source export. Verified on 2026-05-19 with COMSOL 6.4: that command saved a
+COMSOL `.mph` ZIP container with a `.java` filename, not Java source.
+
+Use the COMSOL API save type instead:
+
+```java
+import com.comsol.model.*;
+import com.comsol.model.util.*;
+
+public class MphToJava {
+  public static Model run() throws Exception {
+    Model model = ModelUtil.load("m", "C:\\path\\input.mph");
+    model.resetHist(); // optional: compact model history before export
+    model.save("C:\\path\\output.java", "java");
+    return model;
+  }
+
+  public static void main(String[] args) throws Exception { run(); }
+}
+```
+
+Then compile and run the wrapper:
+
+```powershell
+& "C:\Program Files\COMSOL\COMSOL64\Multiphysics\bin\win64\comsolcompile.exe" MphToJava.java
+& "C:\Program Files\COMSOL\COMSOL64\Multiphysics\bin\win64\comsolbatch.exe" -inputfile MphToJava.class
+```
+
+If the host has Python `mph`, the shorter batchable form is:
+
+```python
+import mph
+
+client = mph.Client(cores=1)
+model = client.load(r"C:\path\input.mph")
+model.clear()  # optional: clears stored plot, solution, and mesh data
+model.reset()  # optional: resets modeling history
+model.save(r"C:\path\output.java")
+```
+
+The output should be readable Java source starting with imports such as
+`com.comsol.model.*`, not a file with ZIP magic bytes (`PK`).
+
 ## Skeleton
 
 ```java

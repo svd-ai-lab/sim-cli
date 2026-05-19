@@ -39,6 +39,27 @@ See `runtime_introspection.md` for the live-session workflow.
 - **`solved`** — full mesh + solution blocks. Largest on disk.
 - **`preview`** — Application Library placeholder. Only `modelinfo.xml` + `modelimage.png` present; `index.txt` plus a 0-byte `preview` entry mark it. The full content streams from the gallery on demand.
 
+## Creating a compact copy from the command line
+
+Use COMSOL's batch binary when the user wants to strip a solved `.mph` down
+to reusable model setup without opening Desktop:
+
+```powershell
+& "C:\Program Files\COMSOL\COMSOL64\Multiphysics\bin\win64\comsolbatch.exe" `
+  -inputfile "full.mph" `
+  -outputfile "compact.mph" `
+  -clearsolution -clearmesh -resethistory -norun
+```
+
+- `-clearsolution` removes solution data while preserving studies/solver setup.
+- `-clearmesh` removes built mesh data while preserving the mesh sequence.
+- `-resethistory` compacts model history before saving.
+- `-norun` prevents recomputation; the command only opens, strips, and saves.
+
+Verified on 2026-05-19 with COMSOL 6.4: a local solved HBM/HBN model went
+from 19.83 MiB (`nodeType=solved`, two `savepoint*` entries) to 0.47 MiB
+(`nodeType=compact`, no savepoint entries), about 2.4% of the original size.
+
 ## Global Parameter contract
 
 Global Parameters in `dmodel.xml`:
