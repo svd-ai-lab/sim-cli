@@ -1,0 +1,59 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sim-plugin-flotherm"
+version = "0.1.1"
+description = "Simcenter Flotherm driver for sim-cli, distributed as an out-of-tree plugin"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+authors = [{ name = "Weiqi Ji", email = "jiweiqi10@gmail.com" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: Microsoft :: Windows",
+]
+dependencies = [
+    # sim-cli-core brings the runtime contract (sim.driver, sim.runner,
+    # sim.inspect, sim.gui, sim.compat) plus pywinauto on win32 — Flotherm
+    # has no batch API, so the driver is a pywinauto-driven GUI automation.
+    "sim-cli-core>=0.3",
+    "numpy>=1.26",
+    "psutil>=5.9",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7",
+    "build>=1.0",
+]
+
+[project.entry-points."sim.drivers"]
+flotherm = "sim_plugin_flotherm:FlothermDriver"
+
+[project.entry-points."sim.skills"]
+flotherm = "sim_plugin_flotherm:skills_dir"
+
+[project.entry-points."sim.plugins"]
+flotherm = "sim_plugin_flotherm:plugin_info"
+
+[project.urls]
+Homepage = "https://github.com/svd-ai-lab/sim-plugin-flotherm"
+Issues = "https://github.com/svd-ai-lab/sim-plugin-flotherm/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sim_plugin_flotherm"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+  "integration: tests that build wheels or touch external tooling",
+]
