@@ -9,3 +9,6 @@ dist/
 .ruff_cache/
 .uv/
 runs/
+
+*.log
+.sim/
