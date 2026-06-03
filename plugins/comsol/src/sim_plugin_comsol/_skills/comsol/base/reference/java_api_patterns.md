@@ -3,6 +3,10 @@
 This is not a COMSOL API reference. It is a small set of stable probing
 patterns for discovering the live model shape before modifying it.
 
+These snippets are for the supported server-backed Java API path: the sim
+runtime/JPype connection to `comsolmphserver`, or equivalent structured COMSOL
+Java API execution. Do not translate them to Java Shell or GUI automation.
+
 ## Rules
 
 - Ask for `tags()` before accessing a child by tag.
@@ -105,6 +109,15 @@ for sel_tag in out["selections"]:
 _result = out
 ```
 
+### Creating Box selections
+
+When creating Box selections through JPype, set the entity dimension before
+range properties and prefer string scalar values for dimension-like properties.
+For example, boundary selections should use `sel.set("entitydim", "2")` before
+`xmin`/`xmax`/`zmin`/`zmax` ranges. This avoids ambiguous Java overloads and
+makes `sel.entities()` return the expected boundary ids instead of an empty
+selection.
+
 ## Before setting a property
 
 Use this pattern before writing to an unfamiliar feature:
@@ -127,3 +140,11 @@ else:
 Do not record the resulting property list as a global truth. It is only
 confirmed for this COMSOL version, module set, physics interface, and
 feature type.
+
+## Store provenance outside parameter values
+
+COMSOL global parameters are parsed as expressions, not arbitrary strings. A
+value like `"arXiv:2510.11461"` is rejected even though it looks useful as a
+paper identifier. Put human-readable provenance in the model label, comments,
+or parameter descriptions; keep parameter values numeric expressions with
+optional units.

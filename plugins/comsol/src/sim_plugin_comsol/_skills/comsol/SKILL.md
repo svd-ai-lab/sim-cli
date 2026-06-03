@@ -29,22 +29,34 @@ Choose the control path first:
 **Routing rule:** an already-open ordinary COMSOL Desktop is **not** a reason
 to choose Java Shell. For any serious model build,
 reproduction, solve, sweep, checkpointed artifact, or task where Codex needs
-structured verification, start or attach through the sim runtime in
-`visual_mode=shared-desktop`. The existing standalone Desktop may stay open for
-screenshots or reference, but it is not the live server-client model unless
-`session.health` confirms `effective_ui_mode="shared-desktop"`,
-`ui_capabilities.model_builder_live=true`, and a valid `active_model_tag`.
+structured verification, start or attach through the sim runtime. The existing
+standalone Desktop may stay open for screenshots or reference, but it is not
+the live server-client model unless `session.health` confirms a structured
+server-backed binding and a valid `active_model_tag`.
 Batch (`comsolcompile` + `comsolbatch`) is a valid third path — not a
 fallback — for settled, deterministic one-shot work that needs no live
 introspection; see the decision table and "Choosing between live session and
 batch" below.
+If the user already has a `comsolmphserver` plus `comsol.exe mphclient -host
+... -port ...` Desktop open with the target model loaded, first attach the
+agent without launching another Desktop client:
+
+```powershell
+uv run sim connect --solver comsol --ui-mode no_gui `
+  --driver-option attach_only=true `
+  --driver-option port=<port>
+```
+
+Then verify model tags and binding through `session.health`/`ModelUtil.tags()`.
+Use `visual_mode=shared-desktop` only when the plugin should launch or manage
+the visible Desktop client.
 If the user explicitly refuses server-client mode, pause and explain that the
 Java Shell fallback is deprecated and not accepted evidence for serious
 automation.
 
 | Path | Use it for | Avoid it for |
 |---|---|---|
-| sim runtime / JPype | Stateful/incremental model building, live introspection (discovering tags and property names before editing), debugging, checkpointing across a long build, and reliable live GUI co-editing with `visual_mode=shared-desktop`. | Settled deterministic recipes that need no live introspection — batch is lighter-weight and more reproducible there (see the batch row). Also when the user explicitly refuses a server-backed/shared Desktop session. |
+| sim runtime / JPype | Stateful/incremental model building, live introspection (discovering tags and property names before editing), debugging, checkpointing across a long build, no-GUI attach to a user-owned existing `comsolmphserver`, and reliable live GUI co-editing when the plugin owns `visual_mode=shared-desktop`. | Settled deterministic recipes that need no live introspection — batch is lighter-weight and more reproducible there (see the batch row). Also when the user explicitly refuses a server-backed/shared Desktop session. |
 | `comsolcompile` + `comsolbatch` | One-shot Java execution against COMSOL's own batch executables — write a `.java` with `public static Model run()`, compile with `comsolcompile.exe`, run with `comsolbatch.exe`; or run a saved model directly with `comsolbatch.exe -inputfile in.mph -outputfile out.mph`. Settled/known-good deterministic recipes (build→solve→extract KPIs, or run-saved-model→get-outputs); reproducibility and isolation (fresh process per run, no session-state drift — regression runs, CI, deterministic artifacts); fan-out over many independent cases; minimal lifecycle (no `comsolmphserver` to start/monitor/leak; works from files on disk even when `sim serve` is down); unattended runs with no human watching and no GUI co-editing. | Stateful/incremental model building, debugging, or anything needing introspection of intermediate live model state (e.g. discovering property names before editing — see the hard rule below); GUI co-editing / shared-desktop; checkpointing across a long exploratory build. Use a live session for those. |
 | saved `.mph` inspection | Offline summaries, archive diffs, and artifact review without starting COMSOL. | Mutating live model state. |
 
@@ -376,16 +388,20 @@ assignment.
    - **Live sim runtime** for stateful/incremental building, live introspection,
      debugging, or GUI collaboration. Use `uv run sim connect --solver comsol
      --ui-mode gui --driver-option visual_mode=shared-desktop` when the user
-     wants real-time Model Builder visibility and the agent needs structured
-     `uv run sim inspect`/JPype state; use plain `uv run sim connect --solver
-     comsol` for no-GUI/server execution and driver-managed artifacts.
+     wants plugin-managed real-time Model Builder visibility and the agent
+     needs structured `uv run sim inspect`/JPype state; use plain
+     `uv run sim connect --solver comsol` for no-GUI/server execution and
+     driver-managed artifacts.
    - **Batch** (`comsolcompile` + `comsolbatch`, or `comsolbatch -inputfile`)
      for a settled, deterministic one-shot recipe that needs no live
      introspection — see "Choosing between live session and batch" above.
    - If the user says COMSOL is already open, treat that as visual context only.
-     Do not infer that Java Shell is preferred; ask whether to preserve unsaved
-     standalone Desktop edits only if needed, then proceed with
-     `shared-desktop` for serious work.
+     Do not infer that Java Shell is preferred. If it is already a
+     server-backed `mphclient` connected to `comsolmphserver`, use no-GUI
+     `attach_only=true` for the agent/API client and do not launch a second
+     Desktop. If it is an ordinary standalone Desktop, ask whether to preserve
+     unsaved edits only if needed, then use a structured path (`shared-desktop`,
+     no-GUI server, batch, or saved `.mph` inspection) for serious work.
 2. For sim runtime, run `uv run sim check comsol`, connect if needed, and read
    `session.versions` plus `uv run sim inspect session.health`.
 3. Establish or verify model identity, working folder, and checkpoint target.
@@ -435,8 +451,13 @@ too GUI-fragile and reports submission, not verified execution. Keep it out of
 normal agent workflows, reproduction work, long model builders, solves,
 screenshots-as-proof, and validation. If a legacy troubleshooting task names
 `sim-comsol-attach` explicitly, state that it is deprecated, keep the action
-read-only or very small, and do not treat it as acceptance evidence. Prefer
-server-client `shared-desktop` instead.
+read-only or very small, and do not treat it as acceptance evidence. Do not
+recommend GUI automation plus Java Shell as a way to operate COMSOL: it depends
+on focus, language/layout, visible shell state, dialogs, and clipboard/text
+submission behavior. Prefer a structured server-backed path instead: no-GUI
+attach for a user-owned existing server session, plugin-owned
+`shared-desktop` for live Model Builder collaboration, or `comsolbatch` for
+settled file-based recipes.
 
 Shared-desktop gotcha for COMSOL 6.4: launching
 `comsol.exe mphclient -host localhost -port <port>` does attach a full
@@ -471,7 +492,23 @@ instead of mixing sim and ad hoc JPype scripts. The user or agent starts
 & "C:\Program Files\COMSOL\COMSOL64\Multiphysics\bin\win64\comsolmphserver.exe" -port 2036 -multi on -login auto -silent
 ```
 
-Then connect through sim with explicit attach-only ownership:
+Then connect through sim with explicit attach-only ownership. If the user has
+already opened a server-backed Desktop with:
+
+```powershell
+& "C:\Program Files\COMSOL\COMSOL64\Multiphysics\bin\win64\comsol.exe" mphclient -host localhost -port 2036
+```
+
+attach the agent/API client without launching another Desktop:
+
+```powershell
+uv run sim connect --solver comsol --ui-mode no_gui `
+  --driver-option attach_only=true `
+  --driver-option port=2036
+```
+
+Use plugin-owned `shared-desktop` only when the agent should launch or manage
+the visible Desktop client:
 
 ```powershell
 uv run sim connect --solver comsol --ui-mode gui `
