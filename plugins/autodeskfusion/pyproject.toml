@@ -3,14 +3,14 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "sim-plugin-fusion360"
+name = "sim-plugin-autodeskfusion"
 version = "0.1.0"
-description = "Autodesk Fusion 360 live-session driver and bundled skill for sim"
+description = "Autodesk Fusion official-MCP driver and bundled skill for sim"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
 authors = [{ name = "Weiqi Ji", email = "jiweiqi10@gmail.com" }]
-keywords = ["fusion360", "cad", "cae", "simulation", "sim-cli"]
+keywords = ["autodesk-fusion", "fusion", "cad", "cae", "simulation", "sim-cli", "mcp"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
@@ -25,6 +25,7 @@ classifiers = [
     "License :: OSI Approved :: Apache Software License",
 ]
 dependencies = [
+    "mcp>=1.20",
     "sim-cli-core>=0.3.5",
 ]
 
@@ -35,26 +36,26 @@ test = [
 ]
 
 [project.entry-points."sim.drivers"]
-fusion360 = "sim_plugin_fusion360:Fusion360Driver"
+autodeskfusion = "sim_plugin_autodeskfusion:AutodeskFusionDriver"
 
 [project.entry-points."sim.skills"]
-fusion360 = "sim_plugin_fusion360:skills_dir"
+autodeskfusion = "sim_plugin_autodeskfusion:skills_dir"
 
 [project.entry-points."sim.plugins"]
-fusion360 = "sim_plugin_fusion360:plugin_info"
+autodeskfusion = "sim_plugin_autodeskfusion:plugin_info"
 
 [project.urls]
-Homepage = "https://github.com/svd-ai-lab/sim-plugin-fusion360"
-Repository = "https://github.com/svd-ai-lab/sim-plugin-fusion360"
-Issues = "https://github.com/svd-ai-lab/sim-plugin-fusion360/issues"
-Changelog = "https://github.com/svd-ai-lab/sim-plugin-fusion360/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/svd-ai-lab/sim-plugin-autodeskfusion"
+Repository = "https://github.com/svd-ai-lab/sim-plugin-autodeskfusion"
+Issues = "https://github.com/svd-ai-lab/sim-plugin-autodeskfusion/issues"
+Changelog = "https://github.com/svd-ai-lab/sim-plugin-autodeskfusion/blob/main/CHANGELOG.md"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/sim_plugin_fusion360"]
-include = ["src/sim_plugin_fusion360/**"]
+packages = ["src/sim_plugin_autodeskfusion"]
+include = ["src/sim_plugin_autodeskfusion/**"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [
-  "integration: requires Autodesk Fusion 360 running with the sim bridge",
+  "integration: requires Autodesk Fusion running with the official MCP server",
 ]
