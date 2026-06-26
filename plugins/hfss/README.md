@@ -23,7 +23,7 @@ workflow has been validated end to end.
 
 ## Scope
 
-Version 0.1.0 targets HFSS 3D through PyAEDT's `ansys.aedt.core.hfss.Hfss`
+Version 0.1.1 targets HFSS 3D through PyAEDT's `ansys.aedt.core.hfss.Hfss`
 interface.
 
 Out of scope for this first version:
@@ -48,7 +48,7 @@ Out of scope for this first version:
 Install from PyPI:
 
 ```bash
-uv pip install "sim-plugin-hfss==0.1.0"
+uv pip install "sim-plugin-hfss==0.1.1"
 ```
 
 For source testing against the current main branch:
@@ -91,10 +91,17 @@ or one of the explicit environment variables works.
 
 ## Common agent workflow
 
-1. Run `sim check hfss`.
+Use `sim-cli` when it adds discovery, session control, inspection, or artifact
+tracking. Plain PyAEDT scripts, AEDT executables, and solver-native batch flows
+are also valid when they are the narrower reliable path; keep the same evidence
+standard either way.
+
+1. Probe AEDT/HFSS availability, for example with `sim check hfss` or an
+   equivalent PyAEDT/AEDT executable probe.
 2. Choose GUI mode only when visual review is required; otherwise prefer
    non-graphical mode.
-3. Connect and inspect the active project/design before mutating anything:
+3. When using a live sim-cli session, inspect the active project/design before
+   mutating anything:
 
    ```bash
    sim connect --solver hfss --ui-mode no_gui
@@ -103,8 +110,9 @@ or one of the explicit environment variables works.
    sim inspect hfss.design.summary
    ```
 
-4. Run one bounded PyAEDT snippet at a time.
-5. Inspect `last.result` and design state before solving or exporting.
+4. Run one bounded PyAEDT snippet, script, or native batch step at a time.
+5. Inspect `last.result`, AEDT messages, exported artifacts, and design state
+   before solving or exporting the next result.
 6. Validate engineering results from HFSS artifacts and domain criteria, not
    from process success alone.
 

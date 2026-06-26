@@ -7,12 +7,15 @@ not have AEDT, HFSS, or PyAEDT importable.
 from __future__ import annotations
 
 import ast
+import csv
 import glob
 import io
 import json
+import math
 import os
 import re
 import shutil
+import subprocess
 import sys
 import time
 import traceback
@@ -23,6 +26,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from sim._timeout import call_with_timeout
 from sim.driver import ConnectionInfo, Diagnostic, LintResult, RunResult, SolverInstall
 from sim.runner import run_subprocess
 
@@ -49,6 +53,11 @@ _ANSYSEM_ENV_RE = re.compile(
 _VERSION_CODE_RE = re.compile(r"v?(\d{3})", re.IGNORECASE)
 _AEDT_EXECUTABLE_NAMES = ("ansysedt.exe", "ansysedt", "ansysedtsv.exe", "ansysedtsv")
 _STUDENT_EXE_NAMES = ("ansysedtsv.exe", "ansysedtsv")
+_DEFAULT_EXEC_TIMEOUT_S = 300.0
+_HFSS_SOLVE_TEXT_RE = re.compile(
+    r"\b(?:analyze(?:_setup|_all)?|solve(?:_setup)?|run_sweep)\s*\(",
+    re.IGNORECASE,
+)
 _DEFAULT_INSTALL_PATTERNS = [
     "C:/Program Files/AnsysEM/v*",
     "C:/Program Files/AnsysEM/v*/Win64",
@@ -395,6 +404,136 @@ def _short_text(value: object, *, limit: int = 240) -> str:
     return text[:limit]
 
 
+def _coerce_timeout_s(value: object, *, source: str) -> float | None:
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"invalid HFSS exec timeout from {source}: {value!r}") from exc
+
+
+def _looks_like_solve_snippet(code: str) -> bool:
+    return bool(_HFSS_SOLVE_TEXT_RE.search(code))
+
+
+def _pid_from_value(value: object) -> int | None:
+    try:
+        pid = int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+    return pid if pid > 0 else None
+
+
+def _runtime_aedt_pid(*objects: object) -> int | None:
+    seen: set[int] = set()
+    for obj in objects:
+        if obj is None or id(obj) in seen:
+            continue
+        seen.add(id(obj))
+        for name in (
+            "aedt_process_id",
+            "aedt_process_pid",
+            "process_id",
+            "processid",
+            "pid",
+        ):
+            pid = _pid_from_value(_safe_attr(obj, name))
+            if pid is not None:
+                return pid
+        for name in ("GetProcessID", "get_process_id", "get_pid"):
+            pid = _pid_from_value(_safe_call(obj, name))
+            if pid is not None:
+                return pid
+    return None
+
+
+def _aedt_process_pids() -> set[int]:
+    names = {name.lower() for name in _AEDT_EXECUTABLE_NAMES}
+    if os.name == "nt":
+        try:
+            proc = subprocess.run(
+                ["tasklist", "/FO", "CSV", "/NH"],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                check=False,
+            )
+        except OSError:
+            return set()
+        if proc.returncode != 0:
+            return set()
+        pids: set[int] = set()
+        for row in csv.reader(proc.stdout.splitlines()):
+            if len(row) < 2:
+                continue
+            if row[0].strip().lower() not in names:
+                continue
+            pid = _pid_from_value(row[1].strip())
+            if pid is not None:
+                pids.add(pid)
+        return pids
+
+    try:
+        proc = subprocess.run(
+            ["ps", "-eo", "pid=,comm="],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+    except OSError:
+        return set()
+    if proc.returncode != 0:
+        return set()
+    pids: set[int] = set()
+    for line in proc.stdout.splitlines():
+        parts = line.strip().split(None, 1)
+        if len(parts) != 2:
+            continue
+        if parts[1].strip().lower() not in names:
+            continue
+        pid = _pid_from_value(parts[0])
+        if pid is not None:
+            pids.add(pid)
+    return pids
+
+
+def _pid_is_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        return pid in _aedt_process_pids()
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
+def _kill_pid(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        try:
+            proc = subprocess.run(
+                ["taskkill", "/PID", str(pid), "/T", "/F"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+        except OSError:
+            return False
+        return proc.returncode == 0
+    try:
+        os.kill(pid, 9)
+        return True
+    except OSError:
+        return False
+
+
 def _safe_attr(obj: object, name: str, default: object = None) -> object:
     try:
         value = getattr(obj, name)
@@ -411,6 +550,211 @@ def _jsonable(value: object) -> object:
         return repr(value)
 
 
+def _safe_call(obj: object, name: str, *args: object, default: object = None) -> object:
+    try:
+        fn = getattr(obj, name)
+        if callable(fn):
+            return fn(*args)
+    except Exception:
+        return default
+    return default
+
+
+def _as_list(value: object) -> list:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    if isinstance(value, tuple | set):
+        return list(value)
+    if isinstance(value, dict):
+        return list(value.values())
+    return [value]
+
+
+def _name_of(value: object) -> str:
+    return str(_safe_attr(value, "name") or _safe_attr(value, "Name") or value)
+
+
+def _parse_message(raw: object) -> dict:
+    text = str(raw)
+    lowered = text.lower()
+    if "error" in lowered or "fail" in lowered:
+        severity = "error"
+    elif "warning" in lowered or "warn" in lowered:
+        severity = "warning"
+    elif "info" in lowered:
+        severity = "info"
+    else:
+        severity = "unknown"
+
+    objects: list[str] = []
+    for match in re.finditer(r"\bParts?\s+([^,\s]+)\s+and\s+([^,\s]+)", text, re.IGNORECASE):
+        objects.extend([match.group(1), match.group(2)])
+    for match in re.finditer(r"\b(?:object|part|port|boundary)\s+'([^']+)'", text, re.IGNORECASE):
+        objects.append(match.group(1))
+
+    return {
+        "severity": severity,
+        "text": text,
+        "objects": sorted(set(objects)),
+    }
+
+
+def _read_su_file(path: Path) -> dict | None:
+    text = _read_text(path)
+    if text is None:
+        return None
+    fields: dict[str, object] = {"path": str(path)}
+    for line in text.splitlines():
+        parts = line.strip().split()
+        if len(parts) < 2:
+            continue
+        key, value = parts[0], parts[1]
+        if key in {"Frequency", "Success", "NumTets", "MatrixSize", "TotalModes"}:
+            try:
+                numeric = float(value)
+                fields[key] = int(numeric) if numeric.is_integer() else numeric
+            except ValueError:
+                fields[key] = value
+    frequency_hz = fields.get("Frequency")
+    if isinstance(frequency_hz, int | float):
+        fields["frequency_ghz"] = float(frequency_hz) / 1e9
+    success = fields.get("Success")
+    if isinstance(success, int | float):
+        fields["success"] = bool(success)
+    return fields
+
+
+def _touchstone_labels(nports: int) -> list[str]:
+    if nports <= 0:
+        return ["S(1,1)"]
+    labels: list[str] = []
+    for col in range(1, nports + 1):
+        for row in range(1, nports + 1):
+            labels.append(f"S({row},{col})")
+    return labels
+
+
+def touchstone_summary(
+    path: str | os.PathLike[str],
+    *,
+    target_frequencies_ghz: list[float] | tuple[float, ...] | None = None,
+    threshold_db: float = -10.0,
+    parameter: str = "S(1,1)",
+) -> dict:
+    """Parse a Touchstone file for lightweight S-parameter acceptance metrics."""
+    file_path = Path(path)
+    if not file_path.is_file():
+        return {
+            "ok": False,
+            "available": False,
+            "error_code": "FILE_NOT_FOUND",
+            "message": f"Touchstone file not found: {file_path}",
+            "path": str(file_path),
+        }
+
+    unit_scale_to_ghz = {"hz": 1e-9, "khz": 1e-6, "mhz": 1e-3, "ghz": 1.0}
+    unit = "ghz"
+    fmt = "ma"
+    match = re.search(r"\.s(\d+)p$", file_path.name, re.IGNORECASE)
+    nports = int(match.group(1)) if match else 1
+    labels = _touchstone_labels(nports)
+    if parameter not in labels:
+        return {
+            "ok": False,
+            "available": True,
+            "error_code": "PARAMETER_NOT_FOUND",
+            "message": f"{parameter} not present in inferred {nports}-port Touchstone data.",
+            "path": str(file_path),
+            "s_parameters": labels,
+        }
+    pair_index = labels.index(parameter)
+    required_values = 1 + 2 * len(labels)
+
+    rows: list[dict[str, float]] = []
+    for raw_line in file_path.read_text(encoding="utf-8", errors="ignore").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("!"):
+            continue
+        if line.startswith("#"):
+            parts = line[1:].lower().split()
+            if parts:
+                unit = parts[0]
+            if "db" in parts:
+                fmt = "db"
+            elif "ri" in parts:
+                fmt = "ri"
+            else:
+                fmt = "ma"
+            continue
+        values = line.split()
+        if len(values) < required_values:
+            continue
+        try:
+            freq_ghz = float(values[0]) * unit_scale_to_ghz.get(unit, 1.0)
+            first = float(values[1 + 2 * pair_index])
+            second = float(values[2 + 2 * pair_index])
+        except ValueError:
+            continue
+
+        if fmt == "db":
+            mag_db = first
+            mag = 10 ** (mag_db / 20.0)
+            angle_deg = second
+        elif fmt == "ri":
+            mag = math.hypot(first, second)
+            mag_db = 20.0 * math.log10(max(mag, 1e-300))
+            angle_deg = math.degrees(math.atan2(second, first))
+        else:
+            mag = first
+            mag_db = 20.0 * math.log10(max(mag, 1e-300))
+            angle_deg = second
+        rows.append({
+            "frequency_ghz": freq_ghz,
+            "magnitude": mag,
+            "angle_deg": angle_deg,
+            "db": mag_db,
+        })
+
+    if not rows:
+        return {
+            "ok": False,
+            "available": True,
+            "error_code": "NO_DATA",
+            "message": f"No {parameter} rows found in Touchstone file.",
+            "path": str(file_path),
+            "format": fmt,
+            "frequency_unit": unit,
+            "s_parameters": labels,
+        }
+
+    min_row = min(rows, key=lambda row: row["db"])
+    below_threshold = [row for row in rows if row["db"] <= threshold_db]
+    targets = []
+    for target in target_frequencies_ghz or []:
+        nearest = min(rows, key=lambda row: abs(row["frequency_ghz"] - float(target)))
+        targets.append({"target_ghz": float(target), **nearest})
+
+    return {
+        "ok": True,
+        "available": True,
+        "path": str(file_path),
+        "parameter": parameter,
+        "format": fmt,
+        "frequency_unit": unit,
+        "row_count": len(rows),
+        "s_parameters": labels,
+        "min": min_row,
+        "targets": targets,
+        "threshold_db": threshold_db,
+        "threshold_bandwidth_ghz": (
+            [min(row["frequency_ghz"] for row in below_threshold), max(row["frequency_ghz"] for row in below_threshold)]
+            if below_threshold else None
+        ),
+    }
+
+
 class HfssDriver:
     """Sim driver for Ansys HFSS 3D through PyAEDT."""
 
@@ -422,8 +766,11 @@ class HfssDriver:
         self._connected_at: str | None = None
         self._run_count: int = 0
         self._last_run: dict | None = None
+        self._last_timeout: dict | None = None
+        self._last_cleanup: dict | None = None
         self._pyaedt_version: str | None = None
         self._launch_options: dict[str, object] = {}
+        self._owned_aedt_pids: set[int] = set()
 
     @property
     def name(self) -> str:
@@ -446,7 +793,7 @@ class HfssDriver:
         if script.suffix.lower() != ".py":
             return LintResult(
                 ok=False,
-                diagnostics=[Diagnostic("error", "HFSS v0.1.0 only lints PyAEDT Python scripts")],
+                diagnostics=[Diagnostic("error", "HFSS v0.1.1 only lints PyAEDT Python scripts")],
             )
 
         text = _read_text(script)
@@ -523,7 +870,7 @@ class HfssDriver:
     def run_file(self, script: Path) -> RunResult:
         if script.suffix.lower() != ".py":
             raise RuntimeError(
-                "HFSS v0.1.0 only runs PyAEDT Python scripts. Direct .aedt/.aedtz "
+                "HFSS v0.1.1 only runs PyAEDT Python scripts. Direct .aedt/.aedtz "
                 "solve support is deferred until real HFSS validation is available."
             )
         return run_subprocess([sys.executable, str(script)], script=script, solver=self.name)
@@ -596,6 +943,12 @@ class HfssDriver:
             "port": port,
         }
         launch_kwargs = {k: v for k, v in launch_kwargs.items() if v not in {None, ""}}
+        owns_aedt_process = self._should_own_aedt_process(
+            new_desktop=new_desktop,
+            machine=machine,
+            port=port,
+        )
+        before_aedt_pids = _aedt_process_pids() if owns_aedt_process else set()
 
         try:
             hfss = api.Hfss(**launch_kwargs)
@@ -609,11 +962,25 @@ class HfssDriver:
 
         self._hfss = hfss
         self._desktop = getattr(hfss, "desktop_class", None) or getattr(hfss, "desktop", None)
+        runtime_pid = _runtime_aedt_pid(
+            hfss,
+            self._desktop,
+            _safe_attr(hfss, "odesktop"),
+        )
+        after_aedt_pids = _aedt_process_pids() if owns_aedt_process else set()
+        self._owned_aedt_pids = self._identify_owned_aedt_pids(
+            owns_process=owns_aedt_process,
+            before_pids=before_aedt_pids,
+            after_pids=after_aedt_pids,
+            runtime_pid=runtime_pid,
+        )
         self._session_id = f"hfss-{uuid.uuid4().hex[:12]}"
         self._ui_mode = normalized_ui
         self._connected_at = datetime.now(timezone.utc).isoformat()
         self._run_count = 0
         self._last_run = None
+        self._last_timeout = None
+        self._last_cleanup = None
         self._pyaedt_version = api.version
         self._launch_options = {
             **launch_kwargs,
@@ -630,15 +997,31 @@ class HfssDriver:
             "non_graphical": non_graphical,
             "student_version": student_version,
             "pyaedt_version": api.version,
+            "aedt_pid": runtime_pid,
+            "owned_aedt_pids": sorted(self._owned_aedt_pids),
             "launch_options": dict(self._launch_options),
         }
 
-    def run(self, code: str, label: str = "") -> dict:
+    def run(self, code: str, label: str = "", timeout_s: float | None = None) -> dict:
         if self._hfss is None:
             return {
                 "ok": False,
                 "error_code": "SESSION_NOT_FOUND",
                 "message": "HFSS session is not launched.",
+            }
+
+        try:
+            timeout_budget, timeout_source = self._resolve_exec_timeout(code, timeout_s)
+        except ValueError as e:
+            return {
+                "ok": False,
+                "stdout": "",
+                "stderr": "",
+                "duration_s": 0,
+                "label": label,
+                "result": None,
+                "error_code": "RUN_FAILED",
+                "message": _short_text(e),
             }
 
         stdout_buf = io.StringIO()
@@ -647,19 +1030,39 @@ class HfssDriver:
         result: object = None
         ok = True
         error: str | None = None
+        hung = False
+        cleanup: dict | None = None
 
         namespace = {
             "hfss": self._hfss,
             "desktop": self._desktop,
             "json": json,
+            "touchstone_summary": touchstone_summary,
         }
-        try:
+
+        def _run_snippet() -> object:
             with redirect_stdout(stdout_buf), redirect_stderr(stderr_buf):
-                result = self._execute_code(code, namespace)
-        except Exception as e:
+                return self._execute_code(code, namespace)
+
+        timed = call_with_timeout(_run_snippet, timeout_s=timeout_budget)
+        if timed.hung:
             ok = False
-            error = f"{type(e).__name__}: {e}"
-            stderr_buf.write(traceback.format_exc(limit=5))
+            hung = True
+            error = f"HFSS snippet exceeded timeout_s={timeout_budget}"
+            self._last_timeout = {
+                "label": label,
+                "timeout_s": timeout_budget,
+                "timeout_source": timeout_source,
+                "elapsed_s": round(timed.elapsed_s, 4),
+            }
+            cleanup = self._cleanup_session(reason="timeout")
+        elif timed.exception is not None:
+            ok = False
+            exc = timed.exception
+            error = f"{type(exc).__name__}: {exc}"
+            stderr_buf.write("".join(traceback.format_exception(type(exc), exc, exc.__traceback__, limit=5)))
+        else:
+            result = timed.value
 
         duration = round(time.monotonic() - start, 4)
         self._run_count += 1
@@ -670,18 +1073,28 @@ class HfssDriver:
             "duration_s": duration,
             "label": label,
             "result": _jsonable(result),
+            "timeout": {
+                "enabled": bool(timeout_budget and timeout_budget > 0),
+                "timeout_s": timeout_budget,
+                "source": timeout_source,
+            },
         }
         if not ok:
             payload.update(
                 {
+                    "hung": hung,
                     "error_code": "RUN_FAILED",
                     "message": _short_text(error),
                 }
             )
+        if cleanup is not None:
+            payload["cleanup"] = cleanup
         self._last_run = payload
         return payload
 
     def query(self, name: str) -> dict:
+        if name in {"health", "session.health"}:
+            return self.health()
         if name == "session.summary":
             return {
                 "ok": True,
@@ -705,6 +1118,16 @@ class HfssDriver:
             return {"ok": True, **self._project_identity()}
         if name == "hfss.design.summary":
             return {"ok": True, **self._design_summary()}
+        if name == "hfss.model.summary":
+            return {"ok": True, **self._model_summary()}
+        if name == "hfss.boundaries.summary":
+            return {"ok": True, **self._boundaries_summary()}
+        if name == "hfss.setups.summary":
+            return {"ok": True, **self._setups_summary()}
+        if name == "hfss.messages":
+            return {"ok": True, **self._messages_summary()}
+        if name == "hfss.solution.progress":
+            return {"ok": True, **self._solution_progress()}
         return {
             "ok": False,
             "error_code": "RUN_FAILED",
@@ -712,12 +1135,132 @@ class HfssDriver:
         }
 
     def disconnect(self) -> dict:
-        if self._hfss is None:
+        if self._hfss is None and not self._owned_aedt_pids:
             return {"ok": True, "disconnected": True}
 
+        cleanup = self._cleanup_session(reason="disconnect")
+        errors = cleanup.get("release_errors") or []
+
+        if errors:
+            return {
+                "ok": False,
+                "disconnected": True,
+                "error_code": "RUN_FAILED",
+                "message": _short_text("; ".join(errors)),
+                "cleanup": cleanup,
+            }
+        return {"ok": True, "disconnected": True, "cleanup": cleanup}
+
+    def health(self) -> dict:
+        if self._hfss is None:
+            return {
+                "ok": False,
+                "connected": False,
+                "code": "hfss.session.disconnected",
+                "message": "No active HFSS session is launched.",
+                "session_id": self._session_id,
+                "solver": self.name,
+                "ui_mode": self._ui_mode,
+                "pyaedt_version": self._pyaedt_version,
+                "owned_aedt_pids": sorted(self._owned_aedt_pids),
+                "last_timeout": self._last_timeout,
+                "last_cleanup": self._last_cleanup,
+            }
+
+        pid_status = {
+            str(pid): _pid_is_alive(pid)
+            for pid in sorted(self._owned_aedt_pids)
+        }
+        owned_pid_dead = bool(pid_status) and not any(pid_status.values())
+        connected = not owned_pid_dead
+        code = "hfss.session.connected" if connected else "hfss.aedt.process_exited"
+        message = "HFSS session is connected" if connected else "Tracked AEDT process is not alive"
+
+        project = self._safe_health_call(self._project_identity)
+        design = self._safe_health_call(self._design_summary)
+        messages = self._safe_health_call(self._messages_summary)
+        progress = self._safe_health_call(self._solution_progress)
+
+        return {
+            "ok": connected,
+            "connected": connected,
+            "code": code,
+            "message": message,
+            "session_id": self._session_id,
+            "solver": self.name,
+            "ui_mode": self._ui_mode,
+            "run_count": self._run_count,
+            "connected_at": self._connected_at,
+            "pyaedt_version": self._pyaedt_version,
+            "launch_options": dict(self._launch_options),
+            "owned_aedt_pids": sorted(self._owned_aedt_pids),
+            "owned_aedt_pid_alive": pid_status,
+            "project": project,
+            "design": design,
+            "messages": messages,
+            "solution_progress": progress,
+            "last_run": self._last_run,
+            "last_timeout": self._last_timeout,
+            "last_cleanup": self._last_cleanup,
+        }
+
+    def _safe_health_call(self, fn) -> dict:
+        try:
+            value = fn()
+            return value if isinstance(value, dict) else {"available": True, "value": _jsonable(value)}
+        except Exception as exc:
+            return {
+                "available": False,
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+
+    def _resolve_exec_timeout(self, code: str, timeout_s: float | None) -> tuple[float | None, str]:
+        direct_timeout = _coerce_timeout_s(timeout_s, source="run(timeout_s)")
+        if direct_timeout is not None:
+            return direct_timeout, "run(timeout_s)"
+
+        option_timeout = _coerce_timeout_s(
+            self._launch_options.get("exec_timeout_s"),
+            source="driver_option:exec_timeout_s",
+        )
+        if option_timeout is not None:
+            return option_timeout, "driver_option:exec_timeout_s"
+
+        env_value = os.environ.get("SIM_HFSS_EXEC_TIMEOUT_S")
+        env_timeout = _coerce_timeout_s(env_value, source="SIM_HFSS_EXEC_TIMEOUT_S")
+        if env_timeout is not None:
+            return env_timeout, "env:SIM_HFSS_EXEC_TIMEOUT_S"
+
+        if _looks_like_solve_snippet(code):
+            return None, "disabled:solve-snippet"
+        return _DEFAULT_EXEC_TIMEOUT_S, "default"
+
+    def _should_own_aedt_process(self, *, new_desktop: bool, machine: str, port: int) -> bool:
+        return bool(new_desktop) and not machine and not port
+
+    def _identify_owned_aedt_pids(
+        self,
+        *,
+        owns_process: bool,
+        before_pids: set[int],
+        after_pids: set[int],
+        runtime_pid: int | None,
+    ) -> set[int]:
+        if not owns_process:
+            return set()
+        if runtime_pid is not None and runtime_pid not in before_pids:
+            return {runtime_pid}
+        new_pids = after_pids - before_pids
+        if len(new_pids) == 1:
+            return set(new_pids)
+        return set()
+
+    def _release_desktop(self) -> list[str]:
+        if self._hfss is None and self._desktop is None:
+            return []
         errors: list[str] = []
         try:
-            release = getattr(self._hfss, "release_desktop", None)
+            release = getattr(self._hfss, "release_desktop", None) if self._hfss is not None else None
             if callable(release):
                 release(close_projects=False, close_desktop=True)
             elif self._desktop is not None:
@@ -726,19 +1269,45 @@ class HfssDriver:
                     desktop_release(close_projects=False, close_desktop=True)
         except Exception as e:
             errors.append(f"{type(e).__name__}: {e}")
-        finally:
-            self._hfss = None
-            self._desktop = None
-            self._session_id = None
+        return errors
 
-        if errors:
-            return {
-                "ok": False,
-                "disconnected": True,
-                "error_code": "RUN_FAILED",
-                "message": _short_text("; ".join(errors)),
-            }
-        return {"ok": True, "disconnected": True}
+    def _kill_owned_aedt_processes(self) -> dict:
+        reports = []
+        for pid in sorted(self._owned_aedt_pids):
+            alive_before = _pid_is_alive(pid)
+            kill_called = False
+            kill_ok = False
+            if alive_before:
+                kill_called = True
+                kill_ok = _kill_pid(pid)
+                time.sleep(0.2)
+            alive_after = _pid_is_alive(pid)
+            reports.append({
+                "pid": pid,
+                "alive_before": alive_before,
+                "kill_called": kill_called,
+                "kill_ok": kill_ok,
+                "alive_after": alive_after,
+            })
+        return {
+            "owned_aedt_pids": sorted(self._owned_aedt_pids),
+            "processes": reports,
+        }
+
+    def _cleanup_session(self, *, reason: str) -> dict:
+        release_errors = self._release_desktop()
+        kill_report = self._kill_owned_aedt_processes()
+        cleanup = {
+            "reason": reason,
+            "release_errors": release_errors,
+            **kill_report,
+        }
+        self._hfss = None
+        self._desktop = None
+        self._session_id = None
+        self._owned_aedt_pids = set()
+        self._last_cleanup = cleanup
+        return cleanup
 
     def _execute_code(self, code: str, namespace: dict[str, object]) -> object:
         tree = ast.parse(code, filename="<hfss-exec>", mode="exec")
@@ -773,4 +1342,143 @@ class HfssDriver:
             "setup_names": _jsonable(_safe_attr(hfss, "setup_names", [])),
             "excitation_names": _jsonable(_safe_attr(hfss, "excitation_names", [])),
             "valid_design": _jsonable(_safe_attr(hfss, "valid_design")),
+        }
+
+    def _model_summary(self) -> dict:
+        hfss = self._hfss
+        assert hfss is not None
+        modeler = _safe_attr(hfss, "modeler")
+        if modeler is None:
+            return {"available": False, "message": "HFSS modeler is not available."}
+
+        object_names = [str(name) for name in _as_list(_safe_attr(modeler, "object_names", []))]
+        solid_names = {str(name) for name in _as_list(_safe_attr(modeler, "solid_names", []))}
+        sheet_names = {str(name) for name in _as_list(_safe_attr(modeler, "sheet_names", []))}
+        objects_by_name: dict[str, object] = {}
+        raw_objects = _safe_attr(modeler, "objects", {})
+        if isinstance(raw_objects, dict):
+            for value in raw_objects.values():
+                objects_by_name[_name_of(value)] = value
+
+        summaries = []
+        for name in object_names:
+            obj = objects_by_name.get(name)
+            kind = "sheet" if name in sheet_names else "solid" if name in solid_names else "unknown"
+            summaries.append({
+                "name": name,
+                "kind": kind,
+                "material": _jsonable(_safe_attr(obj, "material_name") if obj is not None else None),
+                "bounding_box": _jsonable(_safe_attr(obj, "bounding_box") if obj is not None else None),
+            })
+
+        return {
+            "available": True,
+            "object_count": len(object_names),
+            "solid_count": len(solid_names),
+            "sheet_count": len(sheet_names),
+            "objects": summaries,
+        }
+
+    def _boundaries_summary(self) -> dict:
+        hfss = self._hfss
+        assert hfss is not None
+        boundaries = []
+        for boundary in _as_list(_safe_attr(hfss, "boundaries", [])):
+            props = _safe_attr(boundary, "props", {})
+            objects = []
+            if isinstance(props, dict):
+                for key in ("Objects", "Faces", "Edges", "Terminals"):
+                    objects.extend(str(item) for item in _as_list(props.get(key)))
+            boundaries.append({
+                "name": _name_of(boundary),
+                "type": _jsonable(_safe_attr(boundary, "type") or _safe_attr(boundary, "boundary_type")),
+                "objects": sorted(set(objects)),
+            })
+
+        return {
+            "available": True,
+            "boundary_count": len(boundaries),
+            "boundaries": boundaries,
+            "excitation_names": _jsonable(_safe_attr(hfss, "excitation_names", [])),
+        }
+
+    def _setups_summary(self) -> dict:
+        hfss = self._hfss
+        assert hfss is not None
+        setup_names = [str(name) for name in _as_list(_safe_attr(hfss, "setup_names", []))]
+        raw_setups = _as_list(_safe_attr(hfss, "setups", []))
+        setups_by_name = {_name_of(setup): setup for setup in raw_setups}
+
+        setups = []
+        for name in setup_names:
+            setup = setups_by_name.get(name)
+            sweeps = []
+            for sweep in _as_list(_safe_attr(setup, "sweeps", []) if setup is not None else []):
+                sweeps.append({
+                    "name": _name_of(sweep),
+                    "type": _jsonable(_safe_attr(sweep, "type") or _safe_attr(sweep, "sweep_type")),
+                    "props": _jsonable(_safe_attr(sweep, "props", {})),
+                })
+            setups.append({
+                "name": name,
+                "props": _jsonable(_safe_attr(setup, "props", {}) if setup is not None else {}),
+                "sweeps": sweeps,
+            })
+
+        return {
+            "available": True,
+            "setup_count": len(setup_names),
+            "setups": setups,
+        }
+
+    def _messages_summary(self) -> dict:
+        hfss = self._hfss
+        assert hfss is not None
+        desktop = _safe_attr(hfss, "odesktop") or self._desktop
+        if desktop is None:
+            return {"available": False, "messages": [], "message": "AEDT desktop object is not available."}
+
+        raw_messages = _safe_call(desktop, "GetMessages", "", "", 0, default=None)
+        if raw_messages is None:
+            raw_messages = _safe_call(desktop, "GetMessages", "", "", 2, default=[])
+        messages = [_parse_message(message) for message in _as_list(raw_messages)]
+        return {
+            "available": True,
+            "count": len(messages),
+            "messages": messages,
+        }
+
+    def _solution_progress(self) -> dict:
+        hfss = self._hfss
+        assert hfss is not None
+        project_file = _safe_attr(hfss, "project_file")
+        if not project_file:
+            return {"available": False, "message": "project_file is not available."}
+
+        project_path = Path(str(project_file))
+        results_dir = Path(str(project_path) + "results")
+        if not results_dir.exists():
+            return {
+                "available": False,
+                "project_file": str(project_path),
+                "results_dir": str(results_dir),
+                "message": "AEDT results directory was not found.",
+            }
+
+        solved = []
+        for path in results_dir.rglob("*_SU.txt"):
+            record = _read_su_file(path)
+            if record is not None:
+                solved.append(record)
+        solved.sort(key=lambda row: (row.get("frequency_ghz") is None, row.get("frequency_ghz", 0)))
+        latest = max(solved, key=lambda row: Path(str(row["path"])).stat().st_mtime) if solved else None
+
+        return {
+            "available": True,
+            "project_file": str(project_path),
+            "results_dir": str(results_dir),
+            "completed_frequency_count": len(solved),
+            "latest": latest,
+            "frequencies_ghz": [row.get("frequency_ghz") for row in solved if row.get("frequency_ghz") is not None],
+            "success_count": sum(1 for row in solved if row.get("success") is True),
         }

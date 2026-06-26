@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "sim-plugin-hfss"
-version = "0.1.0"
+version = "0.1.1"
 description = "Ansys HFSS driver for sim-cli, distributed as a plugin"
 readme = "README.md"
 license = "Apache-2.0"

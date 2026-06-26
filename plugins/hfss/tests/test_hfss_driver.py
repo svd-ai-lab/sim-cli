@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import subprocess
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -77,6 +78,7 @@ class TestInstallDiscovery:
         exe = tmp_path / "v261" / "Win64" / "ansysedt.exe"
         exe.parent.mkdir(parents=True)
         exe.write_text("", encoding="utf-8")
+        monkeypatch.delenv("ANSYSEMSV_ROOT252", raising=False)
         monkeypatch.setenv("SIM_HFSS_AEDT_ROOT", str(exe.parent))
         monkeypatch.setattr(drv, "_INSTALL_FINDERS", [drv._candidates_from_env])
 
@@ -228,6 +230,42 @@ class TestParseOutput:
         assert self.driver.parse_output("plain log") == {}
 
 
+class TestTouchstoneSummary:
+    @pytest.mark.parametrize(
+        ("header", "rows", "expected_min_db"),
+        [
+            ("# GHz S MA R 50", ["5.0 0.5 0", "5.1 0.1 0"], -20.0),
+            ("# GHz S DB R 50", ["5.0 -3 0", "5.1 -12 0"], -12.0),
+            ("# GHz S RI R 50", ["5.0 0.5 0", "5.1 0.1 0"], -20.0),
+        ],
+    )
+    def test_touchstone_summary_parses_s1p_formats(
+        self, tmp_path: Path, header: str, rows: list[str], expected_min_db: float
+    ) -> None:
+        touchstone = tmp_path / "result.s1p"
+        touchstone.write_text("\n".join(["! fixture", header, *rows]), encoding="utf-8")
+
+        summary = drv.touchstone_summary(
+            touchstone,
+            target_frequencies_ghz=[5.05],
+            threshold_db=-10,
+        )
+
+        assert summary["ok"] is True
+        assert summary["available"] is True
+        assert summary["row_count"] == 2
+        assert summary["min"]["db"] == pytest.approx(expected_min_db, abs=0.02)
+        assert summary["targets"][0]["target_ghz"] == 5.05
+        assert summary["threshold_bandwidth_ghz"] == [5.1, 5.1]
+
+    def test_touchstone_summary_reports_missing_file(self, tmp_path: Path) -> None:
+        summary = drv.touchstone_summary(tmp_path / "missing.s1p")
+
+        assert summary["ok"] is False
+        assert summary["available"] is False
+        assert summary["error_code"] == "FILE_NOT_FOUND"
+
+
 class TestRunFile:
     def test_run_file_uses_current_python(self, monkeypatch: pytest.MonkeyPatch) -> None:
         captured: dict[str, object] = {}
@@ -296,8 +334,165 @@ class TestSession:
         assert last["result"]["label"] == "mutate"
 
         disconnected = driver.disconnect()
-        assert disconnected == {"ok": True, "disconnected": True}
+        assert disconnected["ok"] is True
+        assert disconnected["disconnected"] is True
+        assert disconnected["cleanup"]["reason"] == "disconnect"
         assert FakeHfss.release_calls
+
+    def test_launch_tracks_unique_new_aedt_pid(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        driver = HfssDriver()
+        pid_snapshots = [set(), {4242}]
+        monkeypatch.delenv("ANSYSEM_ROOT261", raising=False)
+        monkeypatch.setattr(driver, "detect_installed", lambda: [_install()])
+        monkeypatch.setattr(drv, "_aedt_process_pids", lambda: pid_snapshots.pop(0) if pid_snapshots else {4242})
+        monkeypatch.setattr(drv, "_pid_is_alive", lambda pid: pid == 4242)
+        monkeypatch.setattr(drv, "_kill_pid", lambda pid: True)
+        monkeypatch.setattr(
+            drv,
+            "_try_import_pyaedt",
+            lambda: drv._PyaedtApi(Desktop=None, Hfss=FakeHfss, version="0.26.3"),
+        )
+
+        launched = driver.launch(ui_mode="no_gui")
+
+        assert launched["ok"] is True
+        assert launched["owned_aedt_pids"] == [4242]
+        health = driver.query("session.health")
+        assert health["ok"] is True
+        assert health["owned_aedt_pid_alive"] == {"4242": True}
+        driver.disconnect()
+
+    def test_attach_mode_does_not_own_existing_aedt_pid(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        driver = HfssDriver()
+        monkeypatch.delenv("ANSYSEM_ROOT261", raising=False)
+        monkeypatch.setattr(driver, "detect_installed", lambda: [_install()])
+        monkeypatch.setattr(drv, "_aedt_process_pids", lambda: {4242})
+        monkeypatch.setattr(
+            drv,
+            "_try_import_pyaedt",
+            lambda: drv._PyaedtApi(Desktop=None, Hfss=FakeHfss, version="0.26.3"),
+        )
+
+        launched = driver.launch(ui_mode="no_gui", new_desktop=False)
+
+        assert launched["ok"] is True
+        assert launched["owned_aedt_pids"] == []
+        driver.disconnect()
+
+    def test_exec_timeout_quarantines_session_and_kills_owned_pid(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        driver = HfssDriver()
+        alive = {4242: True}
+        killed: list[int] = []
+        monkeypatch.delenv("ANSYSEM_ROOT261", raising=False)
+        monkeypatch.setattr(FakeHfss, "runtime_pid", 4242)
+        monkeypatch.setattr(driver, "detect_installed", lambda: [_install()])
+        monkeypatch.setattr(drv, "_aedt_process_pids", lambda: set())
+        monkeypatch.setattr(drv, "_pid_is_alive", lambda pid: alive.get(pid, False))
+
+        def fake_kill(pid: int) -> bool:
+            killed.append(pid)
+            alive[pid] = False
+            return True
+
+        monkeypatch.setattr(drv, "_kill_pid", fake_kill)
+        monkeypatch.setattr(
+            drv,
+            "_try_import_pyaedt",
+            lambda: drv._PyaedtApi(Desktop=None, Hfss=FakeHfss, version="0.26.3"),
+        )
+
+        launched = driver.launch(ui_mode="no_gui", exec_timeout_s=0.001)
+        assert launched["owned_aedt_pids"] == [4242]
+
+        run = driver.run("import time\ntime.sleep(0.05)", label="hung-control")
+        time.sleep(0.1)
+
+        assert run["ok"] is False
+        assert run["hung"] is True
+        assert run["timeout"]["timeout_s"] == 0.001
+        assert run["cleanup"]["reason"] == "timeout"
+        assert killed == [4242]
+        assert FakeHfss.release_calls
+        assert driver.query("session.health")["connected"] is False
+
+    def test_default_timeout_is_disabled_for_solve_snippets(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        driver = HfssDriver()
+        monkeypatch.delenv("SIM_HFSS_EXEC_TIMEOUT_S", raising=False)
+
+        timeout_s, source = driver._resolve_exec_timeout("hfss.analyze_setup('Setup1')", None)
+
+        assert timeout_s is None
+        assert source == "disabled:solve-snippet"
+
+    def test_driver_option_exec_timeout_overrides_default(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        driver = HfssDriver()
+        driver._launch_options = {"exec_timeout_s": "12.5"}
+        monkeypatch.delenv("SIM_HFSS_EXEC_TIMEOUT_S", raising=False)
+
+        timeout_s, source = driver._resolve_exec_timeout("hfss.project_name", None)
+
+        assert timeout_s == 12.5
+        assert source == "driver_option:exec_timeout_s"
+
+    def test_evidence_queries(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        driver = HfssDriver()
+        monkeypatch.delenv("ANSYSEM_ROOT261", raising=False)
+        monkeypatch.setattr(driver, "detect_installed", lambda: [_install()])
+        monkeypatch.setattr(
+            drv,
+            "_try_import_pyaedt",
+            lambda: drv._PyaedtApi(Desktop=None, Hfss=FakeHfss, version="0.26.3"),
+        )
+
+        launched = driver.launch(ui_mode="no_gui", project=str(tmp_path / "demo.aedt"))
+        assert launched["ok"] is True
+
+        model = driver.query("hfss.model.summary")
+        assert model["ok"] is True
+        assert model["available"] is True
+        assert model["object_count"] == 2
+        assert model["solid_count"] == 1
+        assert model["sheet_count"] == 1
+
+        boundaries = driver.query("hfss.boundaries.summary")
+        assert boundaries["boundary_count"] == 2
+        assert boundaries["boundaries"][0]["name"] == "P1"
+        assert boundaries["excitation_names"] == ["Port1"]
+
+        setups = driver.query("hfss.setups.summary")
+        assert setups["setup_count"] == 1
+        assert setups["setups"][0]["sweeps"][0]["name"] == "Sweep1"
+
+        messages = driver.query("hfss.messages")
+        assert messages["available"] is True
+        assert messages["count"] == 2
+        assert messages["messages"][0]["severity"] == "error"
+        assert set(messages["messages"][0]["objects"]) == {"Via1", "Substrate"}
+
+        results_dir = tmp_path / "demo.aedtresults" / "HFSSDesign1.results"
+        results_dir.mkdir(parents=True)
+        (results_dir / "F1_SU.txt").write_text(
+            "\n".join([
+                "Frequency 5800000000.000000",
+                "Success 1",
+                "NumTets 123",
+                "MatrixSize 456",
+            ]),
+            encoding="utf-8",
+        )
+        progress = driver.query("hfss.solution.progress")
+        assert progress["available"] is True
+        assert progress["completed_frequency_count"] == 1
+        assert progress["latest"]["frequency_ghz"] == pytest.approx(5.8)
+        assert progress["success_count"] == 1
+
+        driver.disconnect()
 
     def test_launch_without_install(self, monkeypatch: pytest.MonkeyPatch) -> None:
         driver = HfssDriver()
@@ -378,12 +573,14 @@ def _student_install() -> SolverInstall:
 class FakeHfss:
     last_kwargs: dict[str, object] = {}
     release_calls: list[dict[str, object]] = []
+    runtime_pid: int | None = None
 
     def __init__(self, **kwargs: object) -> None:
         type(self).last_kwargs = kwargs
         type(self).release_calls = []
+        self.aedt_process_id = type(self).runtime_pid
         self.project_name = "DemoProject"
-        self.project_file = "demo.aedt"
+        self.project_file = str(kwargs.get("project") or "demo.aedt")
         self.project_path = "/tmp/demo"
         self.working_directory = "/tmp/demo"
         self.aedt_version_id = "2026.1"
@@ -393,7 +590,36 @@ class FakeHfss:
         self.setup_names = ["Setup1"]
         self.excitation_names = ["Port1"]
         self.valid_design = True
+        self.modeler = SimpleNamespace(
+            object_names=["Box1", "PortSheet"],
+            solid_names=["Box1"],
+            sheet_names=["PortSheet"],
+            objects={
+                1: SimpleNamespace(name="Box1", material_name="vacuum", bounding_box=[0, 0, 0, 1, 1, 1]),
+                2: SimpleNamespace(name="PortSheet", material_name="copper", bounding_box=[0, 0, 0, 0, 1, 1]),
+            },
+        )
+        self.boundaries = [
+            SimpleNamespace(name="P1", type="Lumped Port", props={"Objects": ["PortSheet"]}),
+            SimpleNamespace(name="Radiation", type="Radiation", props={"Objects": ["Air"]}),
+        ]
+        self.setups = [
+            SimpleNamespace(
+                name="Setup1",
+                props={"Frequency": "5.8GHz"},
+                sweeps=[SimpleNamespace(name="Sweep1", type="Discrete", props={"RangeStart": "5GHz"})],
+            )
+        ]
+        self.odesktop = FakeDesktop()
         self.desktop_class = SimpleNamespace()
 
     def release_desktop(self, **kwargs: object) -> None:
         type(self).release_calls.append(kwargs)
+
+
+class FakeDesktop:
+    def GetMessages(self, *_args: object) -> list[str]:
+        return [
+            "Error: Parts Via1 and Substrate intersect.",
+            "Warning: Mesh refinement reached requested limit.",
+        ]
