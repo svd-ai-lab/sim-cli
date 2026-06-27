@@ -381,12 +381,150 @@ def _candidates_from_path() -> list[tuple[Path, str]]:
     return out
 
 
+def _registry_string_value(winreg: object, key: object, name: str) -> str | None:
+    try:
+        value, _ = winreg.QueryValueEx(key, name)  # type: ignore[attr-defined]
+    except OSError:
+        return None
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip()
+    return cleaned or None
+
+
+def _close_registry_key(key: object) -> None:
+    close = getattr(key, "Close", None)
+    if callable(close):
+        try:
+            close()
+        except OSError:
+            pass
+
+
+def _open_registry_key(winreg: object, root: object, path: str, access: int) -> object | None:
+    try:
+        return winreg.OpenKey(root, path, 0, access)  # type: ignore[attr-defined]
+    except OSError:
+        return None
+
+
+def _comsol_registry_paths() -> list[tuple[Path, str]]:
+    """Windows Registry hints for installs that are not on PATH/default dirs."""
+    try:
+        import winreg  # type: ignore
+    except ImportError:
+        return []
+
+    access_flags = [getattr(winreg, "KEY_READ", 0)]
+    for view_name in ("KEY_WOW64_64KEY", "KEY_WOW64_32KEY"):
+        view = getattr(winreg, view_name, 0)
+        if view:
+            access_flags.append(getattr(winreg, "KEY_READ", 0) | view)
+
+    roots = [
+        (getattr(winreg, "HKEY_LOCAL_MACHINE", None), "HKLM"),
+        (getattr(winreg, "HKEY_CURRENT_USER", None), "HKCU"),
+    ]
+    uninstall_keys = [
+        r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+        r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
+    ]
+
+    out: list[tuple[Path, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for root, root_label in roots:
+        if root is None:
+            continue
+        for uninstall_key in uninstall_keys:
+            for access in access_flags:
+                parent = _open_registry_key(winreg, root, uninstall_key, access)
+                if parent is None:
+                    continue
+                try:
+                    subkey_count, _, _ = winreg.QueryInfoKey(parent)  # type: ignore[attr-defined]
+                    for idx in range(subkey_count):
+                        try:
+                            child_name = winreg.EnumKey(parent, idx)  # type: ignore[attr-defined]
+                        except OSError:
+                            continue
+                        child = _open_registry_key(winreg, parent, child_name, access)
+                        if child is None:
+                            continue
+                        try:
+                            display = _registry_string_value(winreg, child, "DisplayName")
+                            if not display or "comsol" not in display.lower():
+                                continue
+                            raw = (
+                                _registry_string_value(winreg, child, "InstallLocation")
+                                or _registry_string_value(winreg, child, "DisplayIcon")
+                                or _registry_string_value(winreg, child, "InstallSource")
+                            )
+                            if not raw:
+                                continue
+                            path_text = raw.split(",", 1)[0].strip().strip('"')
+                            key = (path_text.lower(), display)
+                            if key in seen:
+                                continue
+                            seen.add(key)
+                            out.append((Path(path_text), f"registry:{root_label}:{display}"))
+                        finally:
+                            _close_registry_key(child)
+                finally:
+                    _close_registry_key(parent)
+
+    app_paths = r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths"
+    for root, root_label in roots:
+        if root is None:
+            continue
+        for access in access_flags:
+            key = _open_registry_key(winreg, root, rf"{app_paths}\comsol.exe", access)
+            if key is None:
+                continue
+            try:
+                raw = _registry_string_value(winreg, key, "") or _registry_string_value(winreg, key, "Path")
+                if raw:
+                    path_text = raw.split(",", 1)[0].strip().strip('"')
+                    dedupe_key = (path_text.lower(), "comsol.exe")
+                    if dedupe_key not in seen:
+                        seen.add(dedupe_key)
+                        out.append((Path(path_text), f"registry:{root_label}:App Paths\\comsol.exe"))
+            finally:
+                _close_registry_key(key)
+    return out
+
+
+def _expand_comsol_registry_path(path: Path) -> list[Path]:
+    candidates = [path]
+    if path.suffix.lower() == ".exe":
+        candidates.extend(path.parents)
+    candidates.append(path / "Multiphysics")
+    candidates.append(path.parent / "Multiphysics")
+    unique: list[Path] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        key = str(candidate).lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(candidate)
+    return unique
+
+
+def _candidates_from_windows_registry() -> list[tuple[Path, str]]:
+    out: list[tuple[Path, str]] = []
+    for path, source in _comsol_registry_paths():
+        for candidate in _expand_comsol_registry_path(path):
+            out.append((candidate, source))
+    return out
+
+
 _INSTALL_DIR_FINDERS: list[Callable[[], list[tuple[Path, str]]]] = [
     _candidates_from_env,
     _candidates_from_windows_defaults,
     _candidates_from_linux_defaults,
     _candidates_from_macos_defaults,
     _candidates_from_path,
+    _candidates_from_windows_registry,
 ]
 """Strategy chain. APPEND new finders for new install layouts; do not edit."""
 
@@ -951,11 +1089,13 @@ class ComsolDriver:
                 ["tasklist", "/fo", "csv", "/nh"],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 check=False,
             )
         except OSError:
             return []
-        if result.returncode != 0:
+        if result.returncode != 0 or not result.stdout:
             return []
         rows: list[dict] = []
         for row in csv.reader(result.stdout.splitlines()):

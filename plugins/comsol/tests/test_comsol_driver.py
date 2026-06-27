@@ -724,6 +724,7 @@ class TestDiscovery:
             "_candidates_from_linux_defaults",
             "_candidates_from_macos_defaults",
             "_candidates_from_path",
+            "_candidates_from_windows_registry",
         ]
 
     def test_macos_finder_picks_up_applications_dir(self, tmp_path, monkeypatch):
@@ -782,3 +783,28 @@ class TestDiscovery:
         assert '"C:"' in src or "'C:'" in src
         assert '"D:"' in src or "'D:'" in src
         assert '"E:"' in src or "'E:'" in src
+
+    def test_windows_registry_finder_accepts_non_default_install_root(self, tmp_path, monkeypatch):
+        from sim_plugin_comsol import driver as comsol_driver_mod
+
+        install = tmp_path / "VendorApps" / "COMSOL64" / "Multiphysics"
+        bin_dir = install / "bin" / "win64"
+        bin_dir.mkdir(parents=True)
+        (bin_dir / "comsol.exe").write_text("", encoding="utf-8")
+
+        monkeypatch.setattr(
+            comsol_driver_mod,
+            "_comsol_registry_paths",
+            lambda: [(install.parent, "registry:HKLM:COMSOL Multiphysics 6.4")],
+        )
+
+        candidates = comsol_driver_mod._candidates_from_windows_registry()
+        installs = [
+            comsol_driver_mod._make_install(path, source)
+            for path, source in candidates
+        ]
+        installs = [install for install in installs if install is not None]
+
+        assert len(installs) == 1
+        assert installs[0].path == str(install)
+        assert installs[0].source == "registry:HKLM:COMSOL Multiphysics 6.4"

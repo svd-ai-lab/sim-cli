@@ -38,11 +38,12 @@ Results are ranked by match count per file.
 1. `--comsol-root PATH`
 2. `COMSOL_DOC_ROOT` env var (plugin tree)
 3. `COMSOL_ROOT` env var (Multiphysics install dir)
-4. `uv run sim check comsol --json` (reuses sim-cli's install discovery)
-5. Typical per-OS install paths:
+4. Typical per-OS install paths:
    - Windows: `C:\Program Files\COMSOL\COMSOL{NN}\Multiphysics\`
    - macOS:   `/Applications/COMSOL{NN}/Multiphysics/`
    - Linux:   `/usr/local/comsol*/multiphysics/`, `/opt/comsol*/multiphysics/`
+5. Windows Registry hints from COMSOL uninstall entries and `App Paths`
+6. Optional `uv run sim check comsol --json` when `sim-cli` is installed
 
 Inside any of those roots it expects
 `doc/help/wtpwebapps/ROOT/doc/com.comsol.help.*/` — the static XHTML tree

@@ -72,10 +72,13 @@ These are not either/or - they compose. The natural arc is **explore live -> sol
 Quick test: if you still need to *ask the live model questions*, stay in a
 session. If you are *executing a recipe you already trust*, run it as batch.
 
-For the sim runtime, start with `uv run sim check comsol`, then
-`uv run sim connect --solver comsol`, then inspect `session.health`. When the
-user wants to watch the live Model Builder while the agent builds or solves,
-use:
+For the sim runtime, use `uv run sim check comsol` when `sim-cli` is available,
+then `uv run sim connect --solver comsol`, then inspect `session.health`.
+Missing `sim-cli` is not evidence that COMSOL is missing: fall back to
+`COMSOL_ROOT`, `sim-comsol-doc where`, COMSOL launcher/default path probes, or
+the user-provided install path before reporting that COMSOL is not installed.
+When the user wants to watch the live Model Builder while the agent builds or
+solves, use:
 
 ```bash
 uv run sim connect --solver comsol --ui-mode gui --driver-option visual_mode=shared-desktop
