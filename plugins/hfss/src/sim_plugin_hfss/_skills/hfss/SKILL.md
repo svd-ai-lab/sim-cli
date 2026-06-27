@@ -20,9 +20,11 @@ same for every path.
 ## Required Protocol
 
 1. Run an HFSS/AEDT availability probe before launch or solve.
-   - Preferred when available: `sim check hfss`.
+   - Use `sim check hfss` when `sim-cli` is available.
    - Acceptable alternatives: a PyAEDT import/version probe, AEDT executable
-     probe, or vendor launcher/version check.
+     probe, Windows Registry/default-install probe, or vendor launcher/version
+     check.
+   - Missing `sim-cli` is not evidence that AEDT/HFSS is missing.
 2. If no AEDT installation is found, stop and ask for an AEDT installation or
    `SIM_HFSS_AEDT_ROOT` path. Do not invent install paths.
 3. Prefer no-GUI operation unless the user needs visual review or the workflow
@@ -172,11 +174,11 @@ fallback. Do not fabricate status.
 
 ## Troubleshooting
 
-- Driver not discovered: reinstall the plugin in the same environment as
-  sim-cli and rerun `sim check hfss`.
+- Driver not discovered: only when using `sim-cli`, reinstall the plugin in
+  the same environment as sim-cli and rerun `sim check hfss`.
 - AEDT not detected: set `SIM_HFSS_AEDT_ROOT` to the directory containing an
-  AEDT launcher, or rely on default discovery for common install layouts. A
-  permanent global `PATH` change is optional, not required.
+  AEDT launcher, or rely on Registry/default discovery for common install
+  layouts. A permanent global `PATH` change is optional, not required.
 - PyAEDT import error: install `pyaedt>=0.26.3,<1` in the active environment.
 - Script not detected: make sure it constructs HFSS through PyAEDT, for example
   `from ansys.aedt.core.hfss import Hfss` followed by `Hfss(...)`.

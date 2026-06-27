@@ -77,6 +77,7 @@ The driver looks for AEDT using:
 - `ANSYSEM_ROOT*`
 - AEDT launchers such as `ansysedt`, `ansysedt.exe`, or `ansysedtsv.exe` on
   `PATH`
+- Windows Registry hints from AEDT/Ansys uninstall entries and `App Paths`
 - conservative default Windows and Linux install roots
 
 If AEDT is installed in a nonstandard location, set an explicit root:

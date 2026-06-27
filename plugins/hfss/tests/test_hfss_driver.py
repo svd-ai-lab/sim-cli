@@ -166,6 +166,27 @@ class TestInstallDiscovery:
         assert installs[0].source == "which:ansysedtsv.exe"
         assert installs[0].extra["student_version"] is True
 
+    def test_windows_registry_discovery_accepts_non_default_root(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        root = tmp_path / "VendorApps" / "ANSYS Inc" / "v252"
+        exe = root / "AnsysEM" / "Win64" / "ansysedt.exe"
+        exe.parent.mkdir(parents=True)
+        exe.write_text("", encoding="utf-8")
+        monkeypatch.setattr(
+            drv,
+            "_aedt_registry_roots",
+            lambda: [(root, "registry:HKLM:Ansys Electronics Desktop 2025 R2")],
+        )
+        monkeypatch.setattr(drv, "_INSTALL_FINDERS", [drv._candidates_from_windows_registry])
+
+        installs = HfssDriver().detect_installed()
+
+        assert len(installs) == 1
+        assert installs[0].version == "2025.2"
+        assert installs[0].source == "registry:HKLM:Ansys Electronics Desktop 2025 R2"
+        assert installs[0].extra["executable"] == str(exe)
+
     def test_prepare_pyaedt_environment_uses_student_env_key(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
