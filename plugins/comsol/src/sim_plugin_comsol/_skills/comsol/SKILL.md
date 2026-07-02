@@ -1,6 +1,6 @@
 ---
 name: comsol-sim
-description: Use when the user asks Codex, Claude Code, ChatGPT-style coding agents, or another AI agent to build, inspect, run, debug, or revise COMSOL Multiphysics / COMSOL Desktop models. Choose the simplest real COMSOL control path for the task: saved `.mph` inspection, local COMSOL documentation, direct COMSOL executables (`comsolbatch`, `comsolcompile`, `comsolmphserver`, `comsol.exe mphclient`), or the sim COMSOL runtime when structured live introspection, shared Desktop collaboration, checkpointing, or plugin diagnostics are useful. Do not use for generic COMSOL theory.
+description: "Use when the user asks Codex, Claude Code, ChatGPT-style coding agents, or another AI agent to build, inspect, run, debug, or revise COMSOL Multiphysics / COMSOL Desktop models. Choose the simplest real COMSOL control path for the task: saved `.mph` inspection, local COMSOL documentation, direct COMSOL executables (`comsolbatch`, `comsolcompile`, `comsolmphserver`, `comsol.exe mphclient`), or the sim COMSOL runtime when structured live introspection, shared Desktop collaboration, checkpointing, or plugin diagnostics are useful. Do not use for generic COMSOL theory."
 ---
 
 # comsol-sim
@@ -273,6 +273,14 @@ A sim-managed batch lifecycle wrapper is not implemented; `sim connect
 when you need live introspection, incremental building, plugin diagnostics, or
 shared-desktop collaboration.
 
+On Windows, COMSOL batch logs may be UTF-16. If a normal read path reports the
+log as binary, decode it explicitly before deciding the run has no useful
+output:
+
+```powershell
+[System.Text.Encoding]::Unicode.GetString([System.IO.File]::ReadAllBytes($log))
+```
+
 ---
 
 ## Path-scoped guardrails
@@ -289,6 +297,10 @@ agent exploration while avoiding known COMSOL failure modes.
    Use chain-style `model.X("tag").Y("tag2")...` calls. Typed COMSOL node
    declarations such as `Component comp = ...` fail at compile time; see
    [`base/reference/java_batch_patterns.md`](base/reference/java_batch_patterns.md).
+   For heat-transfer smoke models, `HeatTransferInSolids` can be unavailable
+   on some installs; if batch output says `Unknown physics interface`, try the
+   installed docs or the more generic `HeatTransfer` interface before treating
+   COMSOL itself as unavailable.
 3. **Unfamiliar live properties or selections.**
    Probe the live node or local docs before mutation. Good probes include
    `uv run sim inspect comsol.node.properties:<target>`, the raw Java
