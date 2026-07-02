@@ -135,6 +135,29 @@ touchstone_summary("path/to/result.s1p", target_frequencies_ghz=[5.8], threshold
 Do not require `scikit-rf` just to compute minimum S-parameter, target-frequency
 values, or threshold bandwidth.
 
+### Long Solves, Sweeps, and Multi-Physics Coupling
+
+There is no dedicated resumable-sweep primitive and no automatic HFSS-to-Icepak
+coupling API, and none is planned. Drive both yourself with the generic
+primitives above instead of waiting for a purpose-built one:
+
+- **Multi-point sweeps**: run one point at a time through bounded `run()` /
+  `sim exec` calls. Use `session.health` / `hfss.solution.progress` between
+  points to tell "still converging" from "actually hung." A stuck point does
+  not require restarting the whole sweep — the AEDT project retains completed
+  points, so reconnect and continue from the next point.
+- **HFSS-to-Icepak coupling**: there is no supported automatic EM-Loss link.
+  Read per-object/per-frequency loss from HFSS through the same `run(code)`
+  scripting used for inspection, then feed the computed value into Icepak's
+  own (manual) heat-source assignment call. See
+  `sim-cookbook/hfss/examples/cpw_thermoelectric_rf_power_sensor/` for the
+  staged recipe (RF baseline -> manual heat source -> loss-driven heat source).
+
+Ask for a new driver primitive only when a generic gap actually blocks
+progress (for example, no timeout guard existed before v0.1.1) — not merely
+because a specific workflow would be more convenient with a dedicated
+shortcut.
+
 ## Monitoring and Evidence
 
 Use these inspections when available:
