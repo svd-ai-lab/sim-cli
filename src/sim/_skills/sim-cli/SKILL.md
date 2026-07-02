@@ -113,3 +113,17 @@ ask the operator to restart `sim serve` from a desktop session. The agent
 never starts `sim serve` itself.
 
 See [`gui/SKILL.md`](gui/SKILL.md) for the full GUI actuation API.
+
+---
+
+## Long-running and multi-stage workflows
+
+Do not wait for or request a dedicated per-task primitive (a resumable-sweep
+API, an auto-coupling feature, etc.) when the generic primitives already
+suffice. Bounded `exec`/`run` calls, `session.health` / solve-progress
+inspection, and the solver's own retained project/session state are enough to
+drive a long sweep, a multi-stage build, or a staged multi-physics coupling
+yourself, one bounded step at a time. Reach for a new dedicated primitive only
+when a real session hits a generic gap (no timeout guard, no liveness check,
+no process cleanup) — not to shortcut a specific workflow that a generic loop
+already covers.

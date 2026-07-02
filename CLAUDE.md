@@ -110,6 +110,16 @@ Create or update solver drivers in the owning `sim-plugin-<solver>` repository. 
 
 The core CLI should only change when the shared runtime contract or plugin discovery machinery changes. Before editing driver-facing docs or behavior, inspect the installed environment with `sim plugin list` and `sim plugin info <solver>`, then work in the plugin repo that owns that solver.
 
+**Prefer generic primitives over task-specific ones.** Before adding a new
+driver method purpose-built for one workflow (a resumable-sweep runner, an
+auto-coupling helper, etc.), check whether bounded `run(timeout_s=...)` +
+`health()`/progress inspection + the solver's own retained state already let
+the agent script that workflow step-by-step. Add a new dedicated primitive
+only for a genuine generic gap proven by a real session (missing timeout
+guard, no orphan-process cleanup, no liveness check) — not for workflow
+convenience alone. See `sim-studio-desktop` issues #62/#80 for the HFSS case
+this pattern was drawn from.
+
 ## Test Layout
 
 ```
