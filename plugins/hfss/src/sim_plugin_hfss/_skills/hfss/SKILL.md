@@ -22,8 +22,14 @@ same for every path.
 1. Run an HFSS/AEDT availability probe before launch or solve.
    - Use `sim check hfss` when `sim-cli` is available.
    - Acceptable alternatives: a PyAEDT import/version probe, AEDT executable
-     probe, Windows Registry/default-install probe, or vendor launcher/version
-     check.
+     path probe, Windows Registry/default-install probe, or environment variable
+     probe.
+   - When probing nested Python packages such as `ansys.aedt.core`, catch
+     `ModuleNotFoundError`; a missing top-level `ansys` package is evidence that
+     the control package is absent, not a reason to launch AEDT for discovery.
+   - Do not use `-help` on `ansysedt.exe`, `ansysedtsv.exe`, or `hfss.exe` as
+     an availability probe. AEDT Student can open a modal `Electronics Desktop
+     Student Help` window and block automation when launched this way.
    - Missing `sim-cli` is not evidence that AEDT/HFSS is missing.
 2. If no AEDT installation is found, stop and ask for an AEDT installation or
    `SIM_HFSS_AEDT_ROOT` path. Do not invent install paths.
@@ -152,6 +158,10 @@ fallback. Do not fabricate status.
 - AEDT Student installs use the student launcher and may expose version strings
   such as `2025.2SV`. The connector patches PyAEDT 0.26.x startup handling for
   this case, but direct scripts may need the same care.
+- If an `Electronics Desktop Student Help` dialog appears during automation,
+  close it, record the exact command, and remove `-help` from the probe path.
+  Use Registry/path/import checks for discovery, or run a real script
+  invocation when the task needs AEDT execution.
 - For small antenna feeds between curved conductors, do not rely on
   `lumped_port(..., create_port_sheet=True)` until the generated sheet has been
   visually or solver-message validated. HFSS can create a non-planar port sheet
