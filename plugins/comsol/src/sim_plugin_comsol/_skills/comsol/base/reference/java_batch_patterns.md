@@ -143,6 +143,35 @@ Do not waste turns inspecting JAR contents.
   Forgetting the `_src` toggle is the classic
   `Undefined material property` runtime error.
 
+## Failure-driven docs/probe loop
+
+You do not need to front-load documentation lookup for every batch recipe.
+For familiar patterns, it is often faster to write the smallest coherent
+`.java`, compile it, and let `comsolcompile`/`comsolbatch` expose the first
+real incompatibility.
+
+The intended loop is:
+
+```text
+write smallest script -> compile/run -> API-shape error ->
+local docs or smallest probe -> patch the formal script
+```
+
+Once the failure is about COMSOL API shape, switch modes instead of guessing:
+
+- Compile-time Java type or overload errors: fix the Java calling form first
+  (chain style, scalar vs. array overloads, strings with units).
+- Unknown physics interface, feature type, module capability, or example
+  workflow: use local COMSOL help search/retrieve.
+- Unknown property, non-editable node state, invalid selection, or missing
+  feature tag: create the smallest local probe model and print `tags()`,
+  `properties()`, `getType()`, `name()`, and selection entities for the exact
+  node.
+
+Do not convert one probe result into a permanent version table. Prefer updating
+the recipe to probe/confirm locally, or record the reusable rule that tells the
+next agent where to confirm the fact.
+
 ## Solver pattern
 
 ```java
@@ -202,6 +231,10 @@ System.out.println("T_max_K=" + tmax);
 | `Undefined material property "X"` at solve | feature uses material value but `<X>_src` not set to userdef | set `<X>_src` to `userdef` then `<X>` to actual value |
 | `Source_selection_not_meshed` | selection is empty or on wrong dim | check `.selection()` index list against `geom("geom1").feature("...").box(...)` first |
 | `Failed to solve linear system` | bad mesh / under-constrained physics | check BC count == DoF count |
+
+For `Unknown property`, `Unknown feature`, and non-editable node-state errors,
+do not add another guessed `set(...)` call. Use the failure-driven docs/probe
+loop above, then patch the batch recipe from the local evidence.
 
 When `comsolcompile` exits non-zero, the first 3 lines of its stderr name
 the line and column. Read those — the underlying issue is almost always

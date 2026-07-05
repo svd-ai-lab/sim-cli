@@ -17,6 +17,17 @@ Java API execution. Do not translate them to Java Shell or GUI automation.
 - Wrap exploratory calls in `try/except`; older COMSOL versions may lack
   optional helpers.
 - Keep probing snippets read-only and return data through `_result`.
+- You do not need to probe every node before writing code. If a compile or
+  batch run reports an unknown property, unknown feature, locked/non-editable
+  node state, or similar API-shape error, stop blind retries and run a
+  smallest-possible local probe or local doc search for that node.
+- For familiar paths, a fast write-run loop is fine: write the smallest script,
+  compile/run it, then use the first real COMSOL error as the routing signal.
+  The failure mode to avoid is repeated guessing after the first API-shape
+  error.
+- Treat probe output as host-local evidence, not as a new global API table.
+  Record durable guidance as "how to confirm" rather than hardcoding every
+  observed property name into version notes.
 
 ## Generic helpers
 
@@ -140,6 +151,39 @@ else:
 Do not record the resulting property list as a global truth. It is only
 confirmed for this COMSOL version, module set, physics interface, and
 feature type.
+
+## After an API-shape failure
+
+When COMSOL rejects a script because a property or selection is not valid,
+probe the exact node that failed before trying another full script. Keep the
+probe disposable and focused on the local model state:
+
+```python
+comp = model.component("comp1")
+phys = comp.physics("<physics_tag>")
+
+out = {
+    "physics_tags": tags(comp.physics()),
+    "features": tags(phys.feature()),
+}
+
+for feat_tag in out["features"]:
+    if isinstance(feat_tag, dict):
+        continue
+    feat = phys.feature(feat_tag)
+    out.setdefault("feature_details", {})[feat_tag] = {
+        "type": safe_call("getType", lambda feat=feat: feat.getType()),
+        "name": safe_call("name", lambda feat=feat: feat.name()),
+        "properties": props(feat),
+        "selection": safe_call("selection", lambda feat=feat: list(feat.selection().entities())),
+    }
+
+_result = out
+```
+
+Use local documentation search for names, capabilities, and examples. Use live
+or batch probes for the final answer on runtime details such as the actual
+feature tags, editable selections, and accepted property keys.
 
 ## Store provenance outside parameter values
 

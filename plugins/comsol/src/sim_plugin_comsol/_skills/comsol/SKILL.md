@@ -302,7 +302,11 @@ agent exploration while avoiding known COMSOL failure modes.
    installed docs or the more generic `HeatTransfer` interface before treating
    COMSOL itself as unavailable.
 3. **Unfamiliar live properties or selections.**
-   Probe the live node or local docs before mutation. Good probes include
+   You do not need to query docs before every edit; familiar paths can use a
+   fast write-run loop. If a COMSOL compile or batch run reports an unknown
+   property, unknown feature, or non-editable/invalid node state, stop blind
+   retries and confirm the exact node through local docs or live/local probes.
+   Good probes include
    `uv run sim inspect comsol.node.properties:<target>`, the raw Java
    `properties()` pattern, `tags()`, and `selection().entities()`.
 4. **Live exploratory builders.**
