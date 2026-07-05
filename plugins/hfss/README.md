@@ -37,6 +37,9 @@ Out of scope for this first version:
 
 - Detect PyAEDT Python scripts that instantiate HFSS.
 - Check whether AEDT appears to be installed on the host.
+- Run an experimental offline `.aedt`/zip-packaged `.aedtz` probe for project
+  names, design hints, variables, setups, ports/boundaries, lock files, and
+  `.aedtresults` sidecar progress without launching AEDT.
 - Start a PyAEDT-backed HFSS session in graphical or non-graphical mode when
   AEDT is available.
 - Execute bounded Python snippets against the active `hfss` object.
@@ -67,6 +70,20 @@ sim run --solver hfss path/to/script.py
 If `sim check hfss` reports that AEDT itself is unavailable, first confirm the
 Python package installed correctly, then fix the local AEDT installation,
 environment variables, or runtime prerequisites.
+
+## Experimental offline AEDT inspection
+
+For quick triage on a machine without AEDT, inspect a project file directly:
+
+```bash
+python -m sim_plugin_hfss.aedt_inspect path/to/project.aedt
+```
+
+The inspector does not import PyAEDT, launch AEDT, solve, or claim full format
+coverage. It scans text-like AEDT project payloads and zip-packaged `.aedtz`
+archives, then reports best-effort project/design hints plus `.aedt.lock` and
+`.aedtresults` sidecar status. Treat geometry, boundary semantics, and detailed
+setup values as low-confidence hints until checked against AEDT/PyAEDT.
 
 ## AEDT discovery
 

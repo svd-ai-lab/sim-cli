@@ -60,6 +60,22 @@ sim inspect hfss.setups.summary
 
 ## Common Workflows
 
+### Offline AEDT Project Probe
+
+When the user only needs quick inventory or triage from a saved project and
+AEDT may not be installed, use the experimental offline inspector before
+launching AEDT:
+
+```bash
+python -m sim_plugin_hfss.aedt_inspect path/to/project.aedt
+```
+
+It can report best-effort project/design hints, variables, setup and sweep
+names, port/boundary names, lock-file status, and `.aedtresults` sidecar
+progress. It does not solve, read field data, extract mesh connectivity, or
+provide authoritative geometry/boundary semantics. When accuracy matters,
+validate the same file through PyAEDT/AEDT inspections.
+
 ### Connect Through sim-cli
 
 ```bash
