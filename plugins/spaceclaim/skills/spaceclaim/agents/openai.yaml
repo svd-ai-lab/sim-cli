@@ -1,0 +1,4 @@
+interface:
+  display_name: "SpaceClaim"
+  short_description: "Prepare CAD with Ansys SpaceClaim"
+  default_prompt: "Use $spaceclaim to inspect CAD files and prepare a SpaceClaim geometry workflow."
