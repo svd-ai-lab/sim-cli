@@ -283,6 +283,32 @@ output:
 
 ---
 
+## Long-running execution and recovery
+
+Keep bounded COMSOL work in the foreground when it fits the active tool-call
+budget. Move a settled solve to native batch or a background process only when
+it is expected to outlive that budget, must continue across agent turns, or the
+user explicitly asks for background execution. Keep live sessions for
+incremental inspection and mutation; prefer `comsolbatch` for a settled,
+repeatable long solve.
+
+For a long batch run, use absolute `-batchlog` and `-outputfile` paths so the
+agent can inspect progress and results later. Do not require a fixed directory
+tree, a job manifest, or sim-cli when the direct COMSOL command is sufficient.
+
+A shell or tool timeout ends that observation call; it does not prove COMSOL
+stopped. Before retrying or stopping, check the existing process, batch-log
+tail, and output-file timestamps. Confirm process ownership from the
+executable, full command line, start time, and batch-log/output targets. Never
+terminate every `comsol` process by name.
+
+Use *resume* only when a saved `.mph` or another COMSOL-native checkpoint
+contains state that can actually continue the solve. Without a usable
+checkpoint, describe the action as a restart rather than promising generic
+resume behavior.
+
+---
+
 ## Path-scoped guardrails
 
 Use these guardrails in the path where they apply. They are meant to preserve
