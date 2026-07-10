@@ -35,3 +35,22 @@ def test_sim_specific_hard_constraints_are_scoped_to_live_sessions() -> None:
 def test_qa_only_skill_specs_are_not_bundled() -> None:
     assert not (SKILL_ROOT / "skill_tests").exists()
     assert not (SKILL_ROOT / "tests").exists()
+
+
+def test_long_running_guidance_preserves_direct_fluent_paths() -> None:
+    text = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
+    flat = " ".join(text.split())
+
+    assert "## Long-running execution and recovery" in text
+    assert "it does not prove Fluent stopped" in flat
+    assert "full command line, start time" in flat
+    assert (
+        "Never terminate every `fluent`, `ansys`, or `cortex` process" in flat
+    )
+    assert "Fluent-native checkpoint" in flat
+    assert "restart rather than promising generic resume" in flat
+    assert (
+        "Do not require a fixed directory tree, a job manifest, or sim-cli" in flat
+    )
+    assert "For direct PyFluent scripts, launch the session normally" in text
+    assert "always run Fluent in the background" not in text

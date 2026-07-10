@@ -80,6 +80,32 @@ program and you do not need a live agent-visible session between steps.
 For direct PyFluent scripts, launch the session normally with PyFluent and do
 not rely on sim-injected variables.
 
+## Long-running execution and recovery
+
+Keep bounded Fluent work in the foreground when it fits the active tool-call
+budget. Use a native journal, direct PyFluent script, or background process only
+when the solve is expected to outlive that budget, must continue across agent
+turns, or the user explicitly asks for background execution. Keep live sessions
+for incremental setup and inspection; use a settled script or journal for a
+repeatable long solve.
+
+For a long run, use absolute transcript/log and case/data output paths so the
+agent can inspect progress and results later. Do not require a fixed directory
+tree, a job manifest, or sim-cli when the direct Fluent or PyFluent path is
+sufficient.
+
+A shell or tool timeout ends that observation call; it does not prove Fluent
+stopped. Before retrying or stopping, check the Fluent/PyFluent process,
+transcript tail, monitor output, and case/data timestamps. Confirm process
+ownership from the executable, full command line, start time, and working or
+output paths. Never terminate every `fluent`, `ansys`, or `cortex` process
+by name.
+
+Use *resume* only when a usable `.cas/.dat(.h5)` pair, autosave, or another
+Fluent-native checkpoint can actually continue the calculation. Without one,
+describe the action as a restart rather than promising generic resume behavior.
+Keep direct PyFluent scripts responsible for their own launch and teardown.
+
 ## File-Side Artifact Review
 
 Before launching Fluent, inventory what is already present:
