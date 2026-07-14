@@ -1,211 +1,144 @@
 ---
 name: flotherm-sim
-description: Use when running Simcenter Flotherm thermal cases through the sim runtime. Primary path is GUI automation via pywinauto UIA (`.pack` import + FloSCRIPT playback). Direct batch (`translator.exe` + `solexe.exe`) is a headless optimization for re-solving existing projects only.
+description: Run, inspect, or troubleshoot Simcenter Flotherm thermal cases using the smallest verified local control path. Use for Flotherm installation checks, existing-project re-solves, .pack import, FloSCRIPT playback, model creation or modification, solver monitoring, and result extraction. Discover native and sim-cli capabilities before choosing a path; do not assume either is installed or connected.
 ---
 
-# flotherm-sim
+# Flotherm
 
-You are connected to **Simcenter Flotherm** via sim-cli. This file is
-the **index**. It tells you where to look for actual content — it does
-not contain the content itself.
+Control Simcenter Flotherm through the narrowest path that can produce the
+requested evidence. A bundled skill does not prove that Flotherm, a license,
+`sim-cli-core`, or `sim-plugin-flotherm` is installed.
 
-The `/connect` response told you which active layer applies via:
+## Start with capability discovery
 
-```json
-"skills": {
-  "root":               "<sim-plugin-flotherm>/_skills/flotherm",
-  "active_sdk_layer":   null,        // Flotherm has no Python SDK
-  "active_solver_layer":"2504"       // or "2412" / "2406"
-}
-```
+Use one or two bounded probes before choosing an execution path:
 
-Always read `base/`, then your active `solver/<version>/`. There is no
-`sdk/` overlay because Flotherm has no Python wrapper — the driver
-controls Flotherm via pywinauto UIA (Qt menu automation) + Win32
-ctypes (standard file dialogs).
+1. Identify the requested operation and input:
+   - installation or version lookup
+   - unchanged existing-project re-solve
+   - `.pack` import
+   - first-time model creation or modification
+   - solve monitoring or result extraction
+2. Inspect the current runtime directly:
+   - Flotherm install roots, `flotherm.bat`, `translator.exe`, and `solexe.exe`
+   - the requested project, `.pack`, FloSCRIPT, logs, and result directories
+   - interactive Windows desktop availability for GUI automation
+   - an already available `sim` command or matching project environment
+3. Choose a path from the table below. Do not install or download sim-cli merely
+   to answer an availability, location, version, or saved-result question.
 
----
+Do not infer that Flotherm is unavailable from a missing `sim` command. Do not
+search transient package-manager caches for old `sim.exe` files as a normal
+discovery path.
 
-## Execution paths
+## Choose the execution path
 
-### GUI automation — primary path (recommended)
+| Task | Preferred path | Why |
+|---|---|---|
+| Locate Flotherm or report its version | Direct filesystem, environment, or Registry probe | No control runtime is needed |
+| Inspect saved logs or result fields | Direct file reading | Avoid launching the solver |
+| Re-solve an existing, unchanged project in `FLOUSERDIR` | Native `translator.exe` + `solexe.exe` | Verified headless path |
+| Import a `.pack`, create a project, or modify model inputs | sim-cli GUI automation | Flotherm 2504 command-line FloSCRIPT playback is not verified end to end |
+| Diagnose driver/session health or capture structured GUI evidence | Existing sim-cli session | Uses the plugin's session and diagnostic surfaces |
 
-All vendor-documented CLI playback modes are broken in Flotherm 2504 (see `known_issues.md` ISSUE-001). GUI automation via pywinauto UIA is the only verified end-to-end working path for `.pack` import, FloSCRIPT playback, and first-time project creation/modification.
+If the selected path requires sim-cli but the command or Flotherm plugin is
+missing, explain the requirement and get the user's approval before downloading
+or installing packages. Prefer the user's existing project environment and a
+pinned public package source. Do not silently use a repository `main` branch for
+an ephemeral install.
 
-```bash
-uv run sim connect --solver flotherm --ui-mode gui     # launch Flotherm GUI (needs RDP/interactive desktop)
-uv run sim exec '<path>.pack'                          # import pack into GUI
-uv run sim exec 'solve'                                # run CFD solve
-uv run sim exec 'status'                               # query session state
-uv run sim disconnect                                  # kill all processes
-```
+## Native batch re-solve
 
-**Requirements**: `uv run sim serve` must run in an interactive desktop session (RDP, not SSH session 0). The GUI binary needs a real desktop to render Qt widgets.
-
-### Direct batch — headless optimization for re-solves only
-
-Bypasses floserv — calls translator and solver executables directly. Works from SSH with no interactive desktop, BUT only for projects that already exist in `FLOUSERDIR` (i.e., previously imported/created via the GUI path).
+Use this only for an existing project that has already been imported or created
+in `FLOUSERDIR` and does not need parameter or geometry changes:
 
 ```batch
-call flotherm.bat -env                              :: set environment only
-translator.exe -p "<FLOUSERDIR>\<project>.<GUID>" -n1   :: discretize model → msp_0
-solexe.exe -p "<FLOUSERDIR>\<project>.<GUID>"           :: run CFD solver
+call flotherm.bat -env
+translator.exe -p "<FLOUSERDIR>\<project>.<GUID>" -n1
+solexe.exe -p "<FLOUSERDIR>\<project>.<GUID>"
 ```
 
-**What this path can do**:
-- Re-solve an existing project with no parameter changes (e.g., crash recovery, rerun with different iteration count after manually editing `solver_control`)
-- Run on a Flotherm project that was originally imported via the GUI path
-- Fully headless, fully scriptable, works from SSH
+The native path can re-solve an existing project, including a crash-recovery
+rerun. It cannot import a `.pack`, create a project, or apply model changes.
 
-**What this path cannot do**:
-- Create a new project from scratch
-- Import a `.pack` file (needs GUI automation)
-- Modify model parameters (requires FloSCRIPT playback, which is broken in CLI)
-- Change geometry, materials, boundary conditions, power values, etc.
+Check the project log at `DataSets/BaseSolution/PDTemp/logit` and the expected
+result fields under `DataSets/BaseSolution/msp_*/end/`. Process exit alone is
+not engineering acceptance.
 
-**Solver log**: `<project>/DataSets/BaseSolution/PDTemp/logit`  
-**Result fields**: `<project>/DataSets/BaseSolution/msp_*/end/Temperature` etc.  
-**Solver variants**: `solexe.exe` (single), `solexed.exe` (double), `solexe_p.exe` (parallel)
+## sim-cli GUI automation
 
-### Decision rule
+Use this path when the task needs `.pack` import, FloSCRIPT playback, first-time
+creation, or model modification. It requires an interactive Windows desktop;
+Flotherm's Qt UI automation does not work in a non-interactive SSH session.
 
-- **Need to import a `.pack` or create/modify a project?** → GUI automation
-- **Just re-solving an existing unmodified project?** → Direct batch (faster, headless)
-- **Need model parameter modification headlessly?** → Not yet possible (see `known_issues.md` ISSUE-003)
+Use the package manager and environment already selected by the user. Typical
+commands, once `sim` and the matching plugin are verified, are:
 
-### How GUI automation works
-
-```
-uv run sim exec → driver.run() → _play_floscript(script_path)
-  ├─ subprocess: pywinauto UIA expand() Macro → invoke() Play FloSCRIPT
-  │  (invoke blocks due to modal dialog; subprocess killed after timeout)
-  └─ main process: Win32 ctypes fills file dialog → clicks Open
-```
-
-UIA runs in a **subprocess** to isolate COM state corruption from the
-server process. The file dialog is a standard Windows dialog, handled
-via `GetDlgItem(1148)` + `SendMessage(WM_SETTEXT)` + `BM_CLICK`.
-
----
-
-## base/ — always relevant
-
-| Path | What's there |
-|---|---|
-| `base/reference/floscript_modeling.md` | **FloSCRIPT model generation reference** — command vocabulary, patterns, step templates for building models from scratch via Claude. Includes the `project_run_script` chaining pattern and a pointer to the full 620-command catalogue. |
-| `base/reference/postprocessing.md` | **Result extraction reference** — FloSCRIPT export commands (Path A), direct binary read of `msp_*/end/<Field>` files (Path B, format verified), GUI export (Path C), plus copy-paste verification probes. |
-| `base/reference/error_codes.md` | **Triage table** for `E/<NNNNN>` / `W/<NNNNN>` / `I/<NNNNN>` codes seen in `floerror.log` and `WinXP\bin\LogFiles\logFile*.xml`. Read this when an `ok=false` result needs a retry-vs-fatal decision. |
-| `base/reference/headless_bootstrap_investigation.md` | **What's ruled out, what's open** for headless project authoring (overlay approach is dead; GUI bootstrap is the next experiment) and `<load_from_library>` `E/15001` (9 syntactic forms ruled out; recording oracle deferred). |
-| `base/reference/` | FloSCRIPT XML patterns, GUI control sequences, Win32 message recipes. |
-| `base/workflows/` | End-to-end demo runs of typical Phase A `.pack` cases. |
-| `base/docs/` | Background on the GUI-automation approach and why headless batch is broken upstream. |
-| `base/skill_tests/` | Skill QA cases (kept inside `base/` for flotherm because the GUI playback IS the skill — there's no separate Python control surface). |
-
-## solver/<active_solver_layer>/ — release specifics
-
-Empty stubs by default; per-release deltas land here as discovered.
-
-- `solver/2504/notes.md` — 2025.1, current
-- `solver/2412/notes.md` — 2024.4
-- `solver/2406/notes.md` — 2024.2
-
-## known_issues.md and tests/ (top-level)
-
-Top-level QA artifacts. `known_issues.md` documents the
-vendor-defect-broken headless batch mode. `tests/` is the pytest suite
-for the inline driver. Not loaded during a normal session.
-
----
-
-## Example files (reference only)
-
-This skill's workflow scripts and `skill_tests/` reference vendor-shipped
-demo models by the paths where they live inside a local Flotherm install.
-This skill does **not** bundle any of that content (it is
-proprietary Siemens / Mentor Graphics material and was removed under
-issue #2 for IP compliance). To reproduce the tests, point the helpers at
-your own Flotherm 2504 install — default on Windows is
-`C:\Program Files\Siemens\SimcenterFlotherm\2504\examples\` (override in
-`flotherm/tests/execution/run_helpers.ps1` if installed elsewhere).
-
-| File referenced in this skill | Location inside `…\2504\examples\` |
-|---|---|
-| `Mobile_Demo-Steady_State.pack` | `FloSCRIPT\Demonstration Examples\Transient Power Update\` |
-| `SuperPosition.pack` | `Demonstration Models\Superposition\` |
-| `Grid-HeatSinks-and-Fans.xml`, `Make_Tube.xml`, `linear-relaxation-setup.xml`, `Remove-All-Grid.xml`, `reset_solver_controls.xml` | `FloSCRIPT\Utilities\` and `FloSCRIPT\Demonstration Examples\Voxelization\` |
-| FloSCRIPT XSD schemas (`FloSCRIPTSchema.xsd`, `CommonCommands.xsd`, `CoreFloviewCommands.xsd`, …) | `FloSCRIPT\Schema\` |
-| `FloSCRIPT_Rack.cls` VBA module | `DCIM\` |
-
-For Flotherm 2410, the same subpaths apply under
-`C:\Program Files\Siemens\SimcenterFlotherm\2410\examples\`.
-
-## Model generation (building from scratch)
-
-To build a Flotherm model from a natural language description, generate
-FloSCRIPT XML step by step. See `base/reference/floscript_modeling.md`
-for the full command reference, common patterns, and pitfalls.
-
-```bash
+```powershell
+uv run sim check flotherm
 uv run sim connect --solver flotherm --ui-mode gui
-uv run sim lint step1.xml                          # XSD validates automatically
-uv run sim exec step1.xml                          # create geometry + save checkpoint
-uv run sim lint step2.xml
-uv run sim exec step2.xml                          # add sources + save checkpoint
-uv run sim exec 'solve'                            # run CFD
+uv run sim exec '<path>.pack'
+uv run sim exec 'solve'
+uv run sim exec 'status'
 uv run sim disconnect
 ```
 
-Each step is a separate FloSCRIPT file with `<project_save_as>` at the
-end for crash recovery. Lint before play — XSD validation catches
-typos and structural errors with line numbers.
+Keep the returned session id and pass it explicitly when commands do not share
+environment state. Let the driver own the Flotherm process while UI automation
+is active; concurrent user input can race with UI element discovery.
 
-## Hard constraints
+For model generation, write and lint small FloSCRIPT XML steps, execute one step
+at a time, and save a project checkpoint after each successful mutation. Read
+`base/reference/floscript_modeling.md` before authoring FloSCRIPT.
 
-1. **GUI must be visible.** The automation uses pywinauto UIA which
-   requires the Flotherm window to be in an interactive desktop session.
-   `uv run sim serve` must be started from RDP, not SSH.
-2. **Don't open Flotherm by hand while sim is using it.** UIA element
-   discovery races with user input. Let the driver own the lifecycle.
-3. **UIA must run in a subprocess.** `invoke()` on Qt menu items throws
-   COMError and corrupts COM state for the entire process. Always
-   isolate in `subprocess.Popen` with timeout.
-4. **Acceptance ≠ exit code.** Always extract a numeric (max temp,
-   junction-to-ambient ΔT) from the .pack output and validate against
-   the user's criterion.
+## Failure and retry rules
 
----
+- Preserve the first failing command, status, logs, and screenshot before
+  attempting a workaround.
+- After a GUI playback failure, inspect the session once and capture one visual
+  or log artifact when useful. Do not repeat an equivalent `exec` call unless a
+  specific state change addresses the failure.
+- Treat a missing file dialog, wrong foreground window, session mismatch, and
+  non-interactive desktop as distinct failure classes.
+- Use `plugin doctor --deep` only for a suspected plugin or protocol defect, not
+  as a routine response to a solver/UI failure.
+- Stop and report when the chosen path is unsupported, installation would be
+  required without approval, or one bounded diagnostic cycle does not identify
+  a corrective action.
+- Disconnect only the session owned by the task. Do not terminate every process
+  matching a generic Flotherm executable name.
 
-## Required protocol
+## Validation and evidence
 
-1. `uv run sim connect --solver flotherm --ui-mode gui` — launches Flotherm
-2. `uv run sim exec '<path>.pack'` — imports pack (uses `project_import` FloSCRIPT with `import_type="Pack File"`)
-3. `uv run sim exec 'solve'` — plays `<start start_type="solver"/>` FloSCRIPT
-4. Verify solve completed: check Message Window for `I/9001 - Solver stopped: steady solution converged`
-5. `uv run sim disconnect` — kills floserv, floview, flotherm
+Before mutation or solve:
 
----
+- confirm the exact input/project and Flotherm version
+- confirm that the chosen path supports the requested operation
+- define a result-based acceptance criterion
+- lint FloSCRIPT or inspect the existing project when applicable
 
-## GUI actuation
+Before claiming completion:
 
-Flotherm's driver is the original user of the UIA subprocess +
-Win32 file-dialog pattern. Starting with Phase 3 that pattern lives in
-[`sim.gui._win32_dialog`](../../sim-cli/src/sim/gui/_win32_dialog.py)
-and [`sim.gui._pywinauto_tools`](../../sim-cli/src/sim/gui/_pywinauto_tools.py),
-shared with every other driver. Flotherm's `_win32_backend.py` now
-imports from there — behaviour is unchanged, the code is no longer
-duplicated.
+- verify Flotherm's completion or convergence marker
+- inspect expected project, log, and result artifacts
+- extract a numeric engineering result when the task calls for one
+- report the execution path used and any checks that were skipped
 
-A `gui` object is **not** injected for Flotherm sessions because the
-driver's `play_floscript` helper already owns the UI interaction. If
-you need generic window actions (screenshot of the Message Window
-dock, a quick `list_windows()` to debug a launch), import the
-primitives directly:
+For GUI solves, look for the Flotherm message indicating that the steady solver
+stopped after convergence. For result extraction, read
+`base/reference/postprocessing.md`. For acceptance details, read
+`base/reference/acceptance_checklists.md`.
 
-```python
-from sim.gui import GuiController
-controller = GuiController(process_name_substrings=("flotherm", "flomain"))
-print(controller.list_windows())
-```
+## Load additional guidance only when needed
 
-See [the sim-cli `gui` skill](../sim-cli/gui/SKILL.md) for the
-full API reference.
+- FloSCRIPT modeling: `base/reference/floscript_modeling.md`
+- Result extraction: `base/reference/postprocessing.md`
+- Error-code triage: `base/reference/error_codes.md`
+- Headless authoring limitations: `base/reference/headless_bootstrap_investigation.md`
+- Runtime control patterns: `base/reference/runtime_patterns.md`
+- Known driver and vendor issues: `known_issues.md`
+- Release-specific differences: `solver/<detected-version>/notes.md`
+
+The version-specific layer is useful only after the installed Flotherm release
+has been detected. Do not assume a `/connect` response or active solver layer
+exists before capability discovery.
