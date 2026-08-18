@@ -33,7 +33,9 @@ uv run sim inspect session.summary
 The `session.versions` payload selects the active overlays. Always read
 `base/`, then the active `sdk/<active_sdk_layer>/`, then the active
 `solver/<active_solver_layer>/` when present. Later layers override earlier
-files with the same name.
+files with the same name. Require `version_source: active_runtime` before
+applying release-specific guidance; installed-version discovery alone does not
+prove which Fluent release the session launched or attached to.
 
 Expected SDK layer directories are:
 

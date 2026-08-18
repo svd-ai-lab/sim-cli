@@ -81,6 +81,9 @@ class _FakeSession:
     def exit(self) -> None:
         pass
 
+    def get_fluent_version(self) -> str:
+        return "25.2.0"
+
 
 def _install_fake_pyfluent(monkeypatch: pytest.MonkeyPatch) -> None:
     ansys = types.ModuleType("ansys")
@@ -104,7 +107,9 @@ def test_fluent_query_surface_reports_live_state(
 ) -> None:
     _install_fake_pyfluent(monkeypatch)
     driver = PyFluentDriver(sim_dir=tmp_path / ".sim")
-    driver.launch(mode="solver", ui_mode="no_gui", cwd=tmp_path)
+    launched = driver.launch(mode="solver", ui_mode="no_gui", cwd=tmp_path)
+    assert launched["solver_version"] == "25.2"
+    assert launched["sdk_version"] == "0.38.1"
     driver.run("_result = {'status': 'ok'}", label="smoke")
 
     summary = driver.query("session.summary")
@@ -179,6 +184,7 @@ def test_session_versions_uses_compatibility_layers(
     driver.launch(mode="solver", ui_mode="no_gui", cwd=tmp_path)
 
     versions = driver.query("session.versions")
+    assert versions["fluent"]["active_session"]["solver_version"] == "25.2"
     assert versions["compatibility"]["active_sdk_layer"] == "0.38"
     assert versions["compatibility"]["active_solver_layer"] == "25.2"
     assert versions["fluent"]["detected"][0]["version"] == "25.2"

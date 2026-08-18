@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import importlib.metadata as metadata
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -135,8 +136,15 @@ def _session_versions(runtime: "PyFluentRuntime", *, driver: object | None = Non
     pyfluent_version = _package_version("ansys-fluent-core")
     plugin_version = _package_version("sim-plugin-fluent")
     installs = _installed_summary(driver)
-    profile = _resolve_profile(installs, pyfluent_version)
     info = runtime.get_active_session()
+    active_solver_version = active_fluent_version(
+        None if info is None else info.session
+    )
+    profile = _resolve_profile(
+        installs,
+        pyfluent_version,
+        active_solver_version=active_solver_version,
+    )
 
     return {
         "driver": {
@@ -155,6 +163,7 @@ def _session_versions(runtime: "PyFluentRuntime", *, driver: object | None = Non
                 "session_id": info.session_id,
                 "solver_kind": info.mode,
                 "source": info.source,
+                "solver_version": active_solver_version,
             },
         },
         "compatibility": profile,
@@ -411,7 +420,12 @@ def _installed_summary(driver: object | None) -> list[dict]:
     return rows
 
 
-def _resolve_profile(installs: list[dict], pyfluent_version: str | None) -> dict | None:
+def _resolve_profile(
+    installs: list[dict],
+    pyfluent_version: str | None,
+    *,
+    active_solver_version: str | None = None,
+) -> dict | None:
     try:
         from sim.compat import load_compatibility_by_name  # noqa: PLC0415
 
@@ -420,6 +434,10 @@ def _resolve_profile(installs: list[dict], pyfluent_version: str | None) -> dict
         compat = None
     if compat is None:
         return None
+
+    if active_solver_version:
+        profile = compat.resolve(active_solver_version)
+        return None if profile is None else profile.to_dict()
 
     profile = None
     for install in installs:
@@ -434,6 +452,39 @@ def _resolve_profile(installs: list[dict], pyfluent_version: str | None) -> dict
         elif pyfluent_version.startswith("0.37"):
             profile = compat.profile_by_name("pyfluent_0_37_legacy")
     return None if profile is None else profile.to_dict()
+
+
+def normalize_runtime_fluent_version(value: object) -> str | None:
+    """Normalize a live ``get_fluent_version()`` value to ``YY.R``."""
+    if value is None:
+        return None
+    candidates = (
+        getattr(value, "value", None),
+        getattr(value, "name", None),
+        str(value),
+    )
+    for candidate in candidates:
+        if candidate is None:
+            continue
+        text = str(candidate).strip()
+        match = re.search(r"(?<!\d)(20)?(\d{2})[._](\d)(?:\.\d+)?", text)
+        if match:
+            return f"{match.group(2)}.{match.group(3)}"
+        match = re.search(r"\bv?(\d{3})\b", text, re.IGNORECASE)
+        if match:
+            code = match.group(1)
+            return f"{code[:2]}.{code[2]}"
+    return None
+
+
+def active_fluent_version(session: object | None) -> str | None:
+    method = _safe_get(session, "get_fluent_version")
+    if not callable(method):
+        return None
+    value, error = _call_safely(method)
+    if error is not None:
+        return None
+    return normalize_runtime_fluent_version(value)
 
 
 def _package_version(package: str) -> str | None:

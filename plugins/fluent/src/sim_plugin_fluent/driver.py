@@ -22,7 +22,7 @@ from sim.inspect import (
 from sim.runner import run_subprocess
 
 from .artifacts import classify_fluent_artifact
-from .queries import handle_query
+from .queries import active_fluent_version, handle_query
 from .runtime import PyFluentRuntime
 
 
@@ -522,6 +522,7 @@ class PyFluentDriver:
             session,
             launch_options=launch_options,
         )
+        solver_version = active_fluent_version(session)
         # Auto-enable GUI probes when the session is actually running with a
         # visible GUI. Headless (no_gui/hidden_gui) sessions don't benefit —
         # the screenshot would be blank and the dialog enum would find nothing
@@ -539,6 +540,8 @@ class PyFluentDriver:
             workdir=str(self._runtime.sim_dir),
         ) if gui_mode else None
         out = info.to_dict()
+        out["solver_version"] = solver_version
+        out["sdk_version"] = self._pyfluent_version
         out["health"] = self.health()
         return out
 
