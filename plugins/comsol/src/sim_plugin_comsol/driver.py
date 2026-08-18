@@ -270,6 +270,25 @@ def _read_install_version(install_dir: Path) -> str | None:
     return None
 
 
+def _active_comsol_version(
+    install_dir: Path,
+    *,
+    attach_only: bool = False,
+) -> str | None:
+    """Return the version of a server launched from ``install_dir``.
+
+    In attach-only mode the selected root identifies the local Java client, not
+    necessarily the external server, so it is not active-runtime evidence.
+    """
+    if attach_only:
+        return None
+    raw = _read_install_version(install_dir)
+    if not raw or raw == "?":
+        return None
+    parts = raw.split(".")
+    return ".".join(parts[:2]) if len(parts) >= 2 else raw
+
+
 # ─── install-dir finders ──────────────────────────────────────────────────
 
 
@@ -1820,6 +1839,7 @@ class ComsolDriver:
         self._server_owner = "external" if attach_only else "plugin"
 
         root = self._resolve_comsol_root(comsol_root)
+        solver_version = _active_comsol_version(Path(root), attach_only=attach_only)
         user = user or os.environ.get("COMSOL_USER", "")
         password = password or os.environ.get("COMSOL_PASSWORD", "")
         bin_dir = os.path.join(root, "bin", "win64")
@@ -1842,6 +1862,7 @@ class ComsolDriver:
             "model_tag": model_tag,
             "processors": processors,
             "comsol_root": root,
+            "solver_version": solver_version,
             "workspace": workspace,
             "cwd": cwd,
             "port": self._port,
@@ -2017,6 +2038,7 @@ class ComsolDriver:
             "session_id": self._session_id,
             "mode": "client-server",
             "source": "launch",
+            "solver_version": solver_version,
             "requested_ui_mode": requested_ui_mode,
             "ui_mode": effective_ui_mode,
             "effective_ui_mode": effective_ui_mode,

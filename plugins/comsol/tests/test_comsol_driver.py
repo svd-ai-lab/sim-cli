@@ -715,6 +715,20 @@ class TestDiscovery:
     finders stay intact and new layouts get a new function. Tests here
     pin both invariants."""
 
+    def test_active_runtime_version_comes_from_selected_root(self, tmp_path):
+        from sim_plugin_comsol import driver as comsol_driver_mod
+
+        (tmp_path / "readme.txt").write_text(
+            "COMSOL 6.2.0.415 README\n",
+            encoding="utf-8",
+        )
+
+        assert comsol_driver_mod._active_comsol_version(tmp_path) == "6.2"
+        assert (
+            comsol_driver_mod._active_comsol_version(tmp_path, attach_only=True)
+            is None
+        )
+
     def test_install_finder_chain_includes_macos(self):
         from sim_plugin_comsol import driver as comsol_driver_mod
         names = [f.__name__ for f in comsol_driver_mod._INSTALL_DIR_FINDERS]

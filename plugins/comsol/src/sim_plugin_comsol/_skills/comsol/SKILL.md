@@ -88,10 +88,14 @@ uv run sim inspect session.health
 Confirm `ui_capabilities.model_builder_live: true`,
 `active_model_tag`, and `live_model_binding.ok: true` before treating the GUI
 as synchronized with agent edits. The returned `session.versions` payload tells
-you which COMSOL-specific subfolders to load:
+you which COMSOL-specific subfolders to load. Require
+`version_source: active_runtime` before using release-specific notes; another
+COMSOL installation detected on the host is not evidence about this session:
 
 ```json
 "session.versions": {
+  "solver_version":       "6.4",
+  "version_source":       "active_runtime",
   "profile":             "mph_1_2_comsol_6_4",
   "active_sdk_layer":    null,        // single SDK line (mph 1.x), no overlay
   "active_solver_layer": "6.4"        // or "6.2" / "6.1" / "6.0"
