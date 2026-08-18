@@ -39,6 +39,7 @@ same for every path.
    project/design using the best available path:
 
 ```bash
+sim inspect session.versions
 sim inspect session.summary
 sim inspect hfss.project.identity
 sim inspect hfss.design.summary
@@ -46,6 +47,10 @@ sim inspect hfss.model.summary
 sim inspect hfss.boundaries.summary
 sim inspect hfss.setups.summary
 ```
+
+   Use release-specific API guidance only when `session.versions` reports
+   `version_source: active_runtime`. A newer AEDT installation detected on the
+   same host does not establish the version of the connected HFSS session.
 
    If you are not using `sim-cli`, collect equivalent project, design, object,
    boundary, port, setup, and sweep information through PyAEDT or AEDT APIs.

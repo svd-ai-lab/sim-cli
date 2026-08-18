@@ -239,6 +239,24 @@ def _version_from_path(path: Path) -> str:
     return "unknown"
 
 
+def _runtime_aedt_version(value: object) -> str | None:
+    """Normalize the version reported by the active PyAEDT application."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    if text.upper().endswith("SV"):
+        text = text[:-2]
+    match = re.search(r"20\d{2}\.\d+", text)
+    if match:
+        return match.group(0)
+    code = _VERSION_CODE_RE.search(text)
+    if code:
+        return _version_from_code(code.group(1))
+    return text
+
+
 def _find_aedt_executable(root: Path) -> Path | None:
     if root.is_file() and root.name.lower() in _AEDT_EXECUTABLE_NAMES:
         return root
@@ -1113,11 +1131,13 @@ class HfssDriver:
         self._last_timeout = None
         self._last_cleanup = None
         self._pyaedt_version = api.version
+        solver_version = _runtime_aedt_version(_safe_attr(hfss, "aedt_version_id"))
         self._launch_options = {
             **launch_kwargs,
             "ui_mode": normalized_ui,
             "mode": mode,
             "prepared_env": prepared_env,
+            "solver_version": solver_version,
             **kwargs,
         }
         return {
@@ -1127,6 +1147,8 @@ class HfssDriver:
             "ui_mode": normalized_ui,
             "non_graphical": non_graphical,
             "student_version": student_version,
+            "solver_version": solver_version,
+            "sdk_version": api.version,
             "pyaedt_version": api.version,
             "aedt_pid": runtime_pid,
             "owned_aedt_pids": sorted(self._owned_aedt_pids),

@@ -332,6 +332,8 @@ class TestSession:
         launched = driver.launch(ui_mode="no_gui", project="demo.aedt", design="HFSSDesign1")
 
         assert launched["ok"] is True
+        assert launched["solver_version"] == "2026.1"
+        assert launched["sdk_version"] == "0.26.3"
         assert FakeHfss.last_kwargs["non_graphical"] is True
         assert FakeHfss.last_kwargs["student_version"] is False
         assert FakeHfss.last_kwargs["project"] == "demo.aedt"
