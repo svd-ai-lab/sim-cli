@@ -96,6 +96,19 @@ default, which can I derive from the files in front of me?
 
 Do not start until every Category A field has an explicit value from the user.
 
+## First causal failure gate
+
+When a workflow fails, locate the first failed stage before changing the model:
+environment/license -> launch or attach -> file import -> model setup -> mesh or
+build -> solve -> postprocess/export. Preserve the first new error, the exact
+entrypoint, active version/profile, and relevant artifact identity; later errors
+may only be consequences.
+
+Run the smallest stage-specific probe that can confirm or reject one cause.
+Do not change physics, boundary conditions, mesh controls, or solver settings to
+work around an unproven environment, import, or setup failure. Retry only after
+naming the hypothesis and the evidence expected to change.
+
 ---
 
 ## Where `sim serve` runs (Windows session-context foot-gun)
