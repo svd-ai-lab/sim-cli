@@ -63,7 +63,11 @@ session was opened. On any failure, stop and report — do not silently retry.
 2. **Step-0 version/profile probe is mandatory.** After `sim connect`, call
    `sim inspect session.versions` and use the returned `profile` /
    `active_sdk_layer` / `active_solver_layer` to pick the right files in the
-   plugin skill. Before `sim run` or native one-shot execution, run the
+   plugin skill. Treat `solver_version` as active-runtime evidence only when
+   `version_source` is `active_runtime`; a detected installation is not proof
+   that the same version was launched. If the runtime version is unreported or
+   has no compatible profile, stop before applying version-specific guidance.
+   Before `sim run` or native one-shot execution, run the
    relevant probe for that path (`sim check <solver>`, plugin guidance, or the
    solver's native `--version` / license check). If a required profile is empty,
    unknown, or deprecated — **stop**.

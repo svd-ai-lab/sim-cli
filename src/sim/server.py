@@ -114,6 +114,8 @@ class SessionState:
     run_count: int = 0
     driver: Any = None
     runs: list[dict] = field(default_factory=list)
+    solver_version: str | None = None
+    sdk_version: str | None = None
     profile: str | None = None
     lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
@@ -225,24 +227,81 @@ def detect_solver(solver: str):
     }
 
 
-def _resolve_profile(driver, solver: str):
+def _resolve_profile(driver, solver: str, solver_version: str | None = None):
     """Best-effort lookup of which compat.yaml profile applies to the
-    detected install. Returns the Profile, or None on miss / failure.
-    Never raises.
+    active runtime or, for older drivers, the detected install. Returns the
+    Profile, or None on miss / failure. Never raises.
+
+    An explicit runtime version is authoritative. Do not silently select a
+    profile for a different detected installation when the launched solver is
+    unsupported.
     """
     from sim.compat import load_compatibility_by_name, safe_detect_installed
 
-    installs = safe_detect_installed(driver)
-    if not installs:
-        return None
     compat = load_compatibility_by_name(solver)
     if compat is None:
+        return None
+    if solver_version:
+        return compat.resolve(solver_version)
+    installs = safe_detect_installed(driver)
+    if not installs:
         return None
     for inst in sorted(installs, key=lambda i: i.version, reverse=True):
         profile = compat.resolve(inst.version)
         if profile is not None:
             return profile
     return None
+
+
+def _optional_version(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _profile_layers(profile_name: str | None) -> tuple[str | None, str | None]:
+    if not profile_name:
+        return None, None
+    from sim.compat import find_profile
+
+    found = find_profile(profile_name)
+    if found is None:
+        return None, None
+    _driver_name, profile = found
+    return profile.active_sdk_layer, profile.active_solver_layer
+
+
+def _session_versions_data(state: SessionState) -> dict:
+    """Return active-runtime version evidence for every session driver.
+
+    Driver-specific version queries may add richer fields, but the flat fields
+    below always describe the runtime registered by /connect. They must not be
+    inferred from another installation detected on the host.
+    """
+    driver_data: dict = {}
+    driver = state.driver
+    if driver is not None and hasattr(driver, "query"):
+        try:
+            candidate = driver.query("session.versions")
+        except Exception:
+            candidate = None
+        if isinstance(candidate, dict) and candidate.get("ok") is not False:
+            driver_data = dict(candidate)
+
+    active_sdk, active_solver = _profile_layers(state.profile)
+    return {
+        **driver_data,
+        "solver": state.solver,
+        "solver_version": state.solver_version,
+        "sdk_version": state.sdk_version,
+        "profile": state.profile,
+        "active_sdk_layer": active_sdk,
+        "active_solver_layer": active_solver,
+        "version_source": (
+            "active_runtime" if state.solver_version else "runtime_not_reported"
+        ),
+    }
 
 
 @app.post("/connect")
@@ -308,9 +367,18 @@ def connect(req: ConnectRequest):
         raise
     except Exception as e:
         raise HTTPException(500, f"failed to launch {req.solver}: {e}")
+    if not isinstance(info, dict):
+        raise HTTPException(500, f"failed to launch {req.solver}: invalid driver response")
+    if info.get("ok") is False:
+        error_code = str(info.get("error_code") or "RUN_FAILED")
+        message = str(info.get("message") or f"{req.solver} launch failed")
+        status_code = 400 if error_code == "SOLVER_NOT_INSTALLED" else 500
+        raise HTTPException(status_code, f"{error_code}: {message}")
 
     from sim.compat import skills_block_for_profile
-    profile = _resolve_profile(driver, req.solver)
+    solver_version = _optional_version(info.get("solver_version"))
+    sdk_version = _optional_version(info.get("sdk_version"))
+    profile = _resolve_profile(driver, req.solver, solver_version)
 
     sid = info.get("session_id") or f"s-{uuid.uuid4().hex[:8]}"
     state = SessionState(
@@ -326,6 +394,8 @@ def connect(req: ConnectRequest):
         run_count=0,
         driver=driver,
         runs=[],
+        solver_version=solver_version,
+        sdk_version=sdk_version,
         profile=profile.name if profile else None,
     )
     _register_session(state)
@@ -353,6 +423,8 @@ def connect(req: ConnectRequest):
             "launch_options": state.launch_options,
             "connected_at": state.connected_at,
             "run_count": 0,
+            "solver_version": state.solver_version,
+            "sdk_version": state.sdk_version,
             "profile": state.profile,
             "skills": skills_block_for_profile(req.solver, profile),
             "tools": tools,
@@ -428,10 +500,14 @@ def inspect(
                 "launch_options": state.launch_options,
                 "connected_at": state.connected_at,
                 "run_count": state.run_count,
+                "solver_version": state.solver_version,
+                "sdk_version": state.sdk_version,
                 "profile": state.profile,
                 "connected": True,
             },
         }
+    if name == "session.versions":
+        return {"ok": True, "data": _session_versions_data(state)}
     if name == "last.result":
         if not state.runs:
             return {"ok": True, "data": {"has_last_run": False}}
@@ -478,6 +554,8 @@ def ps():
             "launch_options": s.launch_options,
             "connected_at": s.connected_at,
             "run_count": s.run_count,
+            "solver_version": s.solver_version,
+            "sdk_version": s.sdk_version,
             "profile": s.profile,
         }
         for s in sessions

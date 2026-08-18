@@ -59,7 +59,11 @@ def client(monkeypatch):
         return None
 
     monkeypatch.setattr("sim.drivers.get_driver", _get_driver)
-    monkeypatch.setattr(srv, "_resolve_profile", lambda driver, solver: None)
+    monkeypatch.setattr(
+        srv,
+        "_resolve_profile",
+        lambda driver, solver, solver_version=None: None,
+    )
 
     # Reset global state in case another test left something
     srv._sessions.clear()
