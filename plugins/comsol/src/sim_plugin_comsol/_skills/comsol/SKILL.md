@@ -113,7 +113,7 @@ specific behavior matters.
 |---|---|
 | `base/workflows/block_with_hole/` | Steady-state thermal of a heated block with a cylindrical hole. 6 numbered Python steps (`00_create_geometry.py` … `05_plot_temperature.py`). The smallest plugin-owned smoke/reference workflow for this driver. |
 | `base/workflows/model_review_loop.md` | Checkpoint loop for live/incremental geometry, materials, physics, mesh, study, and results work. |
-| `base/workflows/debug_failed_exec.md` | Failure triage loop for a failed `uv run sim exec`: inspect `last.result`, inspect live model state, inspect suspicious node properties, then retry with the smallest patch. |
+| `base/workflows/debug_failed_exec.md` | Failure and divergence triage: preserve the first causal error, inspect live state, separate singular/setup/mesh/nonlinear causes, then retry one hypothesis at a time. |
 | `base/reference/runtime_introspection.md` | Live-session inspection contract: preferred `uv run sim inspect` targets, compatibility rules, partial results, and raw Java fallbacks. |
 | `base/reference/java_api_patterns.md` | Stable Java API probing patterns: tags first, properties before `set`, selection checks, and version-safe try/except snippets. |
 | `base/reference/java_batch_patterns.md` | Read before writing `.java` for `comsolcompile`: chain-style calls, anti-patterns that fail to compile, source-property toggles (`<prop>_src`), study/sol skeleton, KPI extraction via stdout, error triage. |

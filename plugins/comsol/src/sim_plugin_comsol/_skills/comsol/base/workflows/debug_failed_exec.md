@@ -50,6 +50,25 @@ failure and the live model state, then retry with the smallest patch.
 7. Retry with a small patch. Do not re-run a full builder unless the
    model state is intentionally being rebuilt from scratch.
 
+## Divergence or singular solve
+
+Do not begin by cycling solver knobs. Save the failing model and convergence
+record, then distinguish the failure class:
+
+| Class | Evidence to inspect first |
+|---|---|
+| Singular or underconstrained | Disconnected domains, unconstrained rigid modes, missing reference potential/pressure, empty selections, inactive constraints. |
+| Invalid setup or scaling | Units, material ranges, source signs, boundary compatibility, variable scaling, and initial values. |
+| Mesh-localized | Worst cells and their locations, thin gaps, interfaces, corners, boundary layers, and resolution of the leading gradient or wavelength. |
+| Nonlinear or coupled | First variable/residual that grows, invalid intermediate states, discontinuities, load jump, and the same physics solved separately. |
+
+Use the smallest discriminating run: zero or reduced load, one uncoupled physics
+block, a coarser valid mesh, or a short continuation step. Change one axis per
+run—initialization/load ramp, scaling, nonlinear controls, coupling, or mesh—so
+the result has a causal interpretation. A lower residual alone is not proof of
+a valid solution; also check conservation, boundary behavior, and the leading
+physical KPI against the last valid baseline.
+
 ## Minimal retry pattern
 
 Return enough information for the next decision:
