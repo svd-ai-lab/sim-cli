@@ -4,12 +4,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**sim** is a unified CLI + HTTP runtime that lets LLM agents (and engineers) launch, drive, and observe CAD/CAE simulations across multiple solvers through one consistent interface. It is the "container runtime for simulations" — agents talk to `sim`, `sim` talks to solvers.
+**sim** reads existing CAE files and turns them into structured text an agent can use, detects local solver installs, validates scripts, and can hold a live solver session open across steps. The `pyproject.toml` description — "Agent-native simulation asset parsing and CAD/CAE runtime" — states the priority correctly: parsing first, runtime second.
 
-The runtime supports two execution modes:
+**Know which tier you are working in, because their dependencies differ:**
 
-- **One-shot** (`sim run script --solver=X`): subprocess execution, result stored as a numbered run, `sim logs` to browse.
-- **Persistent session** (`sim serve` + `sim connect/exec/inspect/disconnect`): a long-lived HTTP server holds a live solver session; agents send code snippets and inspect state without restarting the solver.
+- **Asset parsing** (`sim scan`) — pure core, no plugin, no solver, no license. Backed by the `simparse` native extension, a hard dependency of `sim-cli-core`. This is the most-used capability in practice: agents can already drive solver GUIs directly, so the highest-value thing `sim` does today is recover engineering context from historical case files (a preprocessing step, closer to a document-to-structured-text converter than to a solver driver).
+- **Solver discovery and script validation** (`sim check`, `sim lint`) — require the solver's plugin. With no plugins installed, `check --all` reports "scanned 0 drivers" and `lint` errors with `No registered driver claims ...`.
+- **Execution** — requires a plugin, and comes in two modes:
+  - **One-shot** (`sim run script --solver=X`): subprocess execution, result stored as a numbered run, `sim logs` to browse.
+  - **Persistent session** (`sim connect/exec/inspect/disconnect`): a long-lived HTTP server holds a live solver session; agents send code snippets and inspect state without restarting the solver. `sim connect` auto-starts a local server when none is reachable (`session.py:_auto_start_server`), so `sim serve` is only needed explicitly for remote hosts — and `sim stop` is the counterpart that reaps that background process.
+
+This tiering is load-bearing for docs and error messages: never imply `sim scan` needs a plugin, and never imply `sim check` works without one.
 
 The shared runtime skill is bundled at `src/sim/_skills/sim-cli/` and synced into agent skill directories by `sim plugin sync-skills`. Per-solver agent skills ship inside their own `sim-plugin-<solver>` packages.
 
@@ -21,14 +26,19 @@ uv pip install -e ".[dev]"          # core + pytest + ruff
 
 # Tests
 pytest -q                            # unit tests (no solver needed)
-pytest tests/test_lint.py            # single test file
+pytest tests/base/test_scan.py       # single test file
 pytest -q -m integration             # integration tests (need solvers + sim serve)
 
 # Lint
 ruff check src/sim tests
 ruff check --fix src/sim tests
 
-# CLI
+# CLI — asset parsing (core only, no plugin/solver needed)
+sim --json scan ./historical-cases    # bounded summary, paths redacted
+sim --json scan model.mph --full --include-paths
+sim --json scan case.inp --format abaqus-inp   # force format for a named file
+
+# CLI — sessions
 sim serve --host 0.0.0.0             # start HTTP server (default port 7600)
 sim --host <ip> connect --solver <name> --mode solver --ui-mode gui
 sim --host <ip> exec "solver.settings.mesh.check()"
@@ -36,12 +46,18 @@ sim --host <ip> inspect session.summary
 sim --host <ip> screenshot -o shot.png
 sim --host <ip> disconnect
 
+sim disconnect                        # tear down the session
+sim stop                              # reap the auto-started local server
+
 sim run script.py --solver pybamm    # one-shot mode
 sim logs                              # list runs
 sim logs last --field voltage_V      # extract a parsed field
-sim check <name>                      # solver availability
-sim lint script.py                    # validate before running
+sim check <name>                      # solver availability (needs the plugin)
+sim lint script.py                    # validate before running (needs the plugin)
+sim --json describe                   # machine-readable command manifest
 ```
+
+**`--json` is a group-level flag and must precede the subcommand.** `sim --json describe` works; `sim describe --json` fails with `Error: No such option: --json`. The same applies to `--host`, `--port`, and `--session`. Note `docs/agent-readability.md` still shows the broken postfix form in two places.
 
 Environment variables: `SIM_HOST`, `SIM_PORT` (CLI client, also `[server]` in config), `SIM_HOME` (global config + history dir, default `~/.sim/`), `SIM_DIR` (project dir, default `./.sim/`).
 
@@ -50,7 +66,18 @@ Config files (issue #5): `~/.sim/config.toml` (global) + `.sim/config.toml` (pro
 ## Architecture
 
 ### CLI (`src/sim/cli.py`)
-Click app with subcommands: `serve`, `check`, `lint`, `run`, `connect`, `exec`, `inspect`, `ps`, `disconnect`, `screenshot`, `logs`. The session-related commands (`connect`/`exec`/`inspect`/`ps`/`disconnect`/`screenshot`) all delegate to `sim.session.SessionClient`, an HTTP client that talks to a running `sim serve`. The non-session commands (`run`, `lint`, `check`, `logs`) work locally without a server.
+Click app with subcommands: `serve`, `scan`, `check`, `lint`, `run`, `connect`, `exec`, `inspect`, `ps`, `disconnect`, `stop`, `screenshot`, `logs`, `config`, `init`, `setup`, `plugin`, `describe`. The session-related commands (`connect`/`exec`/`inspect`/`ps`/`disconnect`/`screenshot`) all delegate to `sim.session.SessionClient`, an HTTP client that talks to a running `sim serve`. The non-session commands (`scan`, `run`, `lint`, `check`, `logs`, `config`, `init`, `setup`, `plugin`, `describe`) work locally without a server.
+
+### Asset parsing (`src/sim/assets.py`)
+`sim scan` → `assets.scan_assets(paths, ...)`, which lazily imports the `simparse` native extension (`_load_simparse`) and calls `simparse.scan` / `simparse.inspect`. There is no Python-level parser here: `assets.py` handles path walking, redaction, bounding, and envelope shaping; all format knowledge lives in the compiled `simparse` wheel.
+
+Formats and their `--format` ids come from the `simparse` package metadata — check `simparse-<ver>.dist-info/METADATA` for the authoritative table rather than guessing, and re-check when the pinned range in `pyproject.toml` (`simparse>=0.3.2,<0.4`) moves. As of 0.3.2: COMSOL `.mph` (`comsol-mph`), Abaqus `.inp`/`.inc` (`abaqus-inp`), Fluent `.cas.h5`/`.msh.h5` (`fluent-hdf5`), Ansys Electronics Desktop `.aedt`/`.aedtz` (`hfss-aedt`), Ansys Mechanical `.mechdb`/`.mechdat` (`ansys-mechanical`), Icepak Classic `.tzr` (`icepak-tzr`), Simcenter FloTHERM `.pack`/`.xml`/`.floxml` (`flotherm-pack`, `flotherm-floxml`).
+
+Output contract (`schema_version: "sim.scan/v1"`), which agents depend on:
+- **Default (summary) view is bounded** — every list is wrapped as `{total, sample, truncated}` so a large directory scan cannot blow up an agent's context. `--full` returns plain lists and is documented for small input sets only.
+- **Absolute paths are redacted** unless `--include-paths` is passed. Preserve this default in any new output path.
+- `--format` is honored only for explicitly named files; directory scans always auto-detect.
+- Unparseable input yields `error_code: ASSET_FORMAT_UNSUPPORTED` inside the standard failure envelope, not an exception.
 
 ### HTTP server (`src/sim/server.py`)
 FastAPI app exposing:
@@ -127,18 +154,33 @@ tests/
   __init__.py
   conftest.py                        shared fixtures / execution paths
   base/                              core framework tests (no solver needed)
+    test_scan.py                     asset scanning contract (envelope, bounding, redaction)
     test_cli.py                      smoke tests for click commands
+    test_describe.py                 CLI manifest / self-describing surface
     test_compat.py                   skills layering / profile resolution
     test_config.py                   two-tier config resolution
+    test_init_setup.py               sim.toml init + setup, exit codes
     test_connect.py                  driver.connect() availability checks
     test_driver_discovery.py         entry-point plugin discovery
+    test_plugins.py                  plugin listing / info
+    test_plugin_install.py           retired-installer migration shim
+    test_protocol_conformance.py     DriverProtocol conformance
     test_history.py                  global run history persistence
     test_lint.py                     lint protocol coverage
+    test_lint_public_corpus.py       lint against a public script corpus
     test_logs.py                     sim logs CLI
     test_multi_session.py            session routing + concurrency
+    test_session_versions.py         session.versions inspect target
     test_run.py                      one-shot subprocess execution
+    test_python_floor_audit.py       minimum-Python-version audit
+  drivers/                           per-solver driver checks (skipped without the solver)
+  execution/                         end-to-end solver runs (integration marker)
+  gui/                               GUI facade + connect tool fields
+  inspect/                           inspect targets, probes, snippet timeouts
   fixtures/                          mock scripts and shared test assets
 ```
+
+Only `-m integration` tests need solvers; `pytest -q` runs green with no plugins installed.
 
 Solver plugin tests live in their own plugin repos. Tests in this repo cover the shared CLI/runtime contract and plugin discovery behavior.
 
