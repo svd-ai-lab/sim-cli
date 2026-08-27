@@ -34,7 +34,7 @@ def test_manifest_includes_every_top_level_command():
     m = _describe.build_manifest(main, version="0")
     names = {c["name"] for c in m["commands"]}
     # Spot-check a representative subset of expected commands
-    for required in ("run", "lint", "connect", "exec", "ps", "describe", "config"):
+    for required in ("scan", "run", "lint", "connect", "exec", "ps", "describe", "config"):
         assert required in names, f"missing command: {required}"
 
 
@@ -107,6 +107,13 @@ def test_error_envelope_schema_references_full_error_enum():
     env = _describe.SCHEMAS["ErrorEnvelope"]
     enum = env["properties"]["error_code"]["enum"]
     assert set(enum) == set(_describe.ERROR_CODES.keys())
+
+
+def test_scan_command_declares_its_output_schema():
+    entry = _describe.build_command_entry(main, "scan")
+    assert entry is not None
+    assert entry["output_schema"] == "ScanResult"
+    assert "ScanResult" in _describe.SCHEMAS
 
 
 # ── CLI invocation ──────────────────────────────────────────────────────────

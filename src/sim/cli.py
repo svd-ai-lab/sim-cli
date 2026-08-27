@@ -627,6 +627,45 @@ def exec_cmd(ctx, code, code_file, label):
             sys.exit(2)
 
 
+# ── scan (historical simulation assets) ──────────────────────────────────────
+
+@main.command()
+@click.argument("paths", nargs=-1, required=True, type=click.Path(path_type=Path))
+@click.option("--recursive/--no-recursive", default=True, show_default=True,
+              help="Descend into subdirectories.")
+@click.option("--include-paths", is_flag=True, default=False,
+              help="Include absolute source paths. Paths are redacted by default.")
+@click.option("--full", is_flag=True, default=False,
+              help="Return full parser output instead of bounded summaries.")
+@click.option("--limit", type=click.IntRange(min=0), default=100, show_default=True,
+              help="Maximum assets and diagnostics returned; 0 means unlimited.")
+@click.option("--format", "format_name", default="auto", show_default=True,
+              help="Force a format for explicit files; directory scans always auto-detect.")
+@click.pass_context
+def scan(ctx, paths, recursive, include_paths, full, limit, format_name):
+    """Parse historical simulation files and directories without launching a solver.
+
+    The default summary view is bounded and redacts absolute paths. Use --full
+    only when an agent needs the complete parser result for a small input set.
+    """
+    from sim.assets import render_scan, scan_assets
+
+    payload, exit_code = scan_assets(
+        paths,
+        recursive=recursive,
+        include_paths=include_paths,
+        full=full,
+        limit=limit,
+        format_name=format_name,
+    )
+    if ctx.obj["json"]:
+        click.echo(json_mod.dumps(payload, indent=2, default=str))
+    else:
+        click.echo(render_scan(payload), err=not payload.get("ok", False))
+    if exit_code:
+        sys.exit(exit_code)
+
+
 # ── inspect (live session state) ─────────────────────────────────────────────
 
 @main.command()

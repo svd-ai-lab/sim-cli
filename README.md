@@ -4,14 +4,15 @@
 
 <br>
 
-**sim-cli lets AI agents operate CAE solvers one verified step at a time.**
+**sim-cli lets AI agents understand existing simulation assets and operate CAE
+solvers one verified step at a time.**
 
 `sim` is an open-source CLI and local runtime that lets Codex, Claude Code,
-GitHub Copilot, Gemini, and other agents work with simulation software through
-solver-specific plugins and bundled skills. An agent can check what is
-installed, connect to a solver, inspect live state, execute bounded modeling
-or analysis steps, verify result/state, and save checkpoints/artifacts for
-engineering review.
+GitHub Copilot, Gemini, and other agents parse historical simulation cases,
+recover their engineering context, and continue work through solver-specific
+plugins and bundled skills. An agent can scan existing assets without launching
+a solver, then connect to simulation software, inspect live state, execute
+bounded steps, verify results, and save reviewable artifacts.
 
 <p align="center">
   <a href="#quick-start-agent-setup"><img src="https://img.shields.io/badge/Quick_Start-agent_setup-3b82f6?style=for-the-badge" alt="Quick Start"></a>
@@ -27,7 +28,7 @@ engineering review.
   <img src="https://img.shields.io/badge/status-alpha-f97316" alt="Status: alpha">
 </p>
 
-[Quick Start](#quick-start-agent-setup) · [COMSOL + Codex](#example-comsol-and-codex-on-one-machine) · [Agent Loop](#the-agent-loop) · [Remote Solvers](#local-vs-remote-solvers) · [Plugins](#solver-plugins) · [Commands](#common-commands)
+[Historical Assets](#parse-historical-simulation-assets) · [Quick Start](#quick-start-agent-setup) · [COMSOL + Codex](#example-comsol-and-codex-on-one-machine) · [Agent Loop](#the-agent-loop) · [Remote Solvers](#local-vs-remote-solvers) · [Plugins](#solver-plugins) · [Commands](#common-commands)
 
 </div>
 
@@ -56,8 +57,9 @@ Plugin authoring, runtime internals, and driver protocol details live in
 LLMs can often write solver scripts, but a one-shot script is a weak workflow:
 it hides intermediate state, fails late, and makes recovery difficult.
 
-`sim` gives an agent a small, composable control surface: detect the
-environment, attach to a live session, inspect state, run one bounded step,
+`sim` gives an agent a small, composable control surface: scan historical case
+files, recover their metadata and model inventory, decide what needs deeper
+inspection, then optionally attach to a live solver, run one bounded step,
 verify, and checkpoint. Use solver-native batch commands directly when they are
 the right execution primitive.
 
@@ -73,6 +75,24 @@ plugins. A plugin can provide both:
 - a **driver**, so `sim` can launch or talk to the solver
 - a **skill**, so the agent knows the solver-specific workflow, pitfalls, and
   inspection rules
+
+## Parse historical simulation assets
+
+Parsing is built into `sim-cli-core`; it does not require a solver plugin or a
+running solver. The default output is a bounded summary suitable for an agent,
+and absolute paths are redacted unless `--include-paths` is set.
+
+```bash
+uv add sim-cli-core
+uv run sim --json scan ./historical-cases
+uv run sim --json scan model.mph --full --include-paths
+```
+
+`sim scan` recognizes COMSOL, Abaqus, Fluent, Ansys Electronics Desktop
+(HFSS/Icepak), Ansys Mechanical, Icepak Classic, and Simcenter FloTHERM assets.
+It reads lightweight metadata and inventory without launching vendor software.
+Use `--limit`, `--no-recursive`, and `--format` to bound or disambiguate a scan.
+`sim inspect` remains the separate command for querying a live solver session.
 
 ## Human-in-the-loop collaboration
 
@@ -100,7 +120,9 @@ project's installed solver plugins. Run from the project root:
 
 ```bash
 uv init  # only if this is not already a uv project
-uv add sim-cli-core sim-plugin-comsol
+uv add sim-cli-core
+uv run sim --json scan ./historical-cases
+uv add sim-plugin-comsol  # only when live COMSOL control is needed
 uv run sim plugin sync-skills --target .agents/skills --copy
 uv run sim check comsol
 uv run sim plugin doctor comsol --deep
@@ -289,6 +311,7 @@ uv run sim plugin sync-skills --target .agents/skills --copy  # or .claude/skill
 
 | Command | Use it for |
 |---|---|
+| `uv run sim --json scan <path>...` | Parse historical simulation assets without launching a solver. |
 | `uv run sim plugin list` | Show plugins visible in this project environment. |
 | `uv run sim plugin info <solver>` | Show plugin metadata and compatibility summary. |
 | `uv run sim plugin doctor <solver> --deep` | Check plugin wiring plus local solver detection. |

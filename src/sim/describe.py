@@ -38,6 +38,12 @@ _EXAMPLES: dict[str, list[dict[str, str]]] = {
         {"cmd": "sim check --all", "summary": "Detect every installed solver."},
         {"cmd": "sim check coolprop --json", "summary": "Detect one driver, JSON output."},
     ],
+    "scan": [
+        {"cmd": "sim --json scan ./historical-cases",
+         "summary": "Parse a directory into bounded, machine-readable asset summaries."},
+        {"cmd": "sim --json scan model.mph --full --include-paths",
+         "summary": "Return the full parser result for one explicit asset."},
+    ],
     "lint": [
         {"cmd": "sim lint script.py --solver gmsh",
          "summary": "Validate a script before running it."},
@@ -158,6 +164,14 @@ ERROR_CODES: dict[str, str] = {
         "A driver returned a value that doesn't match DriverProtocol.",
     "NONINTERACTIVE_INPUT_REQUIRED":
         "--no-interactive is set and the command would otherwise prompt.",
+    "ASSET_SCAN_FAILED":
+        "A simulation asset or directory could not be read or parsed.",
+    "ASSET_FORMAT_UNSUPPORTED":
+        "An explicitly requested file is not a supported simulation asset format.",
+    "ASSET_PATH_NOT_FOUND":
+        "A requested simulation asset path does not exist.",
+    "SIMPARSE_UNAVAILABLE":
+        "The required native simparse dependency could not be loaded on this platform.",
 }
 
 
@@ -238,6 +252,45 @@ SCHEMAS: dict[str, dict[str, Any]] = {
             "solver_name": {"type": "string"},
         },
     },
+    "ScanResult": {
+        "type": "object",
+        "description": "Bounded result of a read-only historical simulation asset scan.",
+        "properties": {
+            "schema_version": {"const": "sim.scan/v1"},
+            "ok": {"const": True},
+            "status": {"enum": ["ok", "partial"]},
+            "engine": {
+                "type": "object",
+                "properties": {
+                    "name": {"const": "simparse"},
+                    "version": {"type": "string"},
+                },
+            },
+            "request": {"type": "object"},
+            "summary": {
+                "type": "object",
+                "properties": {
+                    "roots": {"type": "integer"},
+                    "assets": {"type": "integer"},
+                    "ok": {"type": "integer"},
+                    "failed": {"type": "integer"},
+                    "formats": {"type": "object"},
+                    "returned": {"type": "integer"},
+                    "omitted": {"type": "integer"},
+                    "diagnostics": {"type": "integer"},
+                    "diagnostics_omitted": {"type": "integer"},
+                },
+            },
+            "assets": {"type": "array", "items": {"type": "object"}},
+            "diagnostics": {"type": "array", "items": {"type": "object"}},
+            "truncated": {"type": "boolean"},
+        },
+    },
+}
+
+
+_OUTPUT_SCHEMAS: dict[str, str] = {
+    "scan": "ScanResult",
 }
 
 
@@ -284,6 +337,8 @@ def _describe_command(name: str, cmd: click.Command) -> dict[str, Any]:
         "params": [_describe_param(p) for p in cmd.params],
         "examples": _EXAMPLES.get(canonical, []),
     }
+    if canonical in _OUTPUT_SCHEMAS:
+        entry["output_schema"] = _OUTPUT_SCHEMAS[canonical]
     return entry
 
 

@@ -62,6 +62,10 @@ top-level keys (`stdout`, `stderr`); never inside `message`.
 | `PLUGIN_INSTALL_RETIRED` | A retired plugin package mutation command was invoked; use `uv add` / `uv remove` instead. |
 | `PROTOCOL_VIOLATION` | A driver returned a value that doesn't match `DriverProtocol`. |
 | `NONINTERACTIVE_INPUT_REQUIRED` | `--no-interactive` is set and the command would otherwise prompt. |
+| `ASSET_SCAN_FAILED` | A simulation asset or directory could not be read or parsed. |
+| `ASSET_FORMAT_UNSUPPORTED` | An explicitly requested file is not a supported simulation asset format. |
+| `ASSET_PATH_NOT_FOUND` | A requested simulation asset path does not exist. |
+| `SIMPARSE_UNAVAILABLE` | The required native `simparse` dependency could not be loaded on this platform. |
 
 This list is closed: adding a new code requires updating this doc, the CLI,
 and the JSON schema emitted by `sim describe --error-codes`.

@@ -696,7 +696,7 @@ wheels = [
 
 [[package]]
 name = "sim-cli-core"
-version = "0.3.7"
+version = "0.3.8"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
@@ -707,6 +707,7 @@ dependencies = [
     { name = "psutil", marker = "sys_platform == 'win32'" },
     { name = "pywinauto", marker = "sys_platform == 'win32'" },
     { name = "pyyaml" },
+    { name = "simparse" },
     { name = "tomli", marker = "python_full_version < '3.11'" },
     { name = "uvicorn" },
 ]
@@ -729,10 +730,22 @@ requires-dist = [
     { name = "pywinauto", marker = "sys_platform == 'win32'", specifier = ">=0.6.8" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4" },
+    { name = "simparse", specifier = ">=0.3.2,<0.4" },
     { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2.0" },
     { name = "uvicorn", specifier = ">=0.34" },
 ]
 provides-extras = ["dev"]
+
+[[package]]
+name = "simparse"
+version = "0.3.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/64/00/eda560b639c67b43c4511bbed178fd4898460f7707e854155c8ca6e2e791/simparse-0.3.2.tar.gz", hash = "sha256:cc7b907226a919bc1e681f300d9b36b232b293b158854c041a06225d0d98b27e", size = 41908, upload-time = "2026-08-27T11:55:10.862Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/fd/cb/e9f38085801c819b85def92de2947b89cb9848d18867b7991d602ce85d71/simparse-0.3.2-cp39-abi3-macosx_11_0_arm64.whl", hash = "sha256:54a360440b27f9cdae945abc5c79c4eb014a0e27bae1bf7a55344ad5a20a80a0", size = 1011780, upload-time = "2026-08-27T11:55:30.717Z" },
+    { url = "https://files.pythonhosted.org/packages/36/78/931d81c1e7bef1a82b947bef574947b48b8f2bb27874f83dffe62b30c4a0/simparse-0.3.2-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:c4f5d263990f8996fa448d2f008e347a08aa02ee91a15962e5389c29df21b419", size = 1089038, upload-time = "2026-08-27T11:55:09.007Z" },
+    { url = "https://files.pythonhosted.org/packages/9c/09/03ec2344d9258095c7ee3224e7db55ed2ddaf6b78099dcfb6a213289abf0/simparse-0.3.2-cp39-abi3-win_amd64.whl", hash = "sha256:601470daf0a67c2354222bd480df783ed39ba2d21897867151cca3f7d42d5d25", size = 984151, upload-time = "2026-08-27T11:55:20.415Z" },
+]
 
 [[package]]
 name = "six"

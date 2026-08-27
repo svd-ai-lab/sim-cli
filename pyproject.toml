@@ -1,7 +1,7 @@
 [project]
 name = "sim-cli-core"
-version = "0.3.7"
-description = "Make every engineering tool agent-native — a CLI runtime that lets LLM agents launch, drive, and observe CAD/CAE software"
+version = "0.3.8"
+description = "Agent-native simulation asset parsing and CAD/CAE runtime"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
@@ -30,6 +30,7 @@ classifiers = [
 # corresponding plugin's install, or directly by the user. compat.yaml
 # documents which combinations are supported.
 dependencies = [
+    "simparse>=0.3.2,<0.4",
     "click>=8.0",
     "httpx>=0.28",
     "fastapi>=0.115",
