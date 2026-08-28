@@ -1,6 +1,6 @@
 [project]
 name = "sim-cli-core"
-version = "0.3.8"
+version = "0.3.9"
 description = "Agent-native simulation asset parsing and CAD/CAE runtime"
 readme = "README.md"
 license = "Apache-2.0"
