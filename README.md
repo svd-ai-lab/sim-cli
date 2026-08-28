@@ -66,9 +66,9 @@ walk, and `--format` to force a format for an explicitly named file.
 ## Example: what's in this folder?
 
 ```text
-Scan ./legacy-cases and tell me which models are thermal, which already have
-solved results, and which reference materials we no longer have licenses for.
-Use `uv run sim --json scan`.
+Scan ./legacy-cases and tell me which models are package-level thermal
+studies, which already have solved results, and what total power each one
+assumes. Use `uv run sim --json scan`.
 ```
 
 ## Find solvers and validate scripts
@@ -121,24 +121,8 @@ maximum junction temperature. Use the installed COMSOL skill. If you need a
 visible COMSOL Desktop session, connect with `--ui-mode gui`.
 ```
 
-## Remote solvers
-
-The same machine needs no `--host`. For a solver workstation, lab box, or HPC
-login node, install `sim-cli-core` and the plugin there and run:
-
-```bash
-# On the solver host.
-uv run sim serve --host 0.0.0.0 --port 7600
-
-# On the agent machine.
-uv run sim --host <solver-host-ip> connect --solver <solver>
-uv run sim --host <solver-host-ip> inspect session.summary
-uv run sim --host <solver-host-ip> disconnect
-```
-
-**Only bind `sim serve` to a trusted network** such as a VPN, Tailscale, or a
-protected LAN. The runtime has no auth layer, and `/connect` plus `/exec` can
-execute solver-side code.
+Running the solver on a different host — and the security constraints that come
+with it — is covered in [docs/remote-solvers.md](docs/remote-solvers.md).
 
 ## Solver plugins
 
@@ -199,6 +183,8 @@ names remain the property of their respective owners.
   protocol, and architecture notes
 - [docs/plugin-install.md](docs/plugin-install.md) — plugin installation and
   `sim.toml` reference
+- [docs/remote-solvers.md](docs/remote-solvers.md) — running the solver on
+  another host, and the security constraints that apply
 - [docs/why-cli-first.md](docs/why-cli-first.md) — why a CLI rather than MCP
 - [CONTRIBUTING.md](CONTRIBUTING.md) — branch, test, and PR workflow
 
