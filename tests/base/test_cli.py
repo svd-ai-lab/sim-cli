@@ -174,7 +174,7 @@ def test_run_success_also_lists_workspace_delta(tmp_path, monkeypatch):
     # the fix. Without it the agent doesn't know where the solver wrote.
     assert "[sim] workspace files written" in result.output
     assert "log.simpleFoam" in result.output
-    assert "postProcessing/sample/100/U.csv" in result.output
+    assert "postProcessing/sample/100/U.csv" in result.output.replace("\\", "/")
     # Drill-in hints also fire on success.
     assert "for more detail" in result.output
 
