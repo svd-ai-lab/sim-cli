@@ -402,7 +402,7 @@ class TestSession:
         assert launched["owned_aedt_pids"] == []
         driver.disconnect()
 
-    def test_exec_timeout_quarantines_session_and_kills_owned_pid(
+    def test_exec_timeout_quarantines_control_and_preserves_owned_pid(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         driver = HfssDriver()
@@ -434,11 +434,53 @@ class TestSession:
 
         assert run["ok"] is False
         assert run["hung"] is True
+        assert run["quarantined"] is True
         assert run["timeout"]["timeout_s"] == 0.001
-        assert run["cleanup"]["reason"] == "timeout"
-        assert killed == [4242]
-        assert FakeHfss.release_calls
-        assert driver.query("session.health")["connected"] is False
+        assert run["recovery"]["mode"] == "control-detached-solver-preserved"
+        assert run["recovery"]["owned_aedt_pid_alive"] == {"4242": True}
+        assert killed == []
+        assert FakeHfss.release_calls == []
+        health = driver.query("session.health")
+        assert health["connected"] is False
+        assert health["quarantined"] is True
+        assert health["code"] == "hfss.session.quarantined"
+        assert health["owned_aedt_pids"] == [4242]
+        assert health["owned_aedt_pid_alive"] == {"4242": True}
+
+        disconnected = driver.disconnect()
+        assert disconnected["cleanup"]["mode"] == "quarantined-control-only"
+        assert alive[4242] is True
+        assert killed == []
+
+    def test_reattach_forwards_exact_pid_and_disconnect_does_not_close_desktop(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        driver = HfssDriver()
+        monkeypatch.delenv("ANSYSEM_ROOT261", raising=False)
+        monkeypatch.setattr(FakeHfss, "runtime_pid", 4242)
+        monkeypatch.setattr(driver, "detect_installed", lambda: [_install()])
+        monkeypatch.setattr(drv, "_aedt_process_pids", lambda: {4242})
+        monkeypatch.setattr(drv, "_pid_is_alive", lambda pid: pid == 4242)
+        monkeypatch.setattr(
+            drv,
+            "_try_import_pyaedt",
+            lambda: drv._PyaedtApi(Desktop=None, Hfss=FakeHfss, version="0.26.3"),
+        )
+
+        launched = driver.launch(
+            ui_mode="no_gui",
+            new_desktop=False,
+            aedt_process_id=4242,
+        )
+
+        assert launched["ok"] is True
+        assert FakeHfss.last_kwargs["aedt_process_id"] == 4242
+        assert launched["owned_aedt_pids"] == []
+        disconnected = driver.disconnect()
+        assert disconnected["ok"] is True
+        assert disconnected["cleanup"]["mode"] == "control-only"
+        assert disconnected["cleanup"]["close_desktop"] is False
+        assert FakeHfss.release_calls[-1]["close_desktop"] is False
 
     def test_default_timeout_is_disabled_for_solve_snippets(
         self, monkeypatch: pytest.MonkeyPatch

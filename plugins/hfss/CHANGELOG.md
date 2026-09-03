@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Quarantine only the timed-out Python control handle while preserving tracked
+  AEDT processes and PID liveness evidence.
+- Forward PyAEDT's `aedt_process_id` attach option through the existing sim-cli
+  driver-option surface.
+- Avoid closing an AEDT desktop when disconnecting a non-owning attached
+  control session.
+
 ## 0.1.1 - 2026-06-26
 
 - Add bounded HFSS control-plane exec timeouts with timeout cleanup for owned AEDT sessions.

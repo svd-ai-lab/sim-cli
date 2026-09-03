@@ -43,6 +43,8 @@ Out of scope for this first version:
 - Start a PyAEDT-backed HFSS session in graphical or non-graphical mode when
   AEDT is available.
 - Execute bounded Python snippets against the active `hfss` object.
+- Preserve and reattach an Agent-owned AEDT process by PID when a bounded
+  Python control call times out.
 - Inspect session, project, and design summaries before continuing.
 - Run complete PyAEDT Python scripts through `sim run --solver hfss`.
 

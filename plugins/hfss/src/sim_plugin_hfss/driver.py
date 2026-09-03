@@ -917,9 +917,12 @@ class HfssDriver:
         self._last_run: dict | None = None
         self._last_timeout: dict | None = None
         self._last_cleanup: dict | None = None
+        self._last_quarantine: dict | None = None
         self._pyaedt_version: str | None = None
         self._launch_options: dict[str, object] = {}
         self._owned_aedt_pids: set[int] = set()
+        self._owns_aedt_process = False
+        self._quarantined = False
 
     @property
     def name(self) -> str:
@@ -1037,6 +1040,7 @@ class HfssDriver:
         machine: str = "",
         port: int = 0,
         new_desktop: bool = True,
+        aedt_process_id: int | None = None,
         close_on_exit: bool = False,
         student_version: bool | None = None,
         **kwargs: object,
@@ -1090,12 +1094,14 @@ class HfssDriver:
             "student_version": student_version,
             "machine": machine,
             "port": port,
+            "aedt_process_id": aedt_process_id,
         }
         launch_kwargs = {k: v for k, v in launch_kwargs.items() if v not in {None, ""}}
         owns_aedt_process = self._should_own_aedt_process(
             new_desktop=new_desktop,
             machine=machine,
             port=port,
+            aedt_process_id=aedt_process_id,
         )
         before_aedt_pids = _aedt_process_pids() if owns_aedt_process else set()
 
@@ -1130,7 +1136,10 @@ class HfssDriver:
         self._last_run = None
         self._last_timeout = None
         self._last_cleanup = None
+        self._last_quarantine = None
         self._pyaedt_version = api.version
+        self._owns_aedt_process = owns_aedt_process
+        self._quarantined = False
         solver_version = _runtime_aedt_version(_safe_attr(hfss, "aedt_version_id"))
         self._launch_options = {
             **launch_kwargs,
@@ -1184,7 +1193,7 @@ class HfssDriver:
         ok = True
         error: str | None = None
         hung = False
-        cleanup: dict | None = None
+        recovery: dict | None = None
 
         namespace = {
             "hfss": self._hfss,
@@ -1208,7 +1217,7 @@ class HfssDriver:
                 "timeout_source": timeout_source,
                 "elapsed_s": round(timed.elapsed_s, 4),
             }
-            cleanup = self._cleanup_session(reason="timeout")
+            recovery = self._quarantine_session(reason="timeout")
         elif timed.exception is not None:
             ok = False
             exc = timed.exception
@@ -1236,12 +1245,13 @@ class HfssDriver:
             payload.update(
                 {
                     "hung": hung,
+                    "quarantined": hung,
                     "error_code": "RUN_FAILED",
                     "message": _short_text(error),
                 }
             )
-        if cleanup is not None:
-            payload["cleanup"] = cleanup
+        if recovery is not None:
+            payload["recovery"] = recovery
         self._last_run = payload
         return payload
 
@@ -1252,6 +1262,7 @@ class HfssDriver:
             return {
                 "ok": True,
                 "connected": self._hfss is not None,
+                "quarantined": self._quarantined,
                 "session_id": self._session_id,
                 "solver": self.name,
                 "ui_mode": self._ui_mode,
@@ -1288,6 +1299,9 @@ class HfssDriver:
         }
 
     def disconnect(self) -> dict:
+        if self._quarantined:
+            cleanup = self._drop_quarantined_session(reason="disconnect")
+            return {"ok": True, "disconnected": True, "cleanup": cleanup}
         if self._hfss is None and not self._owned_aedt_pids:
             return {"ok": True, "disconnected": True}
 
@@ -1305,10 +1319,40 @@ class HfssDriver:
         return {"ok": True, "disconnected": True, "cleanup": cleanup}
 
     def health(self) -> dict:
+        if self._quarantined:
+            pid_status = {
+                str(pid): _pid_is_alive(pid)
+                for pid in sorted(self._owned_aedt_pids)
+            }
+            return {
+                "ok": False,
+                "connected": False,
+                "quarantined": True,
+                "code": "hfss.session.quarantined",
+                "message": (
+                    "The PyAEDT control handle timed out and was detached; "
+                    "tracked AEDT process state is preserved for inspection or reattachment."
+                ),
+                "session_id": self._session_id,
+                "solver": self.name,
+                "ui_mode": self._ui_mode,
+                "run_count": self._run_count,
+                "connected_at": self._connected_at,
+                "pyaedt_version": self._pyaedt_version,
+                "launch_options": dict(self._launch_options),
+                "owns_aedt_process": self._owns_aedt_process,
+                "owned_aedt_pids": sorted(self._owned_aedt_pids),
+                "owned_aedt_pid_alive": pid_status,
+                "last_run": self._last_run,
+                "last_timeout": self._last_timeout,
+                "last_cleanup": self._last_cleanup,
+                "last_quarantine": self._last_quarantine,
+            }
         if self._hfss is None:
             return {
                 "ok": False,
                 "connected": False,
+                "quarantined": False,
                 "code": "hfss.session.disconnected",
                 "message": "No active HFSS session is launched.",
                 "session_id": self._session_id,
@@ -1318,6 +1362,7 @@ class HfssDriver:
                 "owned_aedt_pids": sorted(self._owned_aedt_pids),
                 "last_timeout": self._last_timeout,
                 "last_cleanup": self._last_cleanup,
+                "last_quarantine": self._last_quarantine,
             }
 
         pid_status = {
@@ -1337,6 +1382,7 @@ class HfssDriver:
         return {
             "ok": connected,
             "connected": connected,
+            "quarantined": False,
             "code": code,
             "message": message,
             "session_id": self._session_id,
@@ -1355,6 +1401,7 @@ class HfssDriver:
             "last_run": self._last_run,
             "last_timeout": self._last_timeout,
             "last_cleanup": self._last_cleanup,
+            "last_quarantine": self._last_quarantine,
         }
 
     def _safe_health_call(self, fn) -> dict:
@@ -1388,8 +1435,15 @@ class HfssDriver:
             return None, "disabled:solve-snippet"
         return _DEFAULT_EXEC_TIMEOUT_S, "default"
 
-    def _should_own_aedt_process(self, *, new_desktop: bool, machine: str, port: int) -> bool:
-        return bool(new_desktop) and not machine and not port
+    def _should_own_aedt_process(
+        self,
+        *,
+        new_desktop: bool,
+        machine: str,
+        port: int,
+        aedt_process_id: int | None,
+    ) -> bool:
+        return bool(new_desktop) and not machine and not port and aedt_process_id is None
 
     def _identify_owned_aedt_pids(
         self,
@@ -1408,18 +1462,18 @@ class HfssDriver:
             return set(new_pids)
         return set()
 
-    def _release_desktop(self) -> list[str]:
+    def _release_desktop(self, *, close_desktop: bool) -> list[str]:
         if self._hfss is None and self._desktop is None:
             return []
         errors: list[str] = []
         try:
             release = getattr(self._hfss, "release_desktop", None) if self._hfss is not None else None
             if callable(release):
-                release(close_projects=False, close_desktop=True)
+                release(close_projects=False, close_desktop=close_desktop)
             elif self._desktop is not None:
                 desktop_release = getattr(self._desktop, "release_desktop", None)
                 if callable(desktop_release):
-                    desktop_release(close_projects=False, close_desktop=True)
+                    desktop_release(close_projects=False, close_desktop=close_desktop)
         except Exception as e:
             errors.append(f"{type(e).__name__}: {e}")
         return errors
@@ -1448,10 +1502,12 @@ class HfssDriver:
         }
 
     def _cleanup_session(self, *, reason: str) -> dict:
-        release_errors = self._release_desktop()
+        release_errors = self._release_desktop(close_desktop=self._owns_aedt_process)
         kill_report = self._kill_owned_aedt_processes()
         cleanup = {
             "reason": reason,
+            "mode": "owned-desktop" if self._owns_aedt_process else "control-only",
+            "close_desktop": self._owns_aedt_process,
             "release_errors": release_errors,
             **kill_report,
         }
@@ -1459,6 +1515,56 @@ class HfssDriver:
         self._desktop = None
         self._session_id = None
         self._owned_aedt_pids = set()
+        self._owns_aedt_process = False
+        self._quarantined = False
+        self._last_cleanup = cleanup
+        return cleanup
+
+    def _quarantine_session(self, *, reason: str) -> dict:
+        pid_status = {
+            str(pid): _pid_is_alive(pid)
+            for pid in sorted(self._owned_aedt_pids)
+        }
+        quarantine = {
+            "reason": reason,
+            "mode": "control-detached-solver-preserved",
+            "solver_process_preserved": True,
+            "owns_aedt_process": self._owns_aedt_process,
+            "owned_aedt_pids": sorted(self._owned_aedt_pids),
+            "owned_aedt_pid_alive": pid_status,
+            "release_called": False,
+            "kill_called": False,
+        }
+        # A timed-out worker thread may still hold and use these objects. Never
+        # call into them concurrently and never destroy the solver merely
+        # because the Python-side deadline elapsed.
+        self._hfss = None
+        self._desktop = None
+        self._quarantined = True
+        self._last_quarantine = quarantine
+        return quarantine
+
+    def _drop_quarantined_session(self, *, reason: str) -> dict:
+        pid_status = {
+            str(pid): _pid_is_alive(pid)
+            for pid in sorted(self._owned_aedt_pids)
+        }
+        cleanup = {
+            "reason": reason,
+            "mode": "quarantined-control-only",
+            "close_desktop": False,
+            "release_errors": [],
+            "owned_aedt_pids": sorted(self._owned_aedt_pids),
+            "owned_aedt_pid_alive": pid_status,
+            "processes": [],
+            "solver_process_preserved": True,
+        }
+        self._hfss = None
+        self._desktop = None
+        self._session_id = None
+        self._owned_aedt_pids = set()
+        self._owns_aedt_process = False
+        self._quarantined = False
         self._last_cleanup = cleanup
         return cleanup
 

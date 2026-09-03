@@ -141,8 +141,21 @@ Use short bounds for inspection, setup edits, and exporter snippets. Do not use
 a fixed wall-clock timeout as the failure signal for real solves; solve-like
 snippets such as `analyze_setup(...)` are not given the driver's default control
 timeout unless you explicitly set `exec_timeout_s`. If a snippet returns
-`hung: true`, treat the session as quarantined: inspect `session.health`, then
-reconnect before more HFSS work.
+`hung: true`, treat the Python control handle as quarantined. Inspect
+`session.health` for the tracked AEDT PID and liveness, drop only the quarantined
+control session, then reattach the existing PID through the ordinary composable
+commands before more HFSS work:
+
+```bash
+sim inspect session.health
+sim disconnect
+sim connect --solver hfss --ui-mode no_gui \
+  --driver-option new_desktop=false \
+  --driver-option aedt_process_id=<tracked-pid>
+```
+
+Do not interpret the control timeout as solver failure and do not start a
+duplicate solve while the preserved PID or solution artifacts still advance.
 
 ### Export and Parse S-Parameters
 
