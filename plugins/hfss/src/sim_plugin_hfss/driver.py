@@ -945,7 +945,7 @@ class HfssDriver:
         if script.suffix.lower() != ".py":
             return LintResult(
                 ok=False,
-                diagnostics=[Diagnostic("error", "HFSS v0.1.1 only lints PyAEDT Python scripts")],
+                diagnostics=[Diagnostic("error", "HFSS v0.1.2 only lints PyAEDT Python scripts")],
             )
 
         text = _read_text(script)
@@ -1022,7 +1022,7 @@ class HfssDriver:
     def run_file(self, script: Path) -> RunResult:
         if script.suffix.lower() != ".py":
             raise RuntimeError(
-                "HFSS v0.1.1 only runs PyAEDT Python scripts. Direct .aedt/.aedtz "
+                "HFSS v0.1.2 only runs PyAEDT Python scripts. Direct .aedt/.aedtz "
                 "solve support is deferred until real HFSS validation is available."
             )
         return run_subprocess([sys.executable, str(script)], script=script, solver=self.name)

@@ -23,7 +23,7 @@ workflow has been validated end to end.
 
 ## Scope
 
-Version 0.1.1 targets HFSS 3D through PyAEDT's `ansys.aedt.core.hfss.Hfss`
+Version 0.1.2 targets HFSS 3D through PyAEDT's `ansys.aedt.core.hfss.Hfss`
 interface.
 
 Out of scope for this first version:
@@ -53,7 +53,7 @@ Out of scope for this first version:
 Install from PyPI:
 
 ```bash
-uv pip install "sim-plugin-hfss==0.1.1"
+uv pip install "sim-plugin-hfss==0.1.2"
 ```
 
 For source testing against the current main branch:

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.2 - 2026-09-03
 
 - Quarantine only the timed-out Python control handle while preserving tracked
   AEDT processes and PID liveness evidence.
@@ -8,6 +8,10 @@
   driver-option surface.
 - Avoid closing an AEDT desktop when disconnecting a non-owning attached
   control session.
+- Report the active HFSS runtime version separately from other detected AEDT
+  installations.
+- Add Windows Registry discovery for non-default AEDT installations.
+- Add an experimental offline `.aedt` and `.aedtz` project inventory command.
 
 ## 0.1.1 - 2026-06-26
 
