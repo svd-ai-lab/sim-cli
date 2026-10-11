@@ -98,3 +98,8 @@ incrementally via `uv run sim exec`, checking `last.result` and
 `base/snippets/` adapted to the user's task. Before handoff, read
 `base/workflows/mechanical_handoff.md` and confirm Workbench has a refreshed
 Model cell. Mechanical owns setup, solve, and result extraction.
+
+## Source
+
+Canonical repository: [svd-ai-lab/sim-plugin-workbench](https://github.com/svd-ai-lab/sim-plugin-workbench).
+Skill path: `src/sim_plugin_workbench/_skills/workbench`.

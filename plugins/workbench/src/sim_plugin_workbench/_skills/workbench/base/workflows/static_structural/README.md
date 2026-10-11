@@ -11,8 +11,10 @@ Engineering Data → Geometry → Model → Setup → Solution → Results
 **Workbench skill responsibility**: Cells 1-3 (Engineering Data, Geometry, Model).
 **PyMechanical skill responsibility**: Cells 4-6 (Setup, Solution, Results).
 
-See [`evidence/`](evidence/) for visual proof (screenshots) of Workbench
+See the [source screenshots](https://github.com/svd-ai-lab/sim-plugin-workbench/tree/main/src/sim_plugin_workbench/_skills/workbench/base/workflows/static_structural/evidence) of Workbench
 successfully taking cells 1-3 from `?` to green checkmark on real Ansys 24.1.
+These historical examples are not bundled; verify each current run from its
+own project state and artifacts.
 
 > **First principles**: PyWorkbench orchestrates projects. PyMechanical
 > drives Mechanical. Keep them distinct — don't use Workbench scripting
