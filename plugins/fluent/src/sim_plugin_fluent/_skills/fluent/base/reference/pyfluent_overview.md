@@ -10,11 +10,11 @@ When docs disagree with the live session, trust the session. Use `uv run sim exe
 
 | Version | Status | Fluent compatibility |
 |---|---|---|
-| [0.38](0.38/) | Current | Fluent 2025 R2 (v252) |
+| [0.38](../../sdk/0.38/) | Bundled reference | Fluent 2025 R2 (v252) |
 
 ## Adding a new version
 
-1. Copy the current version folder: `cp -r 0.38 0.39`
+1. From the skill root, copy the reference version folder: `cp -r sdk/0.38 sdk/0.39`
 2. Update changed API paths
 3. Run integration tests to verify
 4. See `driver-upgrade` skill for the full process

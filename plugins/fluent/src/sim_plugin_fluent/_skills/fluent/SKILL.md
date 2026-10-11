@@ -174,3 +174,8 @@ For partially premixed steady-diffusion flamelet workflows, load:
 Short version: import CHEMKIN as `flamelet-mixture`, generate flamelets and the
 PDF table, persist the table with `write_pdf_cmd(...)`, and restart or
 postprocess with `read_case -> read_pdf -> read_data`.
+
+## Source
+
+Canonical repository: [svd-ai-lab/sim-plugin-fluent](https://github.com/svd-ai-lab/sim-plugin-fluent).
+Skill path: `src/sim_plugin_fluent/_skills/fluent`.
