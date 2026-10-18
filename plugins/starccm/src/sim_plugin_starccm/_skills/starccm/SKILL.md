@@ -1,6 +1,6 @@
 ---
 name: starccm-sim
-description: Use when driving Simcenter STAR-CCM+ for CFD/multiphysics tasks: batch macro execution, mesh generation, solver setup, and result extraction. Choose the smallest real control path first: direct `starccm+` launcher/batch, local project artifacts, native Java macros, or sim-cli when standardized runtime validation, diagnostics, sessions, and artifact handling are useful.
+description: "Use when driving Simcenter STAR-CCM+ for CFD/multiphysics tasks: batch macro execution, mesh generation, solver setup, and result extraction. Choose the smallest real control path first: direct `starccm+` launcher/batch, local project artifacts, native Java macros, or sim-cli when standardized runtime validation, diagnostics, sessions, and artifact handling are useful."
 ---
 
 # starccm-sim

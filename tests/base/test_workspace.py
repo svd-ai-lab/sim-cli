@@ -3,6 +3,7 @@ import importlib.util
 from pathlib import Path
 
 import pytest
+import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -38,3 +39,11 @@ def test_bundled_skills_exclude_solver_result_artifacts():
         assert file.suffix.lower() not in {".png", ".odb", ".sim", ".sim~", ".dat"}, file
         if "evidence" in file.parts:
             assert file.name == "README.md", file
+
+
+def test_skill_frontmatter_is_valid_yaml():
+    for file in [*(ROOT / "plugins").rglob("SKILL.md"), *(ROOT / "src/sim/_skills").rglob("SKILL.md")]:
+        text = file.read_text(encoding="utf-8")
+        assert text.startswith("---"), file
+        metadata = yaml.safe_load(text.split("---", 2)[1])
+        assert metadata["name"] and metadata["description"], file
