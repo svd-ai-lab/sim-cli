@@ -1,0 +1,50 @@
+driver: mechanical
+sdk_package: ansys-mechanical-core
+
+profiles:
+
+  # ── 24.1: PyMechanical 0.11.x–0.12.x ───────────────────────────
+
+  - name: mechanical_v24_1_sdk
+    sdk: ">=0.11,<0.13"
+    solver_versions: ["24.1", "24.1.0", "2024 R1"]
+    active_sdk_layer: "0.12"
+    active_solver_layer: "24.1"
+    notes: |
+      PyMechanical 0.11–0.12 + Ansys 24.1.
+      launch_mechanical(version=241, batch=False) — GUI visible for screenshot.
+      run_python_script executes IronPython inside Mechanical's scripting engine.
+      GUI is required for sim screenshot command.
+
+  # ── 24.2: PyMechanical 0.11+ ───────────────────────────────────
+
+  - name: mechanical_v24_2_sdk
+    sdk: ">=0.11,<1.0"
+    solver_versions: ["24.2", "24.2.0", "2024 R2"]
+    active_sdk_layer: "0.12"
+    active_solver_layer: "24.2"
+    notes: |
+      PyMechanical 0.11+ with Ansys 24.2.
+      launch_mechanical(version=242, batch=False).
+
+  # ── 25.1: PyMechanical 0.12+ ───────────────────────────────────
+
+  - name: mechanical_v25_1_sdk
+    sdk: ">=0.12,<1.0"
+    solver_versions: ["25.1", "25.1.0", "2025 R1"]
+    active_sdk_layer: "0.12"
+    active_solver_layer: "25.1"
+    notes: |
+      PyMechanical 0.12+ with Ansys 25.1.
+      launch_mechanical(version=251, batch=False).
+
+  # ── 25.2: PyMechanical 0.12+ ───────────────────────────────────
+
+  - name: mechanical_v25_2_sdk
+    sdk: ">=0.12,<1.0"
+    solver_versions: ["25.2", "25.2.0", "2025 R2"]
+    active_sdk_layer: "0.12"
+    active_solver_layer: "25.2"
+    notes: |
+      PyMechanical 0.12+ with Ansys 25.2.
+      launch_mechanical(version=252, batch=False).

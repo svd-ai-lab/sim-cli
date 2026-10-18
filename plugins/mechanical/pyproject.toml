@@ -1,0 +1,59 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sim-plugin-mechanical"
+version = "0.1.6"
+description = "Ansys Mechanical (PyMechanical) driver for sim-cli, distributed as an out-of-tree plugin"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+authors = [{ name = "Weiqi Ji", email = "jiweiqi10@gmail.com" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: Apache Software License",
+]
+dependencies = [
+    # Versioned pin against sim-cli-core. Replaces an earlier
+    # `sim-cli-core @ git+...sim-cli@main` pin that (a) referenced the
+    # pre-rename dist name, and (b) clobbered editable installs of the
+    # runtime during plugin upgrades — see sim-cli#80.
+    "sim-cli-core>=0.3",
+    "ansys-mechanical-core",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7",
+    "build>=1.0",
+]
+
+[project.entry-points."sim.drivers"]
+mechanical = "sim_plugin_mechanical:MechanicalDriver"
+
+[project.entry-points."sim.skills"]
+mechanical = "sim_plugin_mechanical:skills_dir"
+
+[project.entry-points."sim.plugins"]
+mechanical = "sim_plugin_mechanical:plugin_info"
+
+[project.urls]
+Homepage = "https://github.com/svd-ai-lab/sim-plugin-mechanical"
+Repository = "https://github.com/svd-ai-lab/sim-plugin-mechanical"
+Issues = "https://github.com/svd-ai-lab/sim-plugin-mechanical/issues"
+Changelog = "https://github.com/svd-ai-lab/sim-plugin-mechanical/blob/main/CHANGELOG.md"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sim_plugin_mechanical"]
+
+[tool.pytest.ini_options]
+markers = [
+  "integration: tests that build wheels or touch external tooling",
+]
