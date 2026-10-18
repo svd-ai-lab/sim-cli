@@ -135,7 +135,7 @@ rules.
 | --- | --- | --- |
 | COMSOL | `sim-plugin-comsol` | [sim-plugin-comsol](https://github.com/svd-ai-lab/sim-plugin-comsol) |
 | Abaqus | `sim-plugin-abaqus` | [sim-plugin-abaqus](https://github.com/svd-ai-lab/sim-plugin-abaqus) |
-| LTspice | `sim-plugin-ltspice` | [sim-plugin-ltspice](https://github.com/svd-ai-lab/sim-plugin-ltspice) |
+| Fluent | `sim-plugin-fluent` | [sim-plugin-fluent](https://github.com/svd-ai-lab/sim-plugin-fluent) |
 
 For the curated full list, see
 [sim-plugin-index](https://github.com/svd-ai-lab/sim-plugin-index).
