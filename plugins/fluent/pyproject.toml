@@ -1,0 +1,57 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sim-plugin-fluent"
+version = "0.2.0"
+description = "Ansys Fluent (PyFluent) driver and bundled skill for sim"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+authors = [{ name = "Weiqi Ji", email = "jiweiqi10@gmail.com" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: Apache Software License",
+]
+dependencies = [
+    "sim-cli-core>=0.3",
+    "ansys-fluent-core>=0.37,<0.39",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7",
+    "build>=1.0",
+]
+
+[project.entry-points."sim.drivers"]
+fluent = "sim_plugin_fluent:PyFluentDriver"
+
+[project.entry-points."sim.skills"]
+fluent = "sim_plugin_fluent:skills_dir"
+
+[project.entry-points."sim.plugins"]
+fluent = "sim_plugin_fluent:plugin_info"
+
+[project.urls]
+Homepage = "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/fluent"
+Repository = "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/fluent"
+Issues = "https://github.com/svd-ai-lab/sim-cli/issues"
+Changelog = "https://github.com/svd-ai-lab/sim-cli/blob/main/plugins/fluent/CHANGELOG.md"
+
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sim_plugin_fluent"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+  "integration: tests that build wheels or touch external tooling",
+]

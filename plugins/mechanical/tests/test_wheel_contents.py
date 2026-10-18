@@ -1,0 +1,53 @@
+"""Build the wheel and assert that bundled skill files ship."""
+from __future__ import annotations
+
+import subprocess
+import sys
+import zipfile
+from pathlib import Path
+
+import pytest
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_wheel_contains_skills(tmp_path: Path) -> None:
+    out_dir = tmp_path / "dist"
+    out_dir.mkdir()
+
+    proc = subprocess.run(
+        [sys.executable, "-m", "build", "--no-isolation", "--wheel", "--outdir", str(out_dir)],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
+    assert proc.returncode == 0, f"build failed: {proc.stderr[-2000:]}"
+
+    wheels = list(out_dir.glob("sim_plugin_mechanical-*.whl"))
+    assert len(wheels) == 1, f"expected one wheel, got {wheels}"
+
+    with zipfile.ZipFile(wheels[0]) as zf:
+        names = set(zf.namelist())
+
+    required = {
+        "sim_plugin_mechanical/__init__.py",
+        "sim_plugin_mechanical/driver.py",
+        "sim_plugin_mechanical/_skills/mechanical/SKILL.md",
+        "sim_plugin_mechanical/_skills/mechanical/base/known_issues.md",
+        "sim_plugin_mechanical/_skills/mechanical/base/reference/pymechanical_api.md",
+        "sim_plugin_mechanical/_skills/mechanical/base/reference/scripting_tree.md",
+        "sim_plugin_mechanical/_skills/mechanical/base/reference/bc_scoping.md",
+        "sim_plugin_mechanical/_skills/mechanical/base/reference/result_extraction.md",
+        "sim_plugin_mechanical/_skills/mechanical/base/reference/observation_commands.md",
+        "sim_plugin_mechanical/_skills/mechanical/base/snippets/01_smoke.py",
+        "sim_plugin_mechanical/_skills/mechanical/base/snippets/06_observation_check.py",
+        "sim_plugin_mechanical/_skills/mechanical/base/workflows/observation_demo/README.md",
+        "sim_plugin_mechanical/_skills/mechanical/base/workflows/static_structural/evidence/README.md",
+        "sim_plugin_mechanical/_skills/mechanical/base/workflows/model_review_loop.md",
+        "sim_plugin_mechanical/_skills/mechanical/base/workflows/debug_failed_exec.md",
+        "sim_plugin_mechanical/_skills/mechanical/base/workflows/workbench_handoff.md",
+    }
+    missing = required - names
+    assert not missing, f"missing from wheel: {missing}"

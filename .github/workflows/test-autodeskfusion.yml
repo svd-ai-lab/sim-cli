@@ -1,0 +1,32 @@
+name: Test autodeskfusion
+on:
+  pull_request:
+    paths:
+      - "plugins/autodeskfusion/**"
+      - "src/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "scripts/**"
+      - ".github/workflows/test-autodeskfusion.yml"
+  push:
+    branches: [main]
+    paths:
+      - "plugins/autodeskfusion/**"
+      - "src/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "scripts/**"
+      - ".github/workflows/test-autodeskfusion.yml"
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --locked --package sim-plugin-autodeskfusion --group dev
+      - run: uv run --no-sync python scripts/workspace.py test --package autodeskfusion
+      - run: uv build --no-sources --package sim-plugin-autodeskfusion

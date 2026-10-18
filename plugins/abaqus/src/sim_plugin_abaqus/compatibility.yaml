@@ -1,0 +1,20 @@
+driver: abaqus
+# Abaqus has no Python SDK imported into sim — scripts run in Abaqus's
+# own embedded Python via subprocess. No sdk_package needed.
+
+profiles:
+  - name: abaqus_2025
+    solver_versions: ["2025"]
+    active_sdk_layer: null
+    active_solver_layer: "2025"
+    notes: |
+      Abaqus 2025 compatibility profile for subprocess input-deck
+      and CAE Python execution.
+
+  - name: abaqus_2026
+    solver_versions: ["2026"]
+    active_sdk_layer: null
+    active_solver_layer: "2026"
+    notes: |
+      Abaqus 2026 with SIM architecture. Tested E2E with static
+      structural cantilever beam. Python 3.x embedded interpreter.

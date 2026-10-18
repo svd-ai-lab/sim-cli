@@ -1,0 +1,22 @@
+{
+  "name": "spaceclaim",
+  "version": "0.1.0",
+  "description": "Ansys SpaceClaim CAD preparation guidance for Codex agents.",
+  "author": {
+    "name": "svd-ai-lab"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "SpaceClaim",
+    "shortDescription": "Prepare CAD with Ansys SpaceClaim.",
+    "longDescription": "SpaceClaim helps Codex inspect local Ansys SpaceClaim capability, plan CAD-prep workflows, script repeatable geometry operations, and decide when GUI-assisted selection is required.",
+    "developerName": "svd-ai-lab",
+    "category": "Engineering",
+    "capabilities": [
+      "CAD prep",
+      "SpaceClaim scripting",
+      "Fluid-domain extraction planning"
+    ],
+    "defaultPrompt": "Use the SpaceClaim skill to inspect this CAD file and prepare a solver-ready geometry workflow."
+  }
+}

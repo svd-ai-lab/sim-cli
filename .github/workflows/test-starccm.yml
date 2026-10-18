@@ -1,0 +1,32 @@
+name: Test starccm
+on:
+  pull_request:
+    paths:
+      - "plugins/starccm/**"
+      - "src/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "scripts/**"
+      - ".github/workflows/test-starccm.yml"
+  push:
+    branches: [main]
+    paths:
+      - "plugins/starccm/**"
+      - "src/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "scripts/**"
+      - ".github/workflows/test-starccm.yml"
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --locked --package sim-plugin-starccm --group dev
+      - run: uv run --no-sync python scripts/workspace.py test --package starccm
+      - run: uv build --no-sources --package sim-plugin-starccm

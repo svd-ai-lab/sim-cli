@@ -17,8 +17,9 @@ def main():
     parser.add_argument("--dist", type=Path, default=Path("dist"))
     parser.add_argument("--manifest", type=Path, default=Path("release-manifest.json"))
     parser.add_argument("--expected-sha256")
+    parser.add_argument("--project", type=Path, default=Path("."))
     args = parser.parse_args()
-    project = tomllib.loads(Path("pyproject.toml").read_text())["project"]
+    project = tomllib.loads((args.project / "pyproject.toml").read_text(encoding="utf-8"))["project"]
     files = sorted([*args.dist.glob("*.whl"), *args.dist.glob("*.tar.gz")])
     if not files: raise ValueError("no distribution artifacts")
     source = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()

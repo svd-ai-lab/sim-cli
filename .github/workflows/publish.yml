@@ -27,7 +27,7 @@ jobs:
           python-version: "3.12"
 
       - name: Build sdist + wheel
-        run: uv build
+        run: uv build --no-sources --package sim-cli-core
 
       - name: Sanity-check artifacts
         run: |

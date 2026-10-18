@@ -133,14 +133,16 @@ provides a **driver**, so `sim` can launch or talk to the solver, and a
 **skill**, so the agent knows that solver's workflow, pitfalls, and inspection
 rules.
 
-| Solver | Package spec | Plugin repo |
-| --- | --- | --- |
-| COMSOL | `sim-plugin-comsol` | [sim-plugin-comsol](https://github.com/svd-ai-lab/sim-plugin-comsol) |
-| Abaqus | `sim-plugin-abaqus` | [sim-plugin-abaqus](https://github.com/svd-ai-lab/sim-plugin-abaqus) |
-| Fluent | `sim-plugin-fluent` | [sim-plugin-fluent](https://github.com/svd-ai-lab/sim-plugin-fluent) |
+Packages and entry points are listed in the [workspace plugin index](plugin-index.json).
+Each plugin remains independently installable from PyPI under its existing
+`sim-plugin-<solver>` name. Its source and bundled skills live in
+[`plugins/<solver>/`](plugins/).
 
-For the curated full list, see
-[sim-plugin-index](https://github.com/svd-ai-lab/sim-plugin-index).
+For a source install of one plugin:
+
+```bash
+uv add sim-cli-core "sim-plugin-fluent @ git+https://github.com/svd-ai-lab/sim-cli.git#subdirectory=plugins/fluent"
+```
 
 ## Commands
 

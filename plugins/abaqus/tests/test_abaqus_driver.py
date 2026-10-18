@@ -1,0 +1,666 @@
+"""Tier 1 protocol-compliance tests for the Abaqus driver."""
+from __future__ import annotations
+
+import json
+import os
+import py_compile
+import subprocess
+import time
+from pathlib import Path
+
+import pytest
+from sim.driver import SolverInstall
+
+from sim_plugin_abaqus import AbaqusDriver
+
+FIXTURES = Path(__file__).parent.parent / "fixtures"
+
+
+class TestDetect:
+    def setup_method(self):
+        self.driver = AbaqusDriver()
+
+    def test_detect_good_py_script(self):
+        """Python script with Abaqus import -> True."""
+        assert self.driver.detect(FIXTURES / "abaqus_good.py") is True
+
+    def test_detect_good_inp_file(self):
+        """Abaqus .inp input deck -> True."""
+        assert self.driver.detect(FIXTURES / "abaqus_inp_good.inp") is True
+
+    def test_detect_unrelated_script(self):
+        """Script without Abaqus import -> False."""
+        assert self.driver.detect(FIXTURES / "not_simulation.py") is False
+
+    def test_detect_no_import_py(self):
+        """Python without Abaqus import -> False."""
+        assert self.driver.detect(FIXTURES / "abaqus_no_import.py") is False
+
+    def test_detect_missing_file(self):
+        """Non-existent path -> False (no exception)."""
+        assert self.driver.detect(Path("/does/not/exist.py")) is False
+
+    def test_detect_syntax_error_still_detects(self):
+        """Regex-based detection works even on broken syntax."""
+        assert self.driver.detect(FIXTURES / "abaqus_syntax_error.py") is True
+
+
+class TestLint:
+    def setup_method(self):
+        self.driver = AbaqusDriver()
+
+    def test_lint_good_py(self):
+        result = self.driver.lint(FIXTURES / "abaqus_good.py")
+        assert result.ok is True
+        assert len([d for d in result.diagnostics if d.level == "error"]) == 0
+
+    def test_lint_good_inp(self):
+        result = self.driver.lint(FIXTURES / "abaqus_inp_good.inp")
+        assert result.ok is True
+
+    def test_lint_bad_syntax(self):
+        result = self.driver.lint(FIXTURES / "abaqus_syntax_error.py")
+        assert result.ok is False
+        assert any(
+            d.level == "error" and "syntax" in d.message.lower()
+            for d in result.diagnostics
+        )
+
+    def test_lint_missing_import(self):
+        result = self.driver.lint(FIXTURES / "abaqus_no_import.py")
+        assert result.ok is False
+        assert any(
+            "import" in d.message.lower()
+            for d in result.diagnostics
+            if d.level == "error"
+        )
+
+    def test_lint_no_step_is_warning(self):
+        """Input deck without *STEP -> warning, not error."""
+        result = self.driver.lint(FIXTURES / "abaqus_no_step.inp")
+        assert result.ok is True
+        assert any(d.level == "warning" for d in result.diagnostics)
+
+
+class TestConnect:
+    def test_connect_not_installed(self, monkeypatch):
+        """When abaqus not found -> status='not_installed'."""
+        driver = AbaqusDriver()
+        monkeypatch.setattr(driver, "detect_installed", lambda: [])
+        info = driver.connect()
+        assert info.status == "not_installed"
+        assert "SIM_ABAQUS_COMMAND" in info.message
+
+    def test_connect_found(self, monkeypatch):
+        """When abaqus found -> status='ok', version populated."""
+        from sim.driver import SolverInstall
+
+        driver = AbaqusDriver()
+        monkeypatch.setattr(
+            driver,
+            "detect_installed",
+            lambda: [
+                SolverInstall(
+                    name="abaqus",
+                    version="2026",
+                    path="C:/SIMULIA",
+                    source="test",
+                )
+            ],
+        )
+        info = driver.connect()
+        assert info.status == "ok"
+        assert info.version is not None
+
+    def test_explicit_launcher_env_path(self, monkeypatch, tmp_path):
+        """SIM_ABAQUS_COMMAND points at an exact launcher outside defaults."""
+        import sim_plugin_abaqus.driver as drv
+
+        bat = tmp_path / "custom_abaqus.bat"
+        bat.write_text("@echo off\n", encoding="utf-8")
+        monkeypatch.setattr(drv, "_INSTALL_FINDERS", [])
+        monkeypatch.setenv("SIM_ABAQUS_COMMAND", str(bat))
+
+        installs = AbaqusDriver().detect_installed()
+
+        assert len(installs) == 1
+        assert installs[0].source == "env:SIM_ABAQUS_COMMAND"
+        assert installs[0].extra["bat"] == str(bat)
+
+    def test_explicit_launcher_env_directory_prefers_versioned_bat(self, monkeypatch, tmp_path):
+        """ABAQUS_BAT_PATH can point at a Commands directory."""
+        import sim_plugin_abaqus.driver as drv
+
+        (tmp_path / "abaqus.bat").write_text("@echo off\n", encoding="utf-8")
+        bat = tmp_path / "abq2026.bat"
+        bat.write_text("@echo off\n", encoding="utf-8")
+        monkeypatch.setattr(drv, "_INSTALL_FINDERS", [])
+        monkeypatch.setenv("ABAQUS_BAT_PATH", str(tmp_path))
+
+        installs = AbaqusDriver().detect_installed()
+
+        assert installs[0].version == "2026"
+        assert installs[0].extra["bat"] == str(bat)
+
+    def test_explicit_launcher_env_strips_single_quotes(self, monkeypatch, tmp_path):
+        """PowerShell-style quoted launcher paths are accepted."""
+        import sim_plugin_abaqus.driver as drv
+
+        bat = tmp_path / "abq2025.bat"
+        bat.write_text("@echo off\n", encoding="utf-8")
+        monkeypatch.setattr(drv, "_INSTALL_FINDERS", [])
+        monkeypatch.setenv("SIM_ABAQUS_COMMAND", f"'{bat}'")
+
+        installs = AbaqusDriver().detect_installed()
+
+        assert len(installs) == 1
+        assert installs[0].extra["bat"] == str(bat)
+
+    def test_explicit_launcher_env_takes_priority_over_higher_default(self, monkeypatch, tmp_path):
+        """SIM_ABAQUS_COMMAND is an override, not just another candidate."""
+        import sim_plugin_abaqus.driver as drv
+
+        explicit = tmp_path / "explicit" / "abq2025.bat"
+        default_dir = tmp_path / "default"
+        default = default_dir / "abq2026.bat"
+        explicit.parent.mkdir()
+        default_dir.mkdir()
+        explicit.write_text("@echo off\n", encoding="utf-8")
+        default.write_text("@echo off\n", encoding="utf-8")
+
+        monkeypatch.setenv("SIM_ABAQUS_COMMAND", str(explicit))
+        monkeypatch.setattr(drv, "_INSTALL_FINDERS", [lambda: [(default_dir, "default-path:test")]])
+
+        installs = AbaqusDriver().detect_installed()
+
+        assert installs[0].version == "2025"
+        assert installs[0].source == "env:SIM_ABAQUS_COMMAND"
+        assert installs[1].version == "2026"
+
+
+class TestParseOutput:
+    def setup_method(self):
+        self.driver = AbaqusDriver()
+
+    def test_last_json_line(self):
+        stdout = 'Abaqus JOB log output\n{"displacement": 0.0123}\n'
+        result = self.driver.parse_output(stdout)
+        assert result == {"displacement": 0.0123}
+
+    def test_no_json(self):
+        result = self.driver.parse_output("just plain solver output\n")
+        assert result == {}
+
+    def test_multiple_json_takes_last(self):
+        stdout = '{"a": 1}\nsome log\n{"b": 2}\n'
+        result = self.driver.parse_output(stdout)
+        assert result == {"b": 2}
+
+    def test_invalid_json_skipped(self):
+        stdout = '{broken\n{"valid": true}\n'
+        result = self.driver.parse_output(stdout)
+        assert result == {"valid": True}
+
+
+class TestRunFile:
+    def test_raises_when_not_installed(self, monkeypatch):
+        driver = AbaqusDriver()
+        monkeypatch.setattr(driver, "detect_installed", lambda: [])
+        with pytest.raises(RuntimeError, match="(?i)abaqus"):
+            driver.run_file(FIXTURES / "abaqus_good.py")
+
+    def test_run_file_attaches_artifacts_and_diagnostics(self, monkeypatch, tmp_path):
+        inp = tmp_path / "model.inp"
+        inp.write_text("*HEADING\n*STEP\n*STATIC\n*END STEP\n", encoding="utf-8")
+        (tmp_path / "model.msg").write_text("***WARNING: check mesh quality\n", encoding="utf-8")
+        (tmp_path / "model.odb").write_bytes(b"odb")
+
+        driver = AbaqusDriver()
+        monkeypatch.setattr(
+            driver,
+            "detect_installed",
+            lambda: [
+                SolverInstall(
+                    name="abaqus",
+                    version="2026",
+                    path="C:/SIMULIA/Commands",
+                    source="test",
+                    extra={"bat": "abaqus"},
+                )
+            ],
+        )
+        monkeypatch.setattr(
+            "sim_plugin_abaqus.driver.subprocess.run",
+            lambda *args, **kwargs: subprocess.CompletedProcess(args[0], 0, stdout="", stderr=""),
+        )
+
+        result = driver.run_file(inp)
+
+        assert result.ok is True
+        assert any(a["kind"] == "odb" for a in result.artifacts)
+        assert any(d["level"] == "warning" for d in result.diagnostics)
+
+    def test_scan_diagnostics_stops_after_limit(self, tmp_path):
+        msg = tmp_path / "model.msg"
+        msg.write_text("\n".join("***WARNING: repeated" for _ in range(60)), encoding="utf-8")
+
+        diagnostics = AbaqusDriver()._scan_diagnostics(tmp_path, stem="model")
+
+        assert len(diagnostics) == 50
+
+
+class TestAuthoringSession:
+    def _install(self):
+        return SolverInstall(
+            name="abaqus",
+            version="2026",
+            path="C:/SIMULIA/Commands",
+            source="test",
+            extra={"bat": "abaqus"},
+        )
+
+    def test_launch_creates_file_backed_session(self, monkeypatch, tmp_path):
+        driver = AbaqusDriver()
+        monkeypatch.setattr(driver, "detect_installed", lambda: [self._install()])
+
+        info = driver.launch(mode="cae", ui_mode="no_gui", workspace=str(tmp_path))
+        summary = driver.query("session.summary")
+
+        assert info["ok"] is True
+        assert info["persistence"] == "file-backed-cae"
+        assert info["backend"] == "file"
+        assert info["snippet_timeout_s"] == 600.0
+        assert summary["connected"] is True
+        assert summary["backend"] == "file"
+        assert summary["workspace"] == str(tmp_path)
+        assert summary["cae_path"].endswith("session.cae")
+
+    def test_session_health_has_public_diagnostics_shape(self, monkeypatch, tmp_path):
+        driver = AbaqusDriver()
+        monkeypatch.setattr(driver, "detect_installed", lambda: [self._install()])
+
+        driver.launch(workspace=str(tmp_path))
+        health = driver.query("session.health")
+
+        assert health["ok"] is True
+        assert health["connected"] is True
+        assert health["code"] == "abaqus.session.connected"
+        assert health["message"] == "Abaqus CAE session is connected"
+        assert health["solver_version"] == "2026"
+        assert health["mode"] == "cae"
+        assert health["ui_mode"] == "no_gui"
+        assert health["backend"] == "file"
+        assert health["persistence"] == "file-backed-cae"
+        assert health["workspace"] == str(tmp_path)
+        assert health["last_ok"] is None
+        assert health["ui_capabilities"]["effective_ui_mode"] == "no_gui"
+        assert health["ui_capabilities"]["model_builder_live"] is False
+
+    def test_launch_accepts_snippet_timeout(self, monkeypatch, tmp_path):
+        driver = AbaqusDriver()
+        monkeypatch.setattr(driver, "detect_installed", lambda: [self._install()])
+
+        info = driver.launch(workspace=str(tmp_path), snippet_timeout="42")
+        summary = driver.query("session.summary")
+
+        assert info["snippet_timeout_s"] == 42.0
+        assert summary["snippet_timeout_s"] == 42.0
+
+    def test_launch_rejects_unknown_backend(self, monkeypatch, tmp_path):
+        driver = AbaqusDriver()
+        monkeypatch.setattr(driver, "detect_installed", lambda: [self._install()])
+
+        with pytest.raises(ValueError, match="Unsupported Abaqus session backend"):
+            driver.launch(workspace=str(tmp_path), backend="mystery")
+
+    def test_launch_bridge_rejects_gui_mode(self, monkeypatch, tmp_path):
+        driver = AbaqusDriver()
+        monkeypatch.setattr(driver, "detect_installed", lambda: [self._install()])
+
+        with pytest.raises(ValueError, match="no_gui"):
+            driver.launch(workspace=str(tmp_path), backend="bridge", ui_mode="gui")
+
+    def test_run_executes_wrapper_and_updates_inspection(self, monkeypatch, tmp_path):
+        driver = AbaqusDriver()
+        monkeypatch.setattr(driver, "detect_installed", lambda: [self._install()])
+        driver.launch(workspace=str(tmp_path))
+        old_msg = tmp_path / "old.msg"
+        old_msg.write_text("***WARNING: old warning\n", encoding="utf-8")
+        old_time = time.time() - 120
+        old_msg.touch()
+        os.utime(old_msg, (old_time, old_time))
+
+        def fake_run(wrapper_path):
+            result_path = wrapper_path.parent / "result_0001.json"
+            result_path.write_text(
+                json.dumps({
+                    "ok": True,
+                    "result": {"created": "beam"},
+                    "model_summary": {
+                        "models": {
+                            "Model-1": {
+                                "parts": ["Beam"],
+                                "materials": ["Steel"],
+                                "sections": [],
+                                "steps": ["Load"],
+                                "loads": ["TipLoad"],
+                                "boundary_conditions": ["Fixed"],
+                                "instances": ["Beam-1"],
+                            }
+                        },
+                        "jobs": ["BeamJob"],
+                    },
+                }),
+                encoding="utf-8",
+            )
+            (wrapper_path.parent / "session.cae").write_bytes(b"cae")
+            new_msg = wrapper_path.parent / "new.msg"
+            new_msg.write_text("***WARNING: new warning\n", encoding="utf-8")
+            os.utime(new_msg, (time.time() + 1, time.time() + 1))
+            return subprocess.CompletedProcess(["abaqus"], 0, stdout="done", stderr="")
+
+        monkeypatch.setattr(driver, "_run_cae_wrapper", fake_run)
+
+        result = driver.run("_sim_result = {'created': 'beam'}", label="build")
+        model_summary = driver.query("cae.model_summary")
+        files = driver.query("workdir.files")
+        latest = driver.query("job.latest")
+
+        assert result["ok"] is True
+        assert result["result"] == {"created": "beam"}
+        assert model_summary["available"] is True
+        assert model_summary["model_summary"]["models"]["Model-1"]["parts"] == ["Beam"]
+        assert any(f["kind"] == "cae" for f in files["files"])
+        assert [d["message"] for d in result["diagnostics"]] == ["***WARNING: new warning"]
+        assert latest["last_ok"] is True
+        assert latest["run_count"] == 1
+        assert any(a["kind"] == "cae" for a in latest["artifacts"])
+        assert [d["message"] for d in latest["diagnostics"]] == ["***WARNING: new warning"]
+
+    def test_generated_wrapper_compiles(self, monkeypatch, tmp_path):
+        driver = AbaqusDriver()
+        monkeypatch.setattr(driver, "detect_installed", lambda: [self._install()])
+        driver.launch(workspace=str(tmp_path))
+
+        wrapper_path, _ = driver._write_cae_wrapper("_sim_result = {'ok': True}", "compile-test")
+
+        py_compile.compile(str(wrapper_path), doraise=True)
+
+    def test_run_uses_stdout_marker_when_result_file_missing(self, monkeypatch, tmp_path):
+        driver = AbaqusDriver()
+        monkeypatch.setattr(driver, "detect_installed", lambda: [self._install()])
+        driver.launch(workspace=str(tmp_path))
+
+        def fake_run(wrapper_path):
+            payload = {"ok": True, "result": {"from": "stdout"}, "model_summary": {"models": {}, "jobs": []}}
+            return subprocess.CompletedProcess(
+                ["abaqus"],
+                0,
+                stdout="noise\n__SIM_RESULT__" + json.dumps(payload) + "\n",
+                stderr="",
+            )
+
+        monkeypatch.setattr(driver, "_run_cae_wrapper", fake_run)
+
+        result = driver.run("print('no result file')", label="stdout-fallback")
+
+        assert result["ok"] is True
+        assert result["result"] == {"from": "stdout"}
+
+    def test_launch_bridge_session_starts_live_backend(self, monkeypatch, tmp_path):
+        driver = AbaqusDriver()
+        monkeypatch.setattr(driver, "detect_installed", lambda: [self._install()])
+
+        class FakeProc:
+            pid = 1234
+
+            def poll(self):
+                return None
+
+        def fake_start_bridge():
+            driver._bridge_proc = FakeProc()
+            driver._bridge_host = "127.0.0.1"
+            driver._bridge_port = 50123
+
+        monkeypatch.setattr(driver, "_start_bridge", fake_start_bridge)
+
+        info = driver.launch(workspace=str(tmp_path), backend="bridge")
+        summary = driver.query("session.summary")
+
+        assert info["persistence"] == "live-bridge"
+        assert info["backend"] == "bridge"
+        assert info["bridge"]["host"] == "127.0.0.1"
+        assert summary["bridge"]["running"] is True
+
+    def test_start_bridge_removes_stale_ready_file_and_sets_token(self, monkeypatch, tmp_path):
+        driver = AbaqusDriver()
+        monkeypatch.setattr(driver, "detect_installed", lambda: [self._install()])
+        stale_ready = tmp_path / "bridge_ready.json"
+        stale_ready.write_text(json.dumps({"host": "127.0.0.1", "port": 1}), encoding="utf-8")
+
+        class FakeProc:
+            pid = 1234
+
+            def poll(self):
+                return None
+
+            def wait(self, timeout=None):
+                return 0
+
+        def fake_popen(args, cwd=None, env=None, stdout=None, stderr=None, text=None):
+            Path(env["SIM_ABAQUS_BRIDGE_READY"]).write_text(
+                json.dumps({"host": "127.0.0.1", "port": 54321}),
+                encoding="utf-8",
+            )
+            return FakeProc()
+
+        monkeypatch.setattr("sim_plugin_abaqus.driver.subprocess.Popen", fake_popen)
+
+        info = driver.launch(workspace=str(tmp_path), backend="bridge")
+
+        assert info["bridge"]["port"] == 54321
+        assert driver._bridge_token is not None
+        assert json.loads(stale_ready.read_text(encoding="utf-8"))["port"] == 54321
+        driver.disconnect()
+
+    def test_bridge_request_adds_session_token(self, monkeypatch, tmp_path):
+        driver = AbaqusDriver()
+        driver._bridge_host = "127.0.0.1"
+        driver._bridge_port = 54321
+        driver._bridge_token = "secret-token"
+
+        class FakeProc:
+            def poll(self):
+                return None
+
+        class FakeSocket:
+            sent = b""
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def settimeout(self, timeout):
+                self.timeout = timeout
+
+            def sendall(self, data):
+                self.sent = data
+
+            def recv(self, size):
+                return b'{"ok": true}\n'
+
+        fake_socket = FakeSocket()
+        driver._bridge_proc = FakeProc()
+        monkeypatch.setattr("sim_plugin_abaqus.driver.socket.create_connection", lambda *args, **kwargs: fake_socket)
+
+        response = driver._bridge_request({"op": "ping"}, timeout=1)
+        sent = json.loads(fake_socket.sent.decode("utf-8"))
+
+        assert response == {"ok": True}
+        assert sent["op"] == "ping"
+        assert sent["token"] == "secret-token"
+
+    def test_run_bridge_uses_live_process_and_updates_inspection(self, monkeypatch, tmp_path):
+        driver = AbaqusDriver()
+        monkeypatch.setattr(driver, "detect_installed", lambda: [self._install()])
+        monkeypatch.setattr(driver, "_start_bridge", lambda: None)
+        driver.launch(workspace=str(tmp_path), backend="bridge")
+
+        def fake_bridge_request(payload, timeout=None):
+            assert payload["op"] == "exec"
+            (tmp_path / "session.cae").write_bytes(b"cae")
+            bridge_msg = tmp_path / "bridge.msg"
+            bridge_msg.write_text("***WARNING: bridge warning\n", encoding="utf-8")
+            os.utime(bridge_msg, (time.time() + 1, time.time() + 1))
+            return {
+                "ok": True,
+                "stdout": "made part",
+                "stderr": "",
+                "result": {"created": "BridgeProbeBlock"},
+                "model_summary": {
+                    "models": {
+                        "Model-1": {
+                            "parts": ["BridgeProbeBlock"],
+                            "materials": ["BridgeSteel"],
+                            "sections": ["BridgeSection"],
+                            "steps": ["Initial"],
+                            "loads": [],
+                            "boundary_conditions": [],
+                            "instances": ["BridgeProbeBlock-1"],
+                        }
+                    },
+                    "jobs": [],
+                },
+            }
+
+        monkeypatch.setattr(driver, "_bridge_request", fake_bridge_request)
+
+        result = driver.run("_sim_result = {'created': 'BridgeProbeBlock'}", label="bridge-build")
+
+        assert result["ok"] is True
+        assert result["backend"] == "bridge"
+        assert result["result"] == {"created": "BridgeProbeBlock"}
+        assert result["model_summary"]["models"]["Model-1"]["parts"] == ["BridgeProbeBlock"]
+        assert [d["message"] for d in result["diagnostics"]] == ["***WARNING: bridge warning"]
+
+    def test_run_bridge_returns_traceback_on_user_error(self, monkeypatch, tmp_path):
+        driver = AbaqusDriver()
+        monkeypatch.setattr(driver, "detect_installed", lambda: [self._install()])
+        monkeypatch.setattr(driver, "_start_bridge", lambda: None)
+        driver.launch(workspace=str(tmp_path), backend="bridge")
+
+        monkeypatch.setattr(
+            driver,
+            "_bridge_request",
+            lambda payload, timeout=None: {
+                "ok": False,
+                "error": "bad model",
+                "traceback": "Traceback...",
+                "stdout": "",
+                "stderr": "",
+                "model_summary": {"models": {}, "jobs": []},
+            },
+        )
+
+        result = driver.run("raise RuntimeError('bad model')", label="bad")
+
+        assert result["ok"] is False
+        assert result["message"] == "bad model"
+        assert result["traceback"] == "Traceback..."
+
+    def test_run_bridge_request_failure_has_stable_shape_and_counts(self, monkeypatch, tmp_path):
+        driver = AbaqusDriver()
+        monkeypatch.setattr(driver, "detect_installed", lambda: [self._install()])
+        monkeypatch.setattr(driver, "_start_bridge", lambda: None)
+        driver.launch(workspace=str(tmp_path), backend="bridge")
+        monkeypatch.setattr(driver, "_bridge_request", lambda payload, timeout=None: (_ for _ in ()).throw(RuntimeError("dead bridge")))
+
+        result = driver.run("print('hello')", label="lost")
+        summary = driver.query("session.summary")
+
+        assert result["ok"] is False
+        assert result["error_code"] == "bridge_request_failed"
+        assert result["exit_code"] == -1
+        assert result["stdout"] == ""
+        assert result["stderr"] == ""
+        assert result["result"] is None
+        assert result["model_summary"] is None
+        assert result["backend"] == "bridge"
+        assert summary["run_count"] == 1
+
+    def test_query_bridge_model_summary_can_inspect_live_state(self, monkeypatch, tmp_path):
+        driver = AbaqusDriver()
+        monkeypatch.setattr(driver, "detect_installed", lambda: [self._install()])
+        monkeypatch.setattr(driver, "_start_bridge", lambda: None)
+        driver.launch(workspace=str(tmp_path), backend="bridge")
+
+        monkeypatch.setattr(
+            driver,
+            "_bridge_request",
+            lambda payload, timeout=None: {"ok": True, "model_summary": {"models": {"Model-1": {}}, "jobs": []}},
+        )
+
+        result = driver.query("cae.model_summary")
+
+        assert result["available"] is True
+        assert "Model-1" in result["model_summary"]["models"]
+
+    def test_generated_bridge_server_compiles(self, monkeypatch, tmp_path):
+        driver = AbaqusDriver()
+        monkeypatch.setattr(driver, "detect_installed", lambda: [self._install()])
+        driver.launch(workspace=str(tmp_path))
+
+        server_path = driver._write_bridge_server()
+
+        py_compile.compile(str(server_path), doraise=True)
+
+    def test_generated_bridge_server_has_auth_and_connection_limits(self, monkeypatch, tmp_path):
+        driver = AbaqusDriver()
+        monkeypatch.setattr(driver, "detect_installed", lambda: [self._install()])
+        driver.launch(workspace=str(tmp_path))
+
+        server_path = driver._write_bridge_server()
+        text = server_path.read_text(encoding="utf-8")
+
+        assert "SIM_ABAQUS_BRIDGE_TOKEN" in text
+        assert 'req.get("token") != TOKEN' in text
+        assert "conn.settimeout(CONNECTION_TIMEOUT_S)" in text
+        assert "MAX_REQUEST_BYTES" in text
+        assert "except Exception:\n        continue\nsock.close()" in text
+
+    def test_cae_wrapper_uses_configured_timeout(self, monkeypatch, tmp_path):
+        driver = AbaqusDriver()
+        monkeypatch.setattr(driver, "detect_installed", lambda: [self._install()])
+        driver.launch(workspace=str(tmp_path), snippet_timeout=12)
+        wrapper_path, _ = driver._write_cae_wrapper("_sim_result = {}", "timeout-test")
+        seen = {}
+
+        def fake_subprocess_run(*args, **kwargs):
+            seen["timeout"] = kwargs["timeout"]
+            return subprocess.CompletedProcess(args[0], 0, stdout="", stderr="")
+
+        monkeypatch.setattr("sim_plugin_abaqus.driver.subprocess.run", fake_subprocess_run)
+
+        driver._run_cae_wrapper(wrapper_path)
+
+        assert seen["timeout"] == 12.0
+
+    def test_run_without_launch_is_readable_failure(self):
+        result = AbaqusDriver().run("print('hello')")
+
+        assert result["ok"] is False
+        assert result["error_code"] == "session_not_connected"
+
+    def test_disconnect_is_idempotent(self, monkeypatch, tmp_path):
+        driver = AbaqusDriver()
+        monkeypatch.setattr(driver, "detect_installed", lambda: [self._install()])
+        driver.launch(workspace=str(tmp_path))
+
+        first = driver.disconnect()
+        second = driver.disconnect()
+
+        assert first["ok"] is True
+        assert first["disconnected"] is True
+        assert second == {"ok": True, "session_id": None, "backend": "file", "disconnected": True}

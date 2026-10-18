@@ -1,0 +1,10 @@
+driver: hypermesh
+sdk_package: null
+
+profiles:
+  - name: hypermesh_gui_current
+    solver_versions: ["2024", "2024.1", "2024.2", "2025", "2025.1", "2026", "2026.0"]
+    active_solver_layer: "current"
+    notes: |
+      GUI-first local desktop workflow. Python snippets run through a visible
+      session and should emit JSON for agent inspection.

@@ -1,0 +1,21 @@
+[project]
+name = "sim-fluent-doc"
+version = "0.1.0"
+description = "Local full-text search over an installed Ansys Fluent documentation tree."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "beautifulsoup4>=4.12",
+    "lxml>=5.0",
+]
+
+[project.scripts]
+sim-fluent-doc = "sim_fluent_doc.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sim_fluent_doc"]

@@ -40,7 +40,7 @@ def _install_migration_message(source: str | None = None) -> str:
             return (
                 f"{base}\n\n"
                 "Short solver names are not package specs. Find the package spec in "
-                "docs.svdailab.com/plugin-index or sim-plugin-index, then run:\n"
+                "the sim-cli workspace plugin-index.json, then run:\n"
                 "  uv add sim-cli-core <plugin-package-spec>"
             )
 

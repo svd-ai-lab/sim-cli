@@ -1,0 +1,97 @@
+# Debug failed exec
+
+When `uv run sim exec` fails, stop generating new full scripts. Inspect the
+failure and the live model state, then retry with the smallest patch.
+
+## Triage
+
+1. Inspect the structured result:
+
+   ```bash
+   uv run sim inspect comsol.model.identity
+   uv run sim inspect last.result
+   ```
+
+2. Classify the failure:
+
+   | Class | Typical signal | First check |
+   |---|---|---|
+   | Python issue | Syntax error, import error, name error | Fix the snippet only. |
+   | Missing tag | Unknown component, physics, feature, material, or study tag | List parent `tags()`. |
+   | Missing property | COMSOL rejects `set(...)` key | Inspect `properties()` on the live node. |
+   | Empty selection | Solve or feature build fails after geometry changes | Inspect named selections and selected entities. |
+   | Geometry failure | `geom.run()` fails | Inspect geometry feature order and entity dimensions. |
+   | Mesh failure | Mesh build fails or produces impossible size | Inspect geometry validity and local size features. |
+   | Solver failure | Study fails after setup looked valid | Inspect physics/material consistency and run smaller probes. |
+   | Module missing | Feature type not found, docs absent, license issue | Check `session.health` and choose a capability fallback path. |
+
+3. Inspect live model state:
+
+   ```bash
+   uv run sim inspect comsol.model.describe_text
+   ```
+
+4. Inspect the suspicious node:
+
+   ```bash
+   uv run sim inspect comsol.node.properties:<tag-or-dot-path>
+   ```
+
+5. If the inspect target is unavailable, use the raw Java snippets in
+   `base/reference/java_api_patterns.md`.
+
+6. Search local COMSOL docs only after live introspection does not answer
+   the question:
+
+   ```bash
+   uv run --project <skill>/doc-search sim-comsol-doc search "2-3 keywords" --module <module>
+   ```
+
+7. Retry with a small patch. Do not re-run a full builder unless the
+   model state is intentionally being rebuilt from scratch.
+
+## Divergence or singular solve
+
+Do not begin by cycling solver knobs. Save the failing model and convergence
+record, then distinguish the failure class:
+
+| Class | Evidence to inspect first |
+|---|---|
+| Singular or underconstrained | Disconnected domains, unconstrained rigid modes, missing reference potential/pressure, empty selections, inactive constraints. |
+| Invalid setup or scaling | Units, material ranges, source signs, boundary compatibility, variable scaling, and initial values. |
+| Mesh-localized | Worst cells and their locations, thin gaps, interfaces, corners, boundary layers, and resolution of the leading gradient or wavelength. |
+| Nonlinear or coupled | First variable/residual that grows, invalid intermediate states, discontinuities, load jump, and the same physics solved separately. |
+
+Use the smallest discriminating run: zero or reduced load, one uncoupled physics
+block, a coarser valid mesh, or a short continuation step. Change one axis per
+run—initialization/load ramp, scaling, nonlinear controls, coupling, or mesh—so
+the result has a causal interpretation. A lower residual alone is not proof of
+a valid solution; also check conservation, boundary behavior, and the leading
+physical KPI against the last valid baseline.
+
+## Minimal retry pattern
+
+Return enough information for the next decision:
+
+```python
+try:
+    # one targeted fix or one read-only probe
+    _result = {"ok": True, "changed": "comp1.ht.hf1"}
+except Exception as exc:
+    _result = {
+        "ok": False,
+        "type": type(exc).__name__,
+        "message": str(exc),
+    }
+    raise
+```
+
+## Good repair behavior
+
+- Keep the current session unless it is corrupted.
+- If identity is missing or not checkpoint-ready, save or load a durable
+  `.mph` before further risky edits.
+- Save a `.mph` checkpoint before risky rebuilds.
+- Prefer checking parent tags over guessing child tags.
+- Prefer inspecting a node over trying alternate property names.
+- Record repeated version-specific workarounds in `solver/<version>/notes.md`.

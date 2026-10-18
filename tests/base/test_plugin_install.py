@@ -26,7 +26,7 @@ def test_install_short_name_points_to_plugin_index():
     assert report.ok is False
     assert report.error_code == "PLUGIN_INSTALL_RETIRED"
     assert "Short solver names are not package specs" in report.message
-    assert "docs.svdailab.com/plugin-index" in report.message
+    assert "plugin-index.json" in report.message
     assert "uv add sim-cli-core <plugin-package-spec>" in report.message
 
 
@@ -89,4 +89,4 @@ def test_cli_plugin_install_json_shows_retired_code():
     data = json.loads(result.output)
     assert data["ok"] is False
     assert data["error_code"] == "PLUGIN_INSTALL_RETIRED"
-    assert "docs.svdailab.com/plugin-index" in data["message"]
+    assert "plugin-index.json" in data["message"]
