@@ -43,8 +43,8 @@ starccm = "sim_plugin_starccm:skills_dir"
 starccm = "sim_plugin_starccm:plugin_info"
 
 [project.urls]
-Homepage = "https://github.com/svd-ai-lab/sim-plugin-starccm"
-Issues = "https://github.com/svd-ai-lab/sim-plugin-starccm/issues"
+Homepage = "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/starccm"
+Issues = "https://github.com/svd-ai-lab/sim-cli/issues"
 
 
 [tool.hatch.build.targets.wheel]

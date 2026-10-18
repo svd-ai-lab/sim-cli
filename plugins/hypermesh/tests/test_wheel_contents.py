@@ -11,13 +11,12 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
-@pytest.mark.integration
 def test_wheel_contains_sanitized_plugin_files(tmp_path: Path) -> None:
     out_dir = tmp_path / "dist"
     out_dir.mkdir()
 
     proc = subprocess.run(
-        [sys.executable, "-m", "build", "--wheel", "--outdir", str(out_dir)],
+        [sys.executable, "-m", "build", "--no-isolation", "--wheel", "--outdir", str(out_dir)],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,

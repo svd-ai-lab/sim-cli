@@ -21,7 +21,7 @@ skills_dir = _skills_dir()
 plugin_info = {
     "name": "spaceclaim",
     "summary": "Ansys SpaceClaim CAD-preparation skill package for sim.",
-    "homepage": "https://github.com/svd-ai-lab/sim-plugin-spaceclaim",
+    "homepage": "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/spaceclaim",
     "license_class": "commercial",
     "solver_name": "spaceclaim",
 }

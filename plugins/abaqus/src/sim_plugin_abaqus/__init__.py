@@ -14,7 +14,7 @@ skills_dir = files(__name__) / "_skills"
 plugin_info = {
     "name": "abaqus",
     "summary": "Driver plugin for sim-cli.",
-    "homepage": "https://github.com/svd-ai-lab/sim-plugin-abaqus",
+    "homepage": "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/abaqus",
     "license_class": "commercial",
     "solver_name": "abaqus",
 }

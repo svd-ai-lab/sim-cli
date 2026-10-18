@@ -45,10 +45,10 @@ mechanical = "sim_plugin_mechanical:skills_dir"
 mechanical = "sim_plugin_mechanical:plugin_info"
 
 [project.urls]
-Homepage = "https://github.com/svd-ai-lab/sim-plugin-mechanical"
-Repository = "https://github.com/svd-ai-lab/sim-plugin-mechanical"
-Issues = "https://github.com/svd-ai-lab/sim-plugin-mechanical/issues"
-Changelog = "https://github.com/svd-ai-lab/sim-plugin-mechanical/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/mechanical"
+Repository = "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/mechanical"
+Issues = "https://github.com/svd-ai-lab/sim-cli/issues"
+Changelog = "https://github.com/svd-ai-lab/sim-cli/blob/main/plugins/mechanical/CHANGELOG.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/sim_plugin_mechanical"]

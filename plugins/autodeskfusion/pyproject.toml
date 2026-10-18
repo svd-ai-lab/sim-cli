@@ -45,10 +45,10 @@ autodeskfusion = "sim_plugin_autodeskfusion:skills_dir"
 autodeskfusion = "sim_plugin_autodeskfusion:plugin_info"
 
 [project.urls]
-Homepage = "https://github.com/svd-ai-lab/sim-plugin-autodeskfusion"
-Repository = "https://github.com/svd-ai-lab/sim-plugin-autodeskfusion"
-Issues = "https://github.com/svd-ai-lab/sim-plugin-autodeskfusion/issues"
-Changelog = "https://github.com/svd-ai-lab/sim-plugin-autodeskfusion/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/autodeskfusion"
+Repository = "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/autodeskfusion"
+Issues = "https://github.com/svd-ai-lab/sim-cli/issues"
+Changelog = "https://github.com/svd-ai-lab/sim-cli/blob/main/plugins/autodeskfusion/CHANGELOG.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/sim_plugin_autodeskfusion"]

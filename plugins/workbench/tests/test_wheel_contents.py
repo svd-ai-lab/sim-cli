@@ -12,13 +12,12 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
-@pytest.mark.integration
 def test_wheel_contains_skills(tmp_path: Path) -> None:
     out_dir = tmp_path / "dist"
     out_dir.mkdir()
 
     proc = subprocess.run(
-        [sys.executable, "-m", "build", "--wheel", "--outdir", str(out_dir)],
+        [sys.executable, "-m", "build", "--no-isolation", "--wheel", "--outdir", str(out_dir)],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
@@ -47,7 +46,6 @@ def test_wheel_contains_skills(tmp_path: Path) -> None:
         "sim_plugin_workbench/_skills/workbench/base/workflows/project_review_loop.md",
         "sim_plugin_workbench/_skills/workbench/base/workflows/debug_failed_exec.md",
         "sim_plugin_workbench/_skills/workbench/base/workflows/mechanical_handoff.md",
-        "sim_plugin_workbench/_skills/workbench/tests/test_orchestration.py",
     }
     missing = required - names
     assert not missing, f"missing from wheel: {missing}"

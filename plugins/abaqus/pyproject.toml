@@ -44,10 +44,10 @@ abaqus = "sim_plugin_abaqus:skills_dir"
 abaqus = "sim_plugin_abaqus:plugin_info"
 
 [project.urls]
-Homepage = "https://github.com/svd-ai-lab/sim-plugin-abaqus"
-Repository = "https://github.com/svd-ai-lab/sim-plugin-abaqus"
-Issues = "https://github.com/svd-ai-lab/sim-plugin-abaqus/issues"
-Changelog = "https://github.com/svd-ai-lab/sim-plugin-abaqus/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/abaqus"
+Repository = "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/abaqus"
+Issues = "https://github.com/svd-ai-lab/sim-cli/issues"
+Changelog = "https://github.com/svd-ai-lab/sim-cli/blob/main/plugins/abaqus/CHANGELOG.md"
 
 
 [tool.hatch.build.targets.wheel]

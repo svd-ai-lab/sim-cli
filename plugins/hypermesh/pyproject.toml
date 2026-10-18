@@ -43,9 +43,9 @@ hypermesh = "sim_plugin_hypermesh:skills_dir"
 hypermesh = "sim_plugin_hypermesh:plugin_info"
 
 [project.urls]
-Homepage = "https://github.com/svd-ai-lab/sim-plugin-hypermesh"
-Repository = "https://github.com/svd-ai-lab/sim-plugin-hypermesh"
-Issues = "https://github.com/svd-ai-lab/sim-plugin-hypermesh/issues"
+Homepage = "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/hypermesh"
+Repository = "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/hypermesh"
+Issues = "https://github.com/svd-ai-lab/sim-cli/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/sim_plugin_hypermesh"]

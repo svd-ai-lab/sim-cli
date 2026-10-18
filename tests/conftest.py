@@ -90,7 +90,7 @@ class _SyntheticPyDriver:
 
 
 @pytest.fixture(autouse=True)
-def _inject_synthetic_coolprop(request):
+def _inject_synthetic_coolprop(request, monkeypatch):
     """Inject a synthetic ``coolprop`` driver into the registry for base CLI tests.
 
     Active only under ``tests/base/``; driver-specific suites still exercise
@@ -104,6 +104,11 @@ def _inject_synthetic_coolprop(request):
         return
 
     from sim import drivers as _drivers_pkg
+    from sim import plugins as _plugins_pkg
+
+    # Discovery-specific tests supply their own entry points. Other core
+    # tests must behave the same with and without workspace plugins installed.
+    monkeypatch.setattr(_plugins_pkg, "entry_points", lambda **kwargs: [])
 
     # Make the synthetic driver importable by the same module path stored in
     # the registry. Depending on pytest import mode this file may not already
@@ -119,7 +124,8 @@ def _inject_synthetic_coolprop(request):
     orig_cache = _drivers_pkg._INSTANCE_CACHE.pop("coolprop", None)
 
     _drivers_pkg._BUILTIN_REGISTRY.append(fake_spec)
-    _drivers_pkg._REGISTRY.append(fake_spec)
+    # Base contracts must not probe locally installed solver plugins.
+    _drivers_pkg._REGISTRY[:] = _drivers_pkg._BUILTIN_REGISTRY
     _drivers_pkg._INSTANCE_CACHE["coolprop"] = instance
     try:
         yield

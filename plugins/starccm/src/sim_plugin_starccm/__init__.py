@@ -14,7 +14,7 @@ skills_dir = files(__name__) / "_skills"
 plugin_info = {
     "name": "starccm",
     "summary": "Driver plugin for sim-cli.",
-    "homepage": "https://github.com/svd-ai-lab/sim-plugin-starccm",
+    "homepage": "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/starccm",
     "license_class": "commercial",
     "solver_name": "starccm",
 }

@@ -1,0 +1,102 @@
+name: Publish plugin
+run-name: "${{ inputs.mode || 'legacy' }} ${{ inputs.package || github.ref_name }} ${{ github.sha }}"
+on:
+  push:
+    tags: ["abaqus-v*", "autodeskfusion-v*", "comsol-v*", "flotherm-v*", "fluent-v*", "hfss-v*", "hypermesh-v*", "mechanical-v*", "spaceclaim-v*", "starccm-v*", "workbench-v*"]
+  workflow_dispatch:
+    inputs:
+      package:
+        type: choice
+        required: true
+        options: [abaqus, autodeskfusion, comsol, flotherm, fluent, hfss, hypermesh, mechanical, spaceclaim, starccm, workbench]
+      mode:
+        type: choice
+        options: [build, publish-reviewed]
+        default: build
+      build_run_id:
+        type: string
+      manifest_sha256:
+        type: string
+permissions:
+  contents: read
+jobs:
+  select:
+    runs-on: ubuntu-latest
+    outputs:
+      project: ${{ steps.select.outputs.project }}
+      package: ${{ steps.select.outputs.package }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - id: select
+        env:
+          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+          PACKAGE: ${{ inputs.package }}
+        run: |
+          args=()
+          if [ -n "$RELEASE_TAG" ]; then args+=(--tag "$RELEASE_TAG"); fi
+          if [ -n "$PACKAGE" ]; then args+=(--package "$PACKAGE"); fi
+          python scripts/release_package.py "${args[@]}"
+  build:
+    if: inputs.mode != 'publish-reviewed'
+    needs: select
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - run: uv build --no-sources --package "${{ needs.select.outputs.package }}"
+      - run: uv tool run twine check dist/*
+      - run: python scripts/release_artifacts.py create --project "${{ needs.select.outputs.project }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: reviewed-distributions
+          path: |
+            dist/*
+            release-manifest.json
+  publish:
+    if: github.event_name == 'push'
+    needs: [select, build]
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: reviewed-distributions
+      - uses: pypa/gh-action-pypi-publish@release/v1
+  publish-reviewed:
+    if: inputs.mode == 'publish-reviewed'
+    needs: select
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate build identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD_RUN_ID: ${{ inputs.build_run_id }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BUILD_RUN_ID" > build-run.json
+          python -c "import json,os; r=json.load(open('build-run.json')); assert r['head_sha']==os.environ['GITHUB_SHA'] and r['conclusion']=='success' and r['path']=='.github/workflows/plugin-publish.yml'"
+      - uses: actions/download-artifact@v4
+        with:
+          name: reviewed-distributions
+          run-id: ${{ inputs.build_run_id }}
+          github-token: ${{ github.token }}
+      - name: Verify reviewed bytes
+        env:
+          MANIFEST_SHA256: ${{ inputs.manifest_sha256 }}
+        run: python scripts/release_artifacts.py verify --project "${{ needs.select.outputs.project }}" --expected-sha256 "$MANIFEST_SHA256"
+      - uses: pypa/gh-action-pypi-publish@release/v1

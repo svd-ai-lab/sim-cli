@@ -46,6 +46,9 @@ dependencies = [
 [project.optional-dependencies]
 dev     = ["pytest>=8.0", "ruff>=0.4"]
 
+[dependency-groups]
+dev = ["pytest>=8.0", "ruff>=0.4", "build>=1.0", "hatchling>=1.26"]
+
 [project.urls]
 Homepage      = "https://github.com/svd-ai-lab/sim-cli"
 Repository    = "https://github.com/svd-ai-lab/sim-cli"
@@ -55,6 +58,12 @@ Changelog     = "https://github.com/svd-ai-lab/sim-cli/blob/main/CHANGELOG.md"
 
 [project.scripts]
 sim = "sim.cli:main"
+
+[tool.uv.workspace]
+members = ["plugins/*"]
+
+[tool.uv.sources]
+sim-cli-core = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]
@@ -69,3 +78,6 @@ markers = ["integration: requires solver packages installed"]
 
 [tool.ruff]
 target-version = "py310"
+
+[tool.hatch.build.targets.sdist]
+only-include = ["src/sim", "pyproject.toml", "README.md", "LICENSE", "NOTICE", "CHANGELOG.md"]

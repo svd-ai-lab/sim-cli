@@ -13,7 +13,6 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
-@pytest.mark.integration
 def test_wheel_contains_skills(tmp_path: Path) -> None:
     if importlib.util.find_spec("build") is None:
         pytest.skip("build package is not installed")
@@ -22,7 +21,7 @@ def test_wheel_contains_skills(tmp_path: Path) -> None:
     out_dir.mkdir()
 
     proc = subprocess.run(
-        [sys.executable, "-m", "build", "--wheel", "--outdir", str(out_dir)],
+        [sys.executable, "-m", "build", "--no-isolation", "--wheel", "--outdir", str(out_dir)],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,

@@ -17,7 +17,7 @@ skills_dir = files(__name__) / "_skills"
 plugin_info = {
     "name": "workbench",
     "summary": "Driver plugin for sim-cli.",
-    "homepage": "https://github.com/svd-ai-lab/sim-plugin-workbench",
+    "homepage": "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/workbench",
     "license_class": "commercial",
     "solver_name": "workbench",
 }

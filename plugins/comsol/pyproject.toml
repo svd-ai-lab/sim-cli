@@ -47,10 +47,10 @@ comsol = "sim_plugin_comsol:plugin_info"
 sim-comsol-attach = "sim_plugin_comsol.desktop_attach.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/svd-ai-lab/sim-plugin-comsol"
-Repository = "https://github.com/svd-ai-lab/sim-plugin-comsol"
-Issues = "https://github.com/svd-ai-lab/sim-plugin-comsol/issues"
-Changelog = "https://github.com/svd-ai-lab/sim-plugin-comsol/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/comsol"
+Repository = "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/comsol"
+Issues = "https://github.com/svd-ai-lab/sim-cli/issues"
+Changelog = "https://github.com/svd-ai-lab/sim-cli/blob/main/plugins/comsol/CHANGELOG.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/sim_plugin_comsol"]

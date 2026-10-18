@@ -14,7 +14,7 @@ skills_dir = files(__name__) / "_skills"
 plugin_info = {
     "name": "hfss",
     "summary": "Ansys HFSS 3D driver plugin for sim-cli.",
-    "homepage": "https://github.com/svd-ai-lab/sim-plugin-hfss",
+    "homepage": "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/hfss",
     "license_class": "commercial",
     "solver_name": "hfss",
 }

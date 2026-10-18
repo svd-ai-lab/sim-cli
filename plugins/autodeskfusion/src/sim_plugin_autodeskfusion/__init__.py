@@ -8,7 +8,7 @@ skills_dir = files(__name__) / "_skills"
 plugin_info = {
     "name": "autodeskfusion",
     "summary": "Autodesk Fusion official-MCP driver and bundled skill for sim.",
-    "homepage": "https://github.com/svd-ai-lab/sim-plugin-autodeskfusion",
+    "homepage": "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/autodeskfusion",
     "license_class": "commercial",
     "solver_name": "Autodesk Fusion",
 }

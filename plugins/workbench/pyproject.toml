@@ -46,10 +46,10 @@ workbench = "sim_plugin_workbench:skills_dir"
 workbench = "sim_plugin_workbench:plugin_info"
 
 [project.urls]
-Homepage = "https://github.com/svd-ai-lab/sim-plugin-workbench"
-Repository = "https://github.com/svd-ai-lab/sim-plugin-workbench"
-Issues = "https://github.com/svd-ai-lab/sim-plugin-workbench/issues"
-Changelog = "https://github.com/svd-ai-lab/sim-plugin-workbench/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/workbench"
+Repository = "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/workbench"
+Issues = "https://github.com/svd-ai-lab/sim-cli/issues"
+Changelog = "https://github.com/svd-ai-lab/sim-cli/blob/main/plugins/workbench/CHANGELOG.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/sim_plugin_workbench"]

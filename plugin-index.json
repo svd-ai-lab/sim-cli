@@ -1,0 +1,222 @@
+{
+  "schema_version": 1,
+  "plugins": [
+    {
+      "solver": "abaqus",
+      "package": "sim-plugin-abaqus",
+      "version": "0.1.4",
+      "install_spec": "sim-plugin-abaqus",
+      "path": "plugins/abaqus",
+      "repository": "https://github.com/svd-ai-lab/sim-cli",
+      "source": "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/abaqus",
+      "entry_points": {
+        "sim.drivers": {
+          "abaqus": "sim_plugin_abaqus:AbaqusDriver"
+        },
+        "sim.skills": {
+          "abaqus": "sim_plugin_abaqus:skills_dir"
+        },
+        "sim.plugins": {
+          "abaqus": "sim_plugin_abaqus:plugin_info"
+        }
+      }
+    },
+    {
+      "solver": "autodeskfusion",
+      "package": "sim-plugin-autodeskfusion",
+      "version": "0.1.0",
+      "install_spec": "sim-plugin-autodeskfusion",
+      "path": "plugins/autodeskfusion",
+      "repository": "https://github.com/svd-ai-lab/sim-cli",
+      "source": "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/autodeskfusion",
+      "entry_points": {
+        "sim.drivers": {
+          "autodeskfusion": "sim_plugin_autodeskfusion:AutodeskFusionDriver"
+        },
+        "sim.skills": {
+          "autodeskfusion": "sim_plugin_autodeskfusion:skills_dir"
+        },
+        "sim.plugins": {
+          "autodeskfusion": "sim_plugin_autodeskfusion:plugin_info"
+        }
+      }
+    },
+    {
+      "solver": "comsol",
+      "package": "sim-plugin-comsol",
+      "version": "0.1.14",
+      "install_spec": "sim-plugin-comsol",
+      "path": "plugins/comsol",
+      "repository": "https://github.com/svd-ai-lab/sim-cli",
+      "source": "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/comsol",
+      "entry_points": {
+        "sim.drivers": {
+          "comsol": "sim_plugin_comsol:ComsolDriver"
+        },
+        "sim.skills": {
+          "comsol": "sim_plugin_comsol:skills_dir"
+        },
+        "sim.plugins": {
+          "comsol": "sim_plugin_comsol:plugin_info"
+        }
+      }
+    },
+    {
+      "solver": "flotherm",
+      "package": "sim-plugin-flotherm",
+      "version": "0.1.1",
+      "install_spec": "sim-plugin-flotherm",
+      "path": "plugins/flotherm",
+      "repository": "https://github.com/svd-ai-lab/sim-cli",
+      "source": "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/flotherm",
+      "entry_points": {
+        "sim.drivers": {
+          "flotherm": "sim_plugin_flotherm:FlothermDriver"
+        },
+        "sim.skills": {
+          "flotherm": "sim_plugin_flotherm:skills_dir"
+        },
+        "sim.plugins": {
+          "flotherm": "sim_plugin_flotherm:plugin_info"
+        }
+      }
+    },
+    {
+      "solver": "fluent",
+      "package": "sim-plugin-fluent",
+      "version": "0.2.0",
+      "install_spec": "sim-plugin-fluent",
+      "path": "plugins/fluent",
+      "repository": "https://github.com/svd-ai-lab/sim-cli",
+      "source": "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/fluent",
+      "entry_points": {
+        "sim.drivers": {
+          "fluent": "sim_plugin_fluent:PyFluentDriver"
+        },
+        "sim.skills": {
+          "fluent": "sim_plugin_fluent:skills_dir"
+        },
+        "sim.plugins": {
+          "fluent": "sim_plugin_fluent:plugin_info"
+        }
+      }
+    },
+    {
+      "solver": "hfss",
+      "package": "sim-plugin-hfss",
+      "version": "0.1.2",
+      "install_spec": "sim-plugin-hfss",
+      "path": "plugins/hfss",
+      "repository": "https://github.com/svd-ai-lab/sim-cli",
+      "source": "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/hfss",
+      "entry_points": {
+        "sim.drivers": {
+          "hfss": "sim_plugin_hfss:HfssDriver"
+        },
+        "sim.skills": {
+          "hfss": "sim_plugin_hfss:skills_dir"
+        },
+        "sim.plugins": {
+          "hfss": "sim_plugin_hfss:plugin_info"
+        }
+      }
+    },
+    {
+      "solver": "hypermesh",
+      "package": "sim-plugin-hypermesh",
+      "version": "0.2.0",
+      "install_spec": "sim-plugin-hypermesh",
+      "path": "plugins/hypermesh",
+      "repository": "https://github.com/svd-ai-lab/sim-cli",
+      "source": "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/hypermesh",
+      "entry_points": {
+        "sim.drivers": {
+          "hypermesh": "sim_plugin_hypermesh:HyperMeshDriver"
+        },
+        "sim.skills": {
+          "hypermesh": "sim_plugin_hypermesh:skills_dir"
+        },
+        "sim.plugins": {
+          "hypermesh": "sim_plugin_hypermesh:plugin_info"
+        }
+      }
+    },
+    {
+      "solver": "mechanical",
+      "package": "sim-plugin-mechanical",
+      "version": "0.1.6",
+      "install_spec": "sim-plugin-mechanical",
+      "path": "plugins/mechanical",
+      "repository": "https://github.com/svd-ai-lab/sim-cli",
+      "source": "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/mechanical",
+      "entry_points": {
+        "sim.drivers": {
+          "mechanical": "sim_plugin_mechanical:MechanicalDriver"
+        },
+        "sim.skills": {
+          "mechanical": "sim_plugin_mechanical:skills_dir"
+        },
+        "sim.plugins": {
+          "mechanical": "sim_plugin_mechanical:plugin_info"
+        }
+      }
+    },
+    {
+      "solver": "spaceclaim",
+      "package": "sim-plugin-spaceclaim",
+      "version": "0.1.0",
+      "install_spec": "sim-plugin-spaceclaim",
+      "path": "plugins/spaceclaim",
+      "repository": "https://github.com/svd-ai-lab/sim-cli",
+      "source": "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/spaceclaim",
+      "entry_points": {
+        "sim.skills": {
+          "spaceclaim": "sim_plugin_spaceclaim:skills_dir"
+        },
+        "sim.plugins": {
+          "spaceclaim": "sim_plugin_spaceclaim:plugin_info"
+        }
+      }
+    },
+    {
+      "solver": "starccm",
+      "package": "sim-plugin-starccm",
+      "version": "0.1.0",
+      "install_spec": "sim-plugin-starccm",
+      "path": "plugins/starccm",
+      "repository": "https://github.com/svd-ai-lab/sim-cli",
+      "source": "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/starccm",
+      "entry_points": {
+        "sim.drivers": {
+          "starccm": "sim_plugin_starccm:StarccmDriver"
+        },
+        "sim.skills": {
+          "starccm": "sim_plugin_starccm:skills_dir"
+        },
+        "sim.plugins": {
+          "starccm": "sim_plugin_starccm:plugin_info"
+        }
+      }
+    },
+    {
+      "solver": "workbench",
+      "package": "sim-plugin-workbench",
+      "version": "0.1.2",
+      "install_spec": "sim-plugin-workbench",
+      "path": "plugins/workbench",
+      "repository": "https://github.com/svd-ai-lab/sim-cli",
+      "source": "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/workbench",
+      "entry_points": {
+        "sim.drivers": {
+          "workbench": "sim_plugin_workbench:WorkbenchDriver"
+        },
+        "sim.skills": {
+          "workbench": "sim_plugin_workbench:skills_dir"
+        },
+        "sim.plugins": {
+          "workbench": "sim_plugin_workbench:plugin_info"
+        }
+      }
+    }
+  ]
+}

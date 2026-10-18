@@ -14,7 +14,7 @@ skills_dir = files(__name__) / "_skills"
 plugin_info = {
     "name": "fluent",
     "summary": "Ansys Fluent driver and bundled skill for sim.",
-    "homepage": "https://github.com/svd-ai-lab/sim-plugin-fluent",
+    "homepage": "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/fluent",
     "license_class": "commercial",
     "solver_name": "fluent",
 }

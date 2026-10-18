@@ -46,8 +46,8 @@ flotherm = "sim_plugin_flotherm:skills_dir"
 flotherm = "sim_plugin_flotherm:plugin_info"
 
 [project.urls]
-Homepage = "https://github.com/svd-ai-lab/sim-plugin-flotherm"
-Issues = "https://github.com/svd-ai-lab/sim-plugin-flotherm/issues"
+Homepage = "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/flotherm"
+Issues = "https://github.com/svd-ai-lab/sim-cli/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/sim_plugin_flotherm"]

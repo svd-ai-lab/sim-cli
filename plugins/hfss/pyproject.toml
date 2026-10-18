@@ -44,10 +44,10 @@ hfss = "sim_plugin_hfss:skills_dir"
 hfss = "sim_plugin_hfss:plugin_info"
 
 [project.urls]
-Homepage = "https://github.com/svd-ai-lab/sim-plugin-hfss"
-Repository = "https://github.com/svd-ai-lab/sim-plugin-hfss"
-Issues = "https://github.com/svd-ai-lab/sim-plugin-hfss/issues"
-Changelog = "https://github.com/svd-ai-lab/sim-plugin-hfss/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/hfss"
+Repository = "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/hfss"
+Issues = "https://github.com/svd-ai-lab/sim-cli/issues"
+Changelog = "https://github.com/svd-ai-lab/sim-cli/blob/main/plugins/hfss/CHANGELOG.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/sim_plugin_hfss"]

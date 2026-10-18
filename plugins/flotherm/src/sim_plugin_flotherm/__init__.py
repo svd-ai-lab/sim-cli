@@ -14,7 +14,7 @@ skills_dir = files(__name__) / "_skills"
 plugin_info = {
     "name": "flotherm",
     "summary": "Driver plugin for sim-cli.",
-    "homepage": "https://github.com/svd-ai-lab/sim-plugin-flotherm",
+    "homepage": "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/flotherm",
     "license_class": "commercial",
     "solver_name": "flotherm",
 }

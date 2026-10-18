@@ -14,7 +14,7 @@ skills_dir = files(__name__) / "_skills"
 plugin_info = {
     "name": "comsol",
     "summary": "Driver plugin for sim-cli.",
-    "homepage": "https://github.com/svd-ai-lab/sim-plugin-comsol",
+    "homepage": "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/comsol",
     "license_class": "commercial",
     "solver_name": "comsol",
 }
