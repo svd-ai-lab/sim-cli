@@ -4,8 +4,10 @@
 
 - Commands dir convention: `SIMULIA\Commands\abaqus.bat` often wraps the
   versioned launcher such as `abq2026.bat`.
-- Confirm the active local build with `abaqus information=release` or
-  `uv run sim check abaqus` before making release-specific claims.
+- Confirm the active local build with a direct launcher probe such as
+  `abaqus information=release`; for sim runtime validation, run
+  `uv run sim check abaqus` from a project environment with the plugin installed
+  before making release-specific claims.
 
 ## Key Changes from 2025
 

@@ -48,11 +48,13 @@ starccm+ -batch smoke_test.java
 
 ## sim-cli integration
 
+From a project environment with sim-cli/plugin installed:
+
 ```bash
 # Run via sim (auto-detects starccm+ path and license)
 sim run macro.java --solver starccm
 
-# Check installation
+# Validate sim runtime/plugin wiring
 sim check starccm
 
 # Lint macro before running

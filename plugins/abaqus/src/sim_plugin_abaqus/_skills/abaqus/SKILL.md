@@ -1,13 +1,14 @@
 ---
 name: abaqus-sim
-description: Use when the user asks Codex, Claude Code, ChatGPT-style coding agents, or another AI agent to automate, inspect, run, or debug Abaqus through sim-cli. Supports Abaqus/CAE noGUI workflows, batch jobs, model inspection, ODB diagnostics, bounded execution, artifact reporting, and troubleshooting. Requires a user-owned Abaqus installation.
+description: "Use when the user asks Codex, Claude Code, ChatGPT-style coding agents, or another AI agent to automate, inspect, run, or debug Abaqus. Choose the simplest real Abaqus control path first: existing artifacts, direct vendor launchers/batch commands, Abaqus/CAE noGUI, or sim-cli when standardized execution, diagnostics, session handling, and artifact reporting are useful. Requires a user-owned Abaqus installation."
 ---
 
 # abaqus-sim
 
-This file is the **Abaqus** index. Use sim-cli for solver execution and live
-CAE authoring; use portable Python text parsing for completed text artifacts
-when the job files are already on disk.
+This file is the **Abaqus** index. Prefer direct local evidence first: existing
+`.inp`/`.odb`/`.dat`/`.sta`/`.msg` artifacts, Abaqus/SIMULIA command launchers,
+installed vendor docs, or user-provided paths. Use sim-cli for solver execution
+and live CAE authoring when its wrapping adds useful structure.
 
 Abaqus is a commercial finite element analysis (FEA) solver by Dassault
 Systemes SIMULIA. The sim plugin supports two execution styles:
@@ -63,15 +64,19 @@ for PyMechanical / Ansys Mechanical sessions.
 ## Hard constraints (apply to every session)
 
 0. **Respect the Abaqus embedded-Python boundary.** Ordinary file-side
-   plotting/post-processing follows the sim-cli Python-helper environment
-   guidance. Abaqus/CAE and ODB scripts are different: execute them through
-   `uv run sim run --solver abaqus script.py` so Abaqus launches its embedded Python
-   with the vendor modules available.
-1. **Availability first.** Run `uv run sim check abaqus` before creating files. If
-   it reports `not_installed`, do not keep trying random paths. Ask the user
-   to install Abaqus or set `SIM_ABAQUS_COMMAND` / `ABAQUS_COMMAND` /
-   `ABAQUS_BAT_PATH` to the exact launcher, for example
-   `C:\SIMULIA\Commands\abq2026.bat`.
+   plotting/post-processing follows the sim-cli Python-helper environment when
+   sim runtime is in use. Abaqus/CAE and ODB scripts are different: execute them
+   through a real Abaqus launcher such as `abaqus cae noGUI=script.py`, or
+   through `uv run sim run --solver abaqus script.py` when using sim runtime, so
+   Abaqus launches its embedded Python with the vendor modules available.
+1. **Direct availability first.** Before requiring sim-cli, look for a real
+   Abaqus launcher through `SIM_ABAQUS_COMMAND`, `ABAQUS_COMMAND`,
+   `ABAQUS_BAT_PATH`, `PATH` entries such as `abaqus`/`abq20*.bat`, and common
+   SIMULIA Commands locations such as `C:\SIMULIA\Commands` or
+   `C:\Program Files\Dassault Systemes\SIMULIA\Commands`. If sim-cli/plugin is
+   already available or needed for deeper runtime validation, run
+   `uv run sim check abaqus`. If no direct or sim runtime path is found, ask the
+   user for an Abaqus launcher path; do not continue with fake geometry.
 2. **Never invent Category A defaults.** Geometry, materials, BCs,
    analysis type, acceptance criteria — if missing, ask the user.
 3. **Acceptance != exit code.** Validate against physics-based criteria
@@ -131,28 +136,60 @@ path and state which files support each conclusion.
 
 ---
 
+## Long-running execution and recovery
+
+Keep bounded Abaqus work in the foreground when it fits the active tool-call
+budget. Use a settled input deck, CAE noGUI script, or background process only
+when the run is expected to outlive that budget, must continue across agent
+turns, or the user explicitly asks for background execution.
+
+For a long run, use a stable job name and absolute working/output paths so the
+agent can inspect it later. A shell or tool timeout ends that observation call;
+it does not prove Abaqus stopped. Before submitting the same job again, check
+the existing launcher/solver process, `.sta` progress, `.msg` and `.dat`
+diagnostics, and `.odb` or other expected artifact timestamps.
+
+Confirm process ownership from the job name, executable and full command line,
+start time, working directory, and output targets. Prefer Abaqus-native job
+cancellation; otherwise stop only the exact confirmed process or process tree.
+Never terminate every Abaqus, Standard, or Explicit process by name.
+
+Treat a successful process exit as only one completion signal. Confirm the
+Abaqus completion marker and usable expected artifacts before claiming the
+analysis completed. Use *resume* only when an Abaqus restart/checkpoint artifact
+can actually continue the analysis; without one, describe a new submission as
+a restart.
+
+---
+
 ## Required protocol
 
-After `uv run sim check abaqus` confirms the solver is available: gather Category A
-inputs from the user (geometry, material properties, loads, BCs, analysis
-type, acceptance criteria). For non-trivial work, establish the case workspace
-above before generating files.
+After direct launcher discovery or sim runtime validation confirms a real
+Abaqus path is available, gather Category A inputs from the user (geometry,
+material properties, loads, BCs, analysis type, acceptance criteria). For
+non-trivial work, establish the case workspace above before generating files.
 
-For batch work: write the `.inp` deck or `.py` script, lint with `uv run sim lint`,
-execute with `uv run sim run --solver abaqus`, then choose the post-processing path
-by artifact: `.dat` -> Python text parsing on the fetched file; ODB -> vendor
-Python via `uv run sim run --solver abaqus script.py` (sim-cli is the right and only
-tool here). For ordinary file-side post-processing and plotting, follow the
-sim-cli Python-helper environment guidance. Validate against physics-based
-acceptance criteria. Keep source decks/scripts under `input/` or `scripts/`,
-job products under `run/`, Abaqus-rendered images or animations under
-`render/`, and extracted metrics/tables under `output/`.
+For batch work: write the `.inp` deck or `.py` script, lint with `uv run sim lint`
+when sim-cli is part of the chosen runtime, execute through the smallest real
+path available (`abaqus job=... input=...`, `abaqus cae noGUI=script.py`, or
+`uv run sim run --solver abaqus ...` for sim runtime), then choose the
+post-processing path by artifact: `.dat` -> Python text parsing on the fetched
+file; ODB -> vendor Python through Abaqus/CAE noGUI or
+`uv run sim run --solver abaqus script.py` when using sim runtime. For ordinary
+file-side post-processing and plotting, use the host Python environment unless
+the sim-cli Python-helper environment is already the selected execution path.
+Validate against physics-based acceptance criteria. Keep source decks/scripts
+under `input/` or `scripts/`, job products under `run/`, Abaqus-rendered images
+or animations under `render/`, and extracted metrics/tables under `output/`.
 
-For modeling/debug/reporting work: start `uv run sim connect --solver abaqus --mode
-cae --ui-mode no_gui --workspace <workdir>`, optionally adding
-`--backend bridge` for a live noGUI CAE process. Build the model in small CAE
-Python snippets, inspect after each major step, save checkpoints when useful,
-submit jobs from the session, read diagnostics, render canonical views in
+For modeling/debug/reporting work, choose the smallest real interactive path:
+attach to or use Abaqus/CAE directly when the user already has it available, or
+start `uv run sim connect --solver abaqus --mode cae --ui-mode no_gui --workspace
+<workdir>` when sim session management and inspection surfaces are useful,
+optionally adding `--backend bridge` for a live noGUI CAE process. Build the
+model in small CAE Python snippets, inspect after each major step, save
+checkpoints when useful, submit jobs from the session, read diagnostics, render
+canonical views in
 Abaqus/CAE or Viewer, fix the model, and produce a report that states
 assumptions, units, mesh, BCs, loads, solver messages, result checks,
 artifact paths, and acceptance status.

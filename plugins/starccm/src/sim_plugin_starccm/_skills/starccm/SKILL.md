@@ -1,11 +1,14 @@
 ---
 name: starccm-sim
-description: Use when driving Simcenter STAR-CCM+ for CFD/multiphysics tasks — batch macro execution, mesh generation, solver setup, result extraction. Covers Java macro API, batch CLI, and common workflow patterns.
+description: Use when driving Simcenter STAR-CCM+ for CFD/multiphysics tasks: batch macro execution, mesh generation, solver setup, and result extraction. Choose the smallest real control path first: direct `starccm+` launcher/batch, local project artifacts, native Java macros, or sim-cli when standardized runtime validation, diagnostics, sessions, and artifact handling are useful.
 ---
 
 # starccm-sim
 
-Skill for controlling **Simcenter STAR-CCM+** through `sim-cli`.
+Skill for controlling **Simcenter STAR-CCM+** through the simplest real path
+that can produce evidence: direct `starccm+` launcher/batch commands, saved
+`.sim` inspection, native Java macros, or `sim-cli` when its runtime layer is
+useful.
 
 ---
 
@@ -42,7 +45,13 @@ Skill for controlling **Simcenter STAR-CCM+** through `sim-cli`.
 
 ## Required protocol
 
-1. **Verify installation**: `sim check starccm` — confirms binary found + license accessible.
+1. **Direct availability probe**: before requiring sim-cli, look for a real
+   `starccm+` launcher from `PATH`, `STARCCM_HOME`/user-provided paths, common
+   Siemens install roots, and visible STAR-CCM+ sessions. Check license signals
+   such as `CDLMD_LICENSE_FILE` when present, while remembering that a path or
+   env var is not proof of solver/license availability. For sim runtime
+   validation, run `sim check starccm` from a project environment with
+   sim-cli/plugin installed.
 2. **Write macro**: `.java` file extending `StarMacro`. End with `sim.println(json)`.
 3. **Lint**: `sim lint macro.java` — checks structure before execution.
 4. **Run**: `sim run macro.java --solver starccm` — executes in batch mode.

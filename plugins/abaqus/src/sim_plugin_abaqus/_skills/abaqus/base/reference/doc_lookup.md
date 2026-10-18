@@ -26,11 +26,17 @@ a failed model build.
 Use these probes before relying on memory:
 
 ```powershell
-uv run sim check abaqus
 abaqus help
 abaqus doc
 abaqus fetch job=<example-name>
 abaqus information=release
+```
+
+From a project environment with sim-cli/plugin installed, add sim runtime
+validation when it is useful:
+
+```powershell
+uv run sim check abaqus
 ```
 
 Notes:
