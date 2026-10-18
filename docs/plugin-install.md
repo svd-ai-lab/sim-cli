@@ -86,7 +86,7 @@ entry points from the environment running `sim`.
 
 ```bash
 uv add sim-cli-core sim-plugin-comsol
-uv add "git+https://github.com/svd-ai-lab/sim-plugin-matlab@main"
+uv add "git+https://github.com/svd-ai-lab/sim-plugin-fluent@main"
 uv add ./sim-plugin-comsol
 uv add ./sim_plugin_comsol-<version>-py3-none-any.whl
 ```
