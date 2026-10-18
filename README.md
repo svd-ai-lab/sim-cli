@@ -56,6 +56,7 @@ roll-up `summary` block.)
 | Ansys Mechanical | `.mechdb`, `.mechdat` | `ansys-mechanical` |
 | Icepak Classic | `.tzr` | `icepak-tzr` |
 | Simcenter FloTHERM | `.pack`, `.xml`, `.floxml` | `flotherm-pack`, `flotherm-floxml` |
+| Simulink | `.slx`, `.mdl` | `simulink-slx`, `simulink-mdl` |
 
 The default view is bounded — lists come back as `{total, sample, truncated}`
 so a large scan cannot blow up an agent's context — and absolute paths are
