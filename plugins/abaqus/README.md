@@ -126,13 +126,13 @@ uv run sim plugin sync-skills --target .claude/skills --copy
 For quick testing of the current source branch, install from GitHub:
 
 ```powershell
-uv add sim-cli-core "git+https://github.com/svd-ai-lab/sim-plugin-abaqus.git@main"
+uv add sim-cli-core "git+https://github.com/svd-ai-lab/sim-cli.git@main#subdirectory=plugins/abaqus"
 ```
 
 For a reproducible agent run, pin a commit SHA:
 
 ```powershell
-uv add sim-cli-core "git+https://github.com/svd-ai-lab/sim-plugin-abaqus.git@<commit-sha>"
+uv add sim-cli-core "git+https://github.com/svd-ai-lab/sim-cli.git@<commit-sha>#subdirectory=plugins/abaqus"
 ```
 
 `uv run sim ...` runs sim from this project environment, so it sees this
@@ -236,18 +236,6 @@ abaqus = "sim_plugin_abaqus:skills_dir"
 [project.entry-points."sim.plugins"]
 abaqus = "sim_plugin_abaqus:plugin_info"
 ```
-
-## Develop
-
-```bash
-git clone https://github.com/svd-ai-lab/sim-plugin-abaqus
-cd sim-plugin-abaqus
-uv sync
-uv run pytest tests -m "not integration"
-```
-
-End-to-end tests require a local Abaqus installation and are skipped unless
-their prerequisites are available.
 
 ## License
 

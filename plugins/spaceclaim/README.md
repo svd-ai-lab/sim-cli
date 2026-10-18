@@ -14,14 +14,3 @@ the model.
 - `skills/spaceclaim/scripts/probe_spaceclaim.ps1` -
   Windows discovery helper for local SpaceClaim installs and API docs.
 - `.codex-plugin/plugin.json` - local Codex plugin manifest for direct plugin use.
-
-## Local checks
-
-```powershell
-python -m pytest
-python -m build --wheel
-pwsh -NoProfile -ExecutionPolicy Bypass -File .\skills\spaceclaim\scripts\probe_spaceclaim.ps1
-```
-
-The probe reports installation/API evidence only. It does not prove licensing,
-GUI availability, or that a particular CAD operation is safe to run unattended.

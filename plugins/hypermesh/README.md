@@ -36,15 +36,6 @@ uv run sim disconnect
 keeps the desktop session first-class instead of pretending it is a headless
 batch solver.
 
-## Development
-
-```powershell
-uv sync --extra test
-New-Item -ItemType Directory -Force .pytest_basetemp | Out-Null
-uv run pytest tests -q --basetemp .pytest_basetemp\local
-uv run sim plugin doctor hypermesh --deep
-```
-
 ## License
 
 Apache-2.0 for this plugin code. Product names remain the property of their

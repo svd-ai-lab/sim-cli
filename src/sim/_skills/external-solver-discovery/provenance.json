@@ -1,0 +1,7 @@
+{
+  "path": "src/sim/_skills/external-solver-discovery",
+  "license": "MIT",
+  "repository": "https://github.com/svd-ai-lab/sim-cli",
+  "original_repository": "https://github.com/svd-ai-lab/sim-plugin-index",
+  "original_path": "skills/external-solver-discovery"
+}

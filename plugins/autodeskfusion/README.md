@@ -18,7 +18,7 @@ project environment:
 
 ```powershell
 uv init  # only if this is not already a uv project
-uv add sim-cli-core "sim-plugin-autodeskfusion @ git+https://github.com/svd-ai-lab/sim-plugin-autodeskfusion@main"
+uv add sim-cli-core "sim-plugin-autodeskfusion @ git+https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/autodeskfusion@main"
 uv run sim plugin sync-skills --target .agents/skills --copy
 uv run sim check autodeskfusion
 uv run sim plugin doctor autodeskfusion --deep
@@ -34,7 +34,7 @@ Without uv, create and activate a venv, then install `sim-cli-core` plus this
 plugin with `python -m pip`:
 
 ```powershell
-python -m pip install sim-cli-core "sim-plugin-autodeskfusion @ git+https://github.com/svd-ai-lab/sim-plugin-autodeskfusion@main"
+python -m pip install sim-cli-core "sim-plugin-autodeskfusion @ git+https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/autodeskfusion@main"
 ```
 
 ## Scope
@@ -96,21 +96,6 @@ def run(_context: str):
 
 If a script writes JSON to `SIM_AUTODESKFUSION_OUT`, the driver reports that
 file as a structured artifact alongside the raw MCP tool result.
-
-## Develop
-
-```bash
-git clone https://github.com/svd-ai-lab/sim-plugin-autodeskfusion
-cd sim-plugin-autodeskfusion
-uv sync --extra test
-uv run sim plugin list
-uv run sim check autodeskfusion
-uv run --extra test pytest --basetemp .pytest_basetemp/local -q
-uv build
-```
-
-Live integration checks require an interactive desktop session with Fusion open
-and its official MCP server enabled.
 
 ## License
 

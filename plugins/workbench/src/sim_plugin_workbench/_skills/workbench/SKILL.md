@@ -38,7 +38,7 @@ Concepts, API patterns, and version-agnostic reference:
 | `base/reference/sub_solver_integration.md` | Starting PyMechanical, PyFluent, PySherlock servers from within a Workbench session. |
 | `base/snippets/` | Numbered IronPython journal snippets (01 through 05). Each writes results to `%TEMP%/sim_wb_result.json`. |
 | `base/examples/` | Official PyWorkbench examples from pyansys.com — Fluent workflow, PyMechanical integration, logging, cooled turbine blade, cyclic symmetry, axisymmetric rotor, material designer. |
-| `base/workflows/static_structural/` | **6-step Static Structural walkthrough** (Engineering Data → Geometry → Model → Setup → Solution → Results). Per-cell API reference + gotchas + executable `walk_workflow.py`. |
+| `base/workflows/static_structural/` | Validation guidance for Static Structural workflows. Use the API reference and snippets to build the intended project. |
 | `base/workflows/project_review_loop.md` | Required checkpoint loop: inspect health, project identity, systems summary, then run one bounded journal step. |
 | `base/workflows/debug_failed_exec.md` | Failure triage loop for failed Workbench snippets and RunWB2 journals. |
 | `base/workflows/mechanical_handoff.md` | Workbench-to-Mechanical checklist for Static Structural workflows. |

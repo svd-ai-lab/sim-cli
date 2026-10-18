@@ -59,7 +59,7 @@ uv pip install "sim-plugin-hfss==0.1.2"
 For source testing against the current main branch:
 
 ```bash
-uv pip install "git+https://github.com/svd-ai-lab/sim-plugin-hfss.git@main"
+uv pip install "git+https://github.com/svd-ai-lab/sim-cli.git@main#subdirectory=plugins/hfss"
 ```
 
 After installation, sim-cli should auto-discover the driver and bundled skill:
@@ -135,30 +135,6 @@ standard either way.
    before solving or exporting the next result.
 6. Validate engineering results from HFSS artifacts and domain criteria, not
    from process success alone.
-
-## Develop
-
-```bash
-git clone https://github.com/svd-ai-lab/sim-plugin-hfss
-cd sim-plugin-hfss
-uv sync --extra test
-uv run pytest -q
-uv build
-```
-
-The test suite is designed to pass on machines without AEDT/HFSS. Real solver
-smoke testing is opt-in:
-
-```bash
-SIM_HFSS_RUN_INTEGRATION=1 uv run pytest tests/test_hfss_real_smoke.py -q
-```
-
-On PowerShell:
-
-```powershell
-$env:SIM_HFSS_RUN_INTEGRATION = '1'
-uv run pytest tests/test_hfss_real_smoke.py -q
-```
 
 ## License
 

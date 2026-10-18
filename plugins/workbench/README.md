@@ -99,7 +99,7 @@ uv run sim plugin sync-skills --target .claude/skills --copy
 For a reproducible agent run, pin a commit SHA:
 
 ```powershell
-uv add sim-cli-core "git+https://github.com/svd-ai-lab/sim-plugin-workbench.git@<commit-sha>"
+uv add sim-cli-core "git+https://github.com/svd-ai-lab/sim-cli.git@<commit-sha>#subdirectory=plugins/workbench"
 ```
 
 If your environment uses SSH authentication:
@@ -176,7 +176,7 @@ uv add --upgrade sim-plugin-workbench
 Update from the latest GitHub `main` branch:
 
 ```powershell
-uv add "git+https://github.com/svd-ai-lab/sim-plugin-workbench.git@main"
+uv add "git+https://github.com/svd-ai-lab/sim-cli.git@main#subdirectory=plugins/workbench"
 ```
 
 Uninstall:
@@ -234,18 +234,6 @@ workbench = "sim_plugin_workbench:skills_dir"
 [project.entry-points."sim.plugins"]
 workbench = "sim_plugin_workbench:plugin_info"
 ```
-
-## Develop
-
-```bash
-git clone https://github.com/svd-ai-lab/sim-plugin-workbench
-cd sim-plugin-workbench
-uv sync
-uv run pytest tests -m "not integration"
-```
-
-End-to-end tests require a local Workbench installation and are skipped unless
-their prerequisites are available.
 
 ## License
 

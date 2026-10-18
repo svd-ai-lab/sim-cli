@@ -104,7 +104,7 @@ uv run sim plugin sync-skills --target .claude/skills --copy
 For a reproducible agent run, pin a commit SHA:
 
 ```powershell
-uv add sim-cli-core "git+https://github.com/svd-ai-lab/sim-plugin-mechanical.git@<commit-sha>"
+uv add sim-cli-core "git+https://github.com/svd-ai-lab/sim-cli.git@<commit-sha>#subdirectory=plugins/mechanical"
 ```
 
 If your environment uses SSH authentication:
@@ -182,7 +182,7 @@ uv add --upgrade sim-plugin-mechanical
 Update from the latest GitHub `main` branch:
 
 ```powershell
-uv add "git+https://github.com/svd-ai-lab/sim-plugin-mechanical.git@main"
+uv add "git+https://github.com/svd-ai-lab/sim-cli.git@main#subdirectory=plugins/mechanical"
 ```
 
 Uninstall:
@@ -247,18 +247,6 @@ Use `uv run sim inspect session.health`. If `ui_capabilities.screenshot_expected
 false, the session is headless. If screenshot support is expected but no
 matching window is found, reconnect in GUI mode and inspect the health payload
 before mutating more state.
-
-## Develop
-
-```bash
-git clone https://github.com/svd-ai-lab/sim-plugin-mechanical
-cd sim-plugin-mechanical
-uv sync
-uv run pytest tests -m "not integration"
-```
-
-End-to-end tests require a local Mechanical installation and are skipped unless
-their prerequisites are available.
 
 ## License
 

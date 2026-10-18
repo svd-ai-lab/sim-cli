@@ -104,7 +104,7 @@ The "schema-valid but runtime-no-op" risk that sank `<load_from_library>` (ISSUE
 
 ### Caveats from verification
 
-- **`<project_load project_name="…"/>` requires the project to already be registered in `group.cat`** (per the canonical `base/workflows/solve_mobile_demo.xml` note). Loading a brand-new project from a fresh `uv run sim connect` session produces `E/15105 - Failed to load project`. If you want the orchestrator to load a project, use `<project_import>` first or pre-register via the GUI.
+- **`<project_load project_name="…"/>` requires the project to already be registered in `group.cat`**. Loading a brand-new project from a fresh `uv run sim connect` session produces `E/15105 - Failed to load project`. If you want the orchestrator to load a project, use `<project_import>` first or pre-register via the GUI.
 - **The driver's `ok` flag flips false on `<quit/>`-bearing scripts** because Flotherm closes underneath the session. Expected — re-`connect` for follow-up commands.
 
 ## Error triage

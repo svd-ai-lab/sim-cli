@@ -148,17 +148,6 @@ comsol = "sim_plugin_comsol:plugin_info"
 skill files bundled inside the wheel; `sim.plugins` exposes plugin metadata for
 discovery.
 
-## Develop
-
-```bash
-git clone https://github.com/svd-ai-lab/sim-plugin-comsol
-cd sim-plugin-comsol
-uv sync
-uv run sim plugin list
-uv run sim check comsol
-uv run pytest
-```
-
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE) and [LICENSE-NOTICE.md](LICENSE-NOTICE.md).

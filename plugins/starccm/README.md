@@ -7,7 +7,7 @@ STAR-CCM+ has no pip-installable Python SDK. Scripts are Java macros (`.java` fi
 ## Install
 
 ```bash
-pip install git+https://github.com/svd-ai-lab/sim-plugin-starccm@main
+pip install git+https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/starccm@main
 ```
 
 After install, sim-cli auto-discovers the driver:
@@ -34,17 +34,6 @@ starccm = "sim_plugin_starccm:skills_dir"
 ## Supported versions
 
 See [`src/sim_plugin_starccm/compatibility.yaml`](src/sim_plugin_starccm/compatibility.yaml) for the solver compatibility matrix. Current profile covers STAR-CCM+ 21.02 (a.k.a. 2602).
-
-## Develop
-
-```bash
-git clone https://github.com/svd-ai-lab/sim-plugin-starccm
-cd sim-plugin-starccm
-uv sync
-uv run pytest
-```
-
-End-to-end tests require a real STAR-CCM+ install on the host; they're gated and skipped when the solver is not detected.
 
 ## License
 
