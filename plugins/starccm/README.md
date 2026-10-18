@@ -7,7 +7,7 @@ STAR-CCM+ has no pip-installable Python SDK. Scripts are Java macros (`.java` fi
 ## Install
 
 ```bash
-pip install git+https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/starccm@main
+pip install git+https://github.com/svd-ai-lab/sim-cli.git@main#subdirectory=plugins/starccm
 ```
 
 After install, sim-cli auto-discovers the driver:

@@ -18,7 +18,7 @@ project environment:
 
 ```powershell
 uv init  # only if this is not already a uv project
-uv add sim-cli-core "sim-plugin-autodeskfusion @ git+https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/autodeskfusion@main"
+uv add sim-cli-core "sim-plugin-autodeskfusion @ git+https://github.com/svd-ai-lab/sim-cli.git@main#subdirectory=plugins/autodeskfusion"
 uv run sim plugin sync-skills --target .agents/skills --copy
 uv run sim check autodeskfusion
 uv run sim plugin doctor autodeskfusion --deep
@@ -34,7 +34,7 @@ Without uv, create and activate a venv, then install `sim-cli-core` plus this
 plugin with `python -m pip`:
 
 ```powershell
-python -m pip install sim-cli-core "sim-plugin-autodeskfusion @ git+https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/autodeskfusion@main"
+python -m pip install sim-cli-core "sim-plugin-autodeskfusion @ git+https://github.com/svd-ai-lab/sim-cli.git@main#subdirectory=plugins/autodeskfusion"
 ```
 
 ## Scope

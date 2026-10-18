@@ -8,6 +8,8 @@ on:
       - "pyproject.toml"
       - "uv.lock"
       - "scripts/**"
+      - "plugins/**"
+      - "plugin-index.json"
       - ".github/workflows/test-core.yml"
   push:
     branches: [main]
@@ -18,6 +20,8 @@ on:
       - "pyproject.toml"
       - "uv.lock"
       - "scripts/**"
+      - "plugins/**"
+      - "plugin-index.json"
       - ".github/workflows/test-core.yml"
 permissions:
   contents: read

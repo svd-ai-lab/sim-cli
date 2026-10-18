@@ -14,7 +14,7 @@ environment:
 
 ```powershell
 uv init  # only if this is not already a uv project
-uv add sim-cli-core "git+https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/flotherm@main"
+uv add sim-cli-core "git+https://github.com/svd-ai-lab/sim-cli.git@main#subdirectory=plugins/flotherm"
 uv run sim plugin sync-skills --target .agents/skills --copy
 uv run sim check flotherm
 uv run sim plugin doctor flotherm --deep

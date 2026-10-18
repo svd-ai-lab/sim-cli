@@ -1,6 +1,7 @@
 """Workspace index and release identity boundaries."""
 import importlib.util
 from pathlib import Path
+import tomllib
 
 import pytest
 import yaml
@@ -26,8 +27,9 @@ def test_index_preserves_package_entry_points():
 
 def test_release_tag_selects_only_matching_package():
     release = load("release_package")
-    assert release.select("abaqus-v0.1.4")["project"] == "plugins/abaqus"
-    for tag, package in [("abaqus-v9.9.9", None), ("abaqus-v0.1.4", "fluent"), ("v0.1.4", None)]:
+    version = tomllib.loads((ROOT / "plugins/abaqus/pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
+    assert release.select(f"abaqus-v{version}")["project"] == "plugins/abaqus"
+    for tag, package in [("abaqus-v999.0.0", None), (f"abaqus-v{version}", "fluent"), (f"v{version}", None)]:
         with pytest.raises(ValueError):
             release.select(tag, package)
 
