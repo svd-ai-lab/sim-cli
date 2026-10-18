@@ -1,0 +1,61 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sim-plugin-comsol"
+version = "0.1.14"
+description = "COMSOL Multiphysics driver for sim-cli, distributed as an out-of-tree plugin"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+authors = [{ name = "svd-ai-lab" }]
+keywords = ["comsol", "cae", "simulation", "multiphysics", "sim-cli", "plugin"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: Microsoft :: Windows",
+    "Topic :: Scientific/Engineering",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: Apache Software License",
+]
+dependencies = [
+    "sim-cli-core>=0.3",
+    "mph>=1.2,<2.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7",
+    "build>=1.0",
+]
+
+[project.entry-points."sim.drivers"]
+comsol = "sim_plugin_comsol:ComsolDriver"
+
+[project.entry-points."sim.skills"]
+comsol = "sim_plugin_comsol:skills_dir"
+
+[project.entry-points."sim.plugins"]
+comsol = "sim_plugin_comsol:plugin_info"
+
+[project.scripts]
+sim-comsol-attach = "sim_plugin_comsol.desktop_attach.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/svd-ai-lab/sim-plugin-comsol"
+Repository = "https://github.com/svd-ai-lab/sim-plugin-comsol"
+Issues = "https://github.com/svd-ai-lab/sim-plugin-comsol/issues"
+Changelog = "https://github.com/svd-ai-lab/sim-plugin-comsol/blob/main/CHANGELOG.md"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sim_plugin_comsol"]
+
+[tool.pytest.ini_options]
+markers = [
+  "integration: tests that build wheels or touch external tooling",
+]
