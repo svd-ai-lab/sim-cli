@@ -1,0 +1,30 @@
+# Changelog
+
+## 0.1.2 - 2026-09-03
+
+- Quarantine only the timed-out Python control handle while preserving tracked
+  AEDT processes and PID liveness evidence.
+- Forward PyAEDT's `aedt_process_id` attach option through the existing sim-cli
+  driver-option surface.
+- Avoid closing an AEDT desktop when disconnecting a non-owning attached
+  control session.
+- Report the active HFSS runtime version separately from other detected AEDT
+  installations.
+- Add Windows Registry discovery for non-default AEDT installations.
+- Add an experimental offline `.aedt` and `.aedtz` project inventory command.
+
+## 0.1.1 - 2026-06-26
+
+- Add bounded HFSS control-plane exec timeouts with timeout cleanup for owned AEDT sessions.
+- Add `session.health` diagnostics with owned AEDT PID liveness, recent timeout cleanup, messages, and solve progress.
+- Add HFSS model, boundary, setup, message, solution-progress, and Touchstone summary evidence helpers.
+- Update the bundled HFSS skill guidance for bounded snippets, session health, and evidence-first workflows.
+
+## 0.1.0 - 2026-05-06
+
+- Bootstrap public HFSS 3D plugin package for sim-cli.
+- Add lazy PyAEDT driver with no-AEDT unit coverage and opt-in real HFSS smoke coverage.
+- Add broader AEDT discovery for regular and alternate AEDT launchers.
+- Add a narrow PyAEDT 0.26.x AEDT startup compatibility shim.
+- Add bundled HFSS skill and public documentation.
+- Add CI, wheel-content checks, and a manual PyPI release workflow.
