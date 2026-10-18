@@ -57,6 +57,7 @@ roll-up `summary` block.)
 | Icepak Classic | `.tzr` | `icepak-tzr` |
 | Simcenter FloTHERM | `.pack`, `.xml`, `.floxml` | `flotherm-pack`, `flotherm-floxml` |
 | Simulink | `.slx`, `.mdl` | `simulink-slx`, `simulink-mdl` |
+| MATLAB data | `.mat` | `matlab-mat` |
 
 The default view is bounded — lists come back as `{total, sample, truncated}`
 so a large scan cannot blow up an agent's context — and absolute paths are
