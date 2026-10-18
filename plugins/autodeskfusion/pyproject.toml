@@ -1,0 +1,61 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sim-plugin-autodeskfusion"
+version = "0.1.0"
+description = "Autodesk Fusion official-MCP driver and bundled skill for sim"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+authors = [{ name = "Weiqi Ji", email = "jiweiqi10@gmail.com" }]
+keywords = ["autodesk-fusion", "fusion", "cad", "cae", "simulation", "sim-cli", "mcp"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "Topic :: Scientific/Engineering",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: Apache Software License",
+]
+dependencies = [
+    "mcp>=1.20",
+    "sim-cli-core>=0.3.5",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7",
+    "build>=1.0",
+]
+
+[project.entry-points."sim.drivers"]
+autodeskfusion = "sim_plugin_autodeskfusion:AutodeskFusionDriver"
+
+[project.entry-points."sim.skills"]
+autodeskfusion = "sim_plugin_autodeskfusion:skills_dir"
+
+[project.entry-points."sim.plugins"]
+autodeskfusion = "sim_plugin_autodeskfusion:plugin_info"
+
+[project.urls]
+Homepage = "https://github.com/svd-ai-lab/sim-plugin-autodeskfusion"
+Repository = "https://github.com/svd-ai-lab/sim-plugin-autodeskfusion"
+Issues = "https://github.com/svd-ai-lab/sim-plugin-autodeskfusion/issues"
+Changelog = "https://github.com/svd-ai-lab/sim-plugin-autodeskfusion/blob/main/CHANGELOG.md"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sim_plugin_autodeskfusion"]
+include = ["src/sim_plugin_autodeskfusion/**"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+  "integration: requires Autodesk Fusion running with the official MCP server",
+]
