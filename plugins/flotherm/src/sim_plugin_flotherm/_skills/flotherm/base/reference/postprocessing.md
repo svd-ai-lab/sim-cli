@@ -7,7 +7,7 @@ There are three paths. Pick the one closest to the result the user needs:
 | # | Path | When to use |
 |---|---|---|
 | A | **FloSCRIPT export commands**, played via GUI Macro→Play | Programmatic extraction; the only headless-friendly path that produces vendor-formatted neutral output. Output formats are **probe-pending** — see §Verification probes. |
-| B | **Direct binary read** of `DataSets/BaseSolution/msp_*/end/<Field>` | First pick when the field is one of the 11 cell-centred fields and the user wants raw numbers. No `uv run sim serve`, no GUI, no win1 dependency; runs on any host with the project files. |
+| B | **Direct binary read** of `DataSets/BaseSolution/msp_*/end/<Field>` | First pick when the field is one of the 11 cell-centred fields and the user wants raw numbers. No `uv run sim serve`, no GUI, no Windows solver host needed; runs on any host with the project files. |
 | C | **Manual GUI export** (FloVIZ, FloVIEW, Project→Export) | One-off ground truth; not automatable. Use as a tie-breaker if A and B disagree. |
 
 Path A is what you reach for when the user asks for "max-T on the die" or "temperature at the monitor points". Path B is what you reach for when they ask for "the whole 3D field" or raw cell-centred arrays and post-processing is happening in numpy/matplotlib anyway.
