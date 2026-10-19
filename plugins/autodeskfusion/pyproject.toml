@@ -50,6 +50,10 @@ Repository = "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/autodeskfu
 Issues = "https://github.com/svd-ai-lab/sim-cli/issues"
 Changelog = "https://github.com/svd-ai-lab/sim-cli/blob/main/plugins/autodeskfusion/CHANGELOG.md"
 
+[tool.sim]
+# Not on PyPI yet; the plugin index points to the Git source.
+pypi = false
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/sim_plugin_autodeskfusion"]
 include = ["src/sim_plugin_autodeskfusion/**"]

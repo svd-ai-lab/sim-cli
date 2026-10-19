@@ -42,6 +42,10 @@ Homepage = "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/spaceclaim"
 Repository = "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/spaceclaim"
 Issues = "https://github.com/svd-ai-lab/sim-cli/issues"
 
+[tool.sim]
+# Not on PyPI yet; the plugin index points to the Git source.
+pypi = false
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/sim_plugin_spaceclaim"]
 

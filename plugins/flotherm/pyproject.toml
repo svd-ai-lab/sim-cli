@@ -49,6 +49,10 @@ flotherm = "sim_plugin_flotherm:plugin_info"
 Homepage = "https://github.com/svd-ai-lab/sim-cli/tree/main/plugins/flotherm"
 Issues = "https://github.com/svd-ai-lab/sim-cli/issues"
 
+[tool.sim]
+# Not on PyPI yet; the plugin index points to the Git source.
+pypi = false
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/sim_plugin_flotherm"]
 
