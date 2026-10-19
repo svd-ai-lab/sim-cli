@@ -23,7 +23,7 @@ Every driver ships as its own `sim-plugin-<name>` package — sim-cli core has n
 
 Set `supports_session = True` for persistent-session drivers, `False` for one-shot only. The server routes all drivers through `DriverProtocol` — no `server.py` changes needed.
 
-Read [`sim-plugin-comsol`](https://github.com/svd-ai-lab/sim-plugin-comsol) for shape: driver implementation + skill packaged together.
+Read [`plugins/comsol`](../plugins/comsol) for shape: driver implementation + skill packaged together.
 
 ## Project layout
 

@@ -55,8 +55,9 @@ these tie-breakers:
   expose the required state.
 - Cloud APIs only when the user confirms account, credentials, data-sensitivity
   constraints, and job-cost expectations.
-- sim-cli plugins when a matching plugin exists and standardized checks,
-  session control, or plugin diagnostics materially reduce risk.
+- sim-cli solver packages when one exists for the solver and standardized
+  checks, session control, or `sim plugin doctor` diagnostics materially reduce
+  risk.
 
 ## FDTD Ad Hoc Checklist
 

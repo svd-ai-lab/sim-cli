@@ -1,6 +1,6 @@
 ---
 name: sim-cli
-description: Cross-solver operating discipline for sim-cli workflows — tool choice, input classification, acceptance semantics, and escalation rules that apply across solvers. Use alongside the solver's own plugin skill, which is self-contained for solver-specific work; this skill carries only the shared rules.
+description: Cross-solver operating discipline for sim-cli workflows — tool choice, input classification, acceptance semantics, and escalation rules that apply across solvers. Use alongside the solver's own skill, which is self-contained for solver-specific work; this skill carries only the shared rules.
 ---
 
 # sim-cli
@@ -11,23 +11,23 @@ tools directly where they are the right primitive. This skill carries the
 **cross-solver discipline** — the rules that hold across sim-cli workflows,
 regardless of which solver you drive.
 
-The solver's **plugin skill** is self-contained for solver-specific work:
+The **solver skill** is self-contained for solver-specific work:
 solver hard constraints, dependency chains, snippets, workflows, SDK/solver
 notes. It does not depend on loading this skill — but it should stay
 consistent with the discipline below. If a rule applies to more than one
-solver, it belongs here, not in a plugin skill.
+solver, it belongs here, not in a solver skill.
 
 ---
 
 ## Execution models
 
-The plugin skill tells you which model the solver uses. Choose the narrowest
+The solver skill tells you which model the solver uses. Choose the narrowest
 correct execution primitive; sim-cli is composable, not a universal wrapper.
 
 | Model | Used by | Lifecycle |
 |---|---|---|
 | **Persistent session** | Drivers that hold a live process open | `sim connect → sim exec × N → sim inspect → sim disconnect` |
-| **sim-wrapped one-shot batch** | Plugin wrappers that add linting, profile-aware invocation, parsing, history, or safer execution | `sim check → sim run → parse_output/logs → evaluate` |
+| **sim-wrapped one-shot batch** | Driver wrappers that add linting, profile-aware invocation, parsing, history, or safer execution | `sim check → sim run → parse_output/logs → evaluate` |
 | **Native/tool one-shot batch** | Ready solver decks/scripts, vendor batch commands, project pipelines, or post-processing tools where native execution is the right primitive | version/profile probe → native command/script → parse artifacts/logs → evaluate |
 
 sim-cli does **not** try to wrap every solver operation, executable flag,
@@ -39,14 +39,14 @@ the solver's own batch command is the right execution primitive, call that
 native command directly instead of forcing it through `sim run`. Preserve
 stdout/stderr, generated files, and acceptance evidence just as carefully.
 
-Use `sim run` when the plugin skill says it is the canonical one-shot path or
+Use `sim run` when the solver skill says it is the canonical one-shot path or
 when the wrapper adds real value. Otherwise, keep the sim-cli discipline while
 composing the solver's native tools directly.
 
 **The loop, any model:** classify inputs and get the missing Category A values
 from the user (including the acceptance criterion) → choose the execution
 primitive → run a Step-0 version/profile probe (`sim inspect session.versions`
-for persistent sessions; `sim check <solver>`, plugin guidance, or native
+for persistent sessions; `sim check <solver>`, solver-skill guidance, or native
 `--version` / license probe for one-shot work) → execute one bounded step at a
 time → inspect `last.result` or parse the native logs/artifacts between steps →
 evaluate against the acceptance criterion → `sim disconnect` if a persistent
@@ -63,12 +63,12 @@ session was opened. On any failure, stop and report — do not silently retry.
 2. **Step-0 version/profile probe is mandatory.** After `sim connect`, call
    `sim inspect session.versions` and use the returned `profile` /
    `active_sdk_layer` / `active_solver_layer` to pick the right files in the
-   plugin skill. Treat `solver_version` as active-runtime evidence only when
+   solver skill. Treat `solver_version` as active-runtime evidence only when
    `version_source` is `active_runtime`; a detected installation is not proof
    that the same version was launched. If the runtime version is unreported or
    has no compatible profile, stop before applying version-specific guidance.
    Before `sim run` or native one-shot execution, run the
-   relevant probe for that path (`sim check <solver>`, plugin guidance, or the
+   relevant probe for that path (`sim check <solver>`, solver-skill guidance, or the
    solver's native `--version` / license check). If a required profile is empty,
    unknown, or deprecated — **stop**.
 3. **Acceptance ≠ exit code.** A `sim run` / `sim exec` / native solver command
