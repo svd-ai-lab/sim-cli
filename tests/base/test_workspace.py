@@ -25,6 +25,15 @@ def test_index_preserves_package_entry_points():
         assert plugin["path"] == "plugins/" + plugin["solver"]
 
 
+def test_index_install_spec_follows_pypi_flag():
+    for plugin in load("workspace").plugin_index()["plugins"]:
+        document = tomllib.loads((ROOT / plugin["path"] / "pyproject.toml").read_text(encoding="utf-8"))
+        if document.get("tool", {}).get("sim", {}).get("pypi", True):
+            assert plugin["install_spec"] == plugin["package"]
+        else:
+            assert plugin["install_spec"].endswith("#subdirectory=" + plugin["path"])
+
+
 def test_release_tag_selects_only_matching_package():
     release = load("release_package")
     version = tomllib.loads((ROOT / "plugins/abaqus/pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]

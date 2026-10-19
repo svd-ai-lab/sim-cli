@@ -22,13 +22,17 @@ def packages():
 def plugin_index():
     plugins = []
     for directory in packages()[1:]:
-        project = tomllib.loads((directory / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+        document = tomllib.loads((directory / "pyproject.toml").read_text(encoding="utf-8"))
+        project = document["project"]
         path = directory.relative_to(ROOT).as_posix()
+        install_spec = project["name"]
+        if not document.get("tool", {}).get("sim", {}).get("pypi", True):
+            install_spec += " @ git+https://github.com/svd-ai-lab/sim-cli.git#subdirectory=" + path
         plugins.append({
             "solver": directory.name,
             "package": project["name"],
             "version": project["version"],
-            "install_spec": project["name"],
+            "install_spec": install_spec,
             "path": path,
             "repository": "https://github.com/svd-ai-lab/sim-cli",
             "source": "https://github.com/svd-ai-lab/sim-cli/tree/main/" + path,
