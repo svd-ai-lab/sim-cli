@@ -232,7 +232,7 @@ Things that commonly make `ok` false:
 
 ## Related skills
 
-- Plugin-specific skills list the dialogs that a given driver is known
+- Solver skills list the dialogs that a given driver is known
   to pop. Check those for recipes before inventing your own.
 - `sim.inspect` probes (issue #8a `window_observed`, #8b screenshots)
   tell you **what is on screen** — read them first, then reach for

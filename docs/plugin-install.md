@@ -1,53 +1,72 @@
-# Installing sim plugins
+# Optional solver packages
 
-`sim-cli-core` ships with no solver drivers built in. Each solver integration
-lives in a separate `sim-plugin-<solver>` Python package. A plugin normally
-provides both:
+`sim scan` parses simulation files with `sim-cli-core` alone. Install a solver
+package only when an agent also needs to detect a local solver, lint scripts,
+or drive the solver. Each package adds:
 
-- a driver entry point that `sim` can load
-- a bundled `_skills/<solver>/` directory that an agent can read
+- a driver, so `sim check`, `sim lint`, `sim run`, and `sim connect` work for
+  that solver
+- a bundled skill describing that solver's workflow, pitfalls, and inspection
+  rules
 
-Use `uv` or Python packaging tools to install packages. Use `sim` to verify
-solver readiness and sync bundled skills into the agent project.
+The packages are developed in this repository under [`plugins/`](../plugins/)
+and published as `sim-plugin-<solver>`.
 
-## TL;DR
+| Solver | Package | Source |
+|---|---|---|
+| Abaqus | `sim-plugin-abaqus` | PyPI |
+| Ansys Fluent | `sim-plugin-fluent` | PyPI |
+| Ansys HFSS / Electronics Desktop | `sim-plugin-hfss` | PyPI |
+| Ansys Mechanical | `sim-plugin-mechanical` | PyPI |
+| Ansys Workbench | `sim-plugin-workbench` | PyPI |
+| COMSOL Multiphysics | `sim-plugin-comsol` | PyPI |
+| Altair HyperMesh | `sim-plugin-hypermesh` | Git |
+| Ansys SpaceClaim | `sim-plugin-spaceclaim` | Git |
+| Autodesk Fusion | `sim-plugin-autodeskfusion` | Git |
+| Simcenter FloTHERM | `sim-plugin-flotherm` | Git |
+| Simcenter STAR-CCM+ | `sim-plugin-starccm` | Git |
 
-| Situation | Command |
-|---|---|
-| Add sim and COMSOL to this uv project | `uv add sim-cli-core sim-plugin-comsol` |
-| Run sim from this uv project | `uv run sim check comsol` |
-| Sync skills for Codex or GitHub Copilot | `uv run sim plugin sync-skills --target .agents/skills --copy` |
-| Sync skills for Claude Code | `uv run sim plugin sync-skills --target .claude/skills --copy` |
-| Inspect installed plugins | `uv run sim plugin list` |
-| Verify plugin and solver path | `uv run sim plugin doctor comsol --deep` |
+[`plugin-index.json`](../plugin-index.json) has the same list with exact
+install specs and entry points.
 
-## uv project setup
+## Install with uv
 
-Use this path for agent projects and reproducible engineering work. Run from
-the project root:
+Run from the project root:
 
 ```bash
 uv init  # only if this is not already a uv project
 uv add sim-cli-core sim-plugin-comsol
 uv run sim plugin sync-skills --target .agents/skills --copy
 uv run sim check comsol
-uv run sim plugin doctor comsol --deep
+```
+
+Packages marked Git in the table are not on PyPI yet; install them from this
+repository:
+
+```bash
+uv add sim-cli-core "sim-plugin-flotherm @ git+https://github.com/svd-ai-lab/sim-cli.git#subdirectory=plugins/flotherm"
 ```
 
 `uv run sim ...` runs `sim` from the current project environment, so it sees
-the plugin packages declared by that project. Bare `sim ...` runs whichever
+the solver packages declared by that project. Bare `sim ...` runs whichever
 `sim` is on `PATH`.
 
-For Claude Code, sync to `.claude/skills` instead:
+Other sources work the same way; keep the dependency in `pyproject.toml` so
+another agent can reproduce the environment with `uv sync`:
 
 ```bash
-uv run sim plugin sync-skills --target .claude/skills --copy
+uv add sim-cli-core sim-plugin-comsol==<version>
+uv add sim-cli-core "sim-plugin-comsol @ git+https://github.com/svd-ai-lab/sim-cli.git@<tag-or-commit>#subdirectory=plugins/comsol"
+uv add sim-cli-core ./sim_plugin_comsol-<version>-py3-none-any.whl
+uv add sim-cli-core <path-to-sim-cli-checkout>/plugins/comsol
 ```
+
+After changing dependencies, run `uv run sim plugin sync-skills` and
+`uv run sim check <solver>` again from the same project.
 
 ## Without uv
 
-If you cannot use `uv`, create and activate a normal Python virtual environment,
-then install `sim-cli-core` and the solver plugin into that environment.
+Create and activate a normal Python virtual environment, then install into it.
 
 macOS/Linux:
 
@@ -58,7 +77,6 @@ python -m pip install --upgrade pip
 python -m pip install sim-cli-core sim-plugin-comsol
 sim plugin sync-skills --target .agents/skills --copy
 sim check comsol
-sim plugin doctor comsol --deep
 ```
 
 Windows PowerShell:
@@ -70,88 +88,71 @@ python -m pip install --upgrade pip
 python -m pip install sim-cli-core sim-plugin-comsol
 sim plugin sync-skills --target .agents/skills --copy
 sim check comsol
-sim plugin doctor comsol --deep
 ```
 
 In an activated environment, bare `sim ...` is fine because the environment is
 explicit.
 
-## What uv installs and what sim does
-
-Python packages live in the environment that runs `sim`. Solver plugins are
-independent Python distributions, but current plugin discovery uses Python
-entry points from the environment running `sim`.
-
-`uv` or `pip` handles package installation:
-
-```bash
-uv add sim-cli-core sim-plugin-comsol
-uv add "git+https://github.com/svd-ai-lab/sim-plugin-fluent@main"
-uv add ./sim-plugin-comsol
-uv add ./sim_plugin_comsol-<version>-py3-none-any.whl
-```
-
-`sim` handles solver-specific checks and agent skill materialization:
-
-```bash
-uv run sim plugin list
-uv run sim plugin info comsol
-uv run sim plugin doctor comsol --deep
-uv run sim plugin sync-skills --target .agents/skills --copy
-uv run sim check comsol
-```
-
-Skills are different from Python packages. The plugin package lives in Python's
-site-packages; the bundled skill is synced into an agent-readable directory such
-as `.agents/skills` or `.claude/skills`.
-
-## Direct sources
-
-Use `uv add` for direct wheel, Git, or local checkout sources too. Keep the
-plugin dependency in `pyproject.toml` so another agent can reproduce the same
-environment with `uv sync`.
-
-Examples:
-
-```bash
-uv add sim-cli-core sim-plugin-comsol==<version>
-uv add sim-cli-core https://example.com/sim_plugin_comsol-<version>-py3-none-any.whl
-uv add sim-cli-core ./sim_plugin_comsol-<version>-py3-none-any.whl
-uv add sim-cli-core ./sim-plugin-comsol
-uv add sim-cli-core git+https://github.com/svd-ai-lab/sim-plugin-comsol
-```
-
-After changing dependencies, run `uv run sim plugin sync-skills` and
-`uv run sim check <solver>` again from the same project.
-
 ## Skill sync targets
 
-Use the two common agent targets directly:
+The Python package lives in site-packages; its skill is copied into a directory
+the agent reads:
 
 - `.agents/skills` for Codex and GitHub Copilot projects
 - `.claude/skills` for Claude Code projects
 
-If you omit `--target`, the CLI uses Claude-oriented defaults:
+If you omit `--target`, the CLI syncs to `./.claude/skills/` when `./.claude/`
+exists and to `~/.claude/skills/` otherwise. Use `--copy` when symlinks are
+inconvenient or unsupported. Re-running `sync-skills` is idempotent.
 
-- if `./.claude/` exists, sync to `./.claude/skills/`
-- otherwise sync to `~/.claude/skills/`
+Tell the agent to run through the project with `uv run sim ...`, and never to
+guess solver API names — inspect the live model or the solver's local docs
+first.
 
-Use `--copy` when symlinks are inconvenient or unsupported. Re-running
-`sync-skills` is idempotent.
+## Live solver sessions
+
+When an agent needs the solver held open across steps, `sim connect` starts a
+local runtime and keeps the session alive. A bounded step is one modeling,
+meshing, solving, or postprocessing action that can be inspected and verified
+before continuing.
+
+1. `uv run sim check <solver>`, then `uv run sim connect --solver <solver>`
+2. `uv run sim inspect session.versions` before changing state — including after
+   any human GUI edit, since a previous script may no longer match the session
+3. `uv run sim exec --file step.py --label <step>` — one bounded step
+4. `uv run sim inspect last.result`, verify with numeric evidence (mesh
+   statistics, convergence, probes, conservation checks, tolerances), checkpoint
+5. `uv run sim disconnect`, then `uv run sim stop` to free the local runtime
+
+The bundled solver skill enforces the details, so give the agent the
+engineering goal in plain language rather than a list of `sim` sub-steps.
+
+## Solver commands
+
+| Command | Use it for |
+|---|---|
+| `uv run sim check <solver>` | Detect local or remote solver installs. |
+| `uv run sim lint <script>` | Validate a script before running it. |
+| `uv run sim run script.py --solver <solver>` | Run a deterministic one-shot script. |
+| `uv run sim logs last --field <name>` | Read back a one-shot run's parsed result. |
+| `uv run sim connect --solver <solver>` | Open a persistent solver session. |
+| `uv run sim exec --file step.py` | Run one bounded step in the live session. |
+| `uv run sim inspect <target>` | Query session, result, or solver-specific state. |
+| `uv run sim disconnect` / `uv run sim stop` | Tear down the session / stop the local runtime. |
+| `uv run sim plugin list` / `info <solver>` | Show installed solver packages and their metadata. |
+| `uv run sim plugin doctor <solver> --deep` | Check driver wiring, bundled skills, and solver detection. |
+| `uv run sim setup` | Validate `sim.toml` and report the packages it declares. |
+
+`plugin doctor` checks entry points, driver instantiation, bundled skills, and
+compatibility metadata. `--deep` also calls solver detection, so it can fail
+when the package is valid but the solver is missing, not available to the
+current process, or installed in an unsupported location.
 
 ## Project manifests with sim.toml
 
 For reproducible Python packages, commit `pyproject.toml` and `uv.lock`. Use
-`sim.toml` for solver defaults, workspace settings, and optional plugin source
-declarations.
-
-Create a starter file:
-
-```bash
-uv run sim init
-```
-
-Example `sim.toml`:
+`sim.toml` for solver defaults, workspace settings, and optional package
+declarations. Create a starter file with `uv run sim init`.
 
 ```toml
 [sim]
@@ -172,31 +173,6 @@ uv run sim plugin sync-skills --target .agents/skills --copy
 uv run sim check comsol
 ```
 
-`sim setup` validates `sim.toml` and reports declared plugin package specs. It
-does not mutate the Python environment. Use `uv add sim-cli-core
-<plugin-package-spec>` to add packages and commit the resulting
-`pyproject.toml` / `uv.lock`.
-
-## Discovery
-
-A curated plugin list lives in the
-[sim-plugin-index](https://github.com/svd-ai-lab/sim-plugin-index) README — a
-markdown table with package specs and `uv add` commands for each plugin.
-Agents and humans read it directly.
-
-## Verifying an install
-
-After installation, check the plugin and solver path:
-
-```bash
-uv run sim plugin list
-uv run sim plugin info comsol
-uv run sim plugin doctor comsol
-uv run sim plugin doctor comsol --deep
-uv run sim check comsol
-```
-
-`plugin doctor` checks entry points, driver instantiation, bundled skills, and
-the plugin compatibility metadata. `--deep` also calls solver detection, so it
-can fail when the plugin is valid but the simulation solver is missing, not
-available to the current process, or installed in an unsupported location.
+`sim setup` validates `sim.toml` and reports the declared package specs. It
+does not change the Python environment; use `uv add sim-cli-core <package-spec>`
+and commit the resulting `pyproject.toml` / `uv.lock`.

@@ -109,13 +109,13 @@ The server supports multiple concurrent sessions keyed by session_id. Each `Sess
 
 `LintResult`, `Diagnostic`, `RunResult`, `ConnectionInfo` are dataclasses with `to_dict()` for JSON serialization.
 
-### Driver registry (plugin entry points)
+### Driver registry (entry points)
 
-`sim-cli-core` is solver-agnostic and ships with no in-tree solver drivers. Drivers are provided by installed plugin packages that expose the `sim.drivers` entry-point group. Use `sim plugin list` and `sim plugin info <name>` to inspect the plugins visible in the active environment.
+The core package (`src/sim`) is solver-agnostic; asset parsing (`sim scan`) is the primary surface and needs no driver. Solver drivers live in the workspace packages under `plugins/<solver>/` (published as `sim-plugin-<solver>`) and register through the `sim.drivers` entry-point group. Use `sim plugin list` and `sim plugin info <name>` to inspect the drivers visible in the active environment.
 
-Plugin implementation work belongs in the owning `sim-plugin-<solver>` repository, where the package metadata, `DriverProtocol` implementation, `compatibility.yaml`, bundled skills, and plugin tests live. Do not add solver drivers under `src/sim/drivers/<name>` in this repo.
+Driver work belongs in `plugins/<solver>/`, next to that package's metadata, `DriverProtocol` implementation, `compatibility.yaml`, bundled skills, and tests. Do not add solver drivers under `src/sim/drivers/<name>`.
 
-A driver may set `supports_session = True` to implement the persistent-session lifecycle (`launch`/`run`/`query`/`disconnect`); the rest are one-shot only. `get_driver(name)` looks up by `.name` attribute and lazily imports the implementation module on first use, so a broken plugin does not crash the CLI.
+A driver may set `supports_session = True` to implement the persistent-session lifecycle (`launch`/`run`/`query`/`disconnect`); the rest are one-shot only. `get_driver(name)` looks up by `.name` attribute and lazily imports the implementation module on first use, so a broken solver package does not crash the CLI.
 
 ### Execution pipeline — one-shot (`run`)
 1. `cli.run` → `runner.execute_script(script, solver, driver)` → subprocess, captures stdout/stderr/duration
@@ -133,9 +133,9 @@ Session routing rules: an explicit `X-Sim-Session` header wins (404 if unknown);
 
 ## Adding or changing a solver driver
 
-Create or update solver drivers in the owning `sim-plugin-<solver>` repository. A plugin should implement `DriverProtocol`, register the driver through `[project.entry-points."sim.drivers"]` in its `pyproject.toml`, and carry its own compatibility metadata, bundled skills, and tests.
+Create or update solver drivers under `plugins/<solver>/`. A solver package implements `DriverProtocol`, registers the driver through `[project.entry-points."sim.drivers"]` in its `pyproject.toml`, and carries its own compatibility metadata, bundled skills, and tests. Regenerate `plugin-index.json` with `uv run python scripts/workspace.py index` after changing package metadata.
 
-The core CLI should only change when the shared runtime contract or plugin discovery machinery changes. Before editing driver-facing docs or behavior, inspect the installed environment with `sim plugin list` and `sim plugin info <solver>`, then work in the plugin repo that owns that solver.
+The core CLI should only change when the shared runtime contract or driver discovery changes.
 
 **Prefer generic primitives over task-specific ones.** Before adding a new
 driver method purpose-built for one workflow (a resumable-sweep runner, an
@@ -180,9 +180,9 @@ tests/
   fixtures/                          mock scripts and shared test assets
 ```
 
-Only `-m integration` tests need solvers; `pytest -q` runs green with no plugins installed.
+Only `-m integration` tests need solvers; `pytest -q` runs green with no solver packages installed.
 
-Solver plugin tests live in their own plugin repos. Tests in this repo cover the shared CLI/runtime contract and plugin discovery behavior.
+Each solver package keeps its tests in `plugins/<solver>/tests`; `uv run python scripts/workspace.py test` runs every package in isolation. The tests above cover the shared CLI/runtime contract and driver discovery.
 
 ## Notes
 

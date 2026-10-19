@@ -9,7 +9,7 @@ authors = [{ name = "Weiqi Ji", email = "jiweiqi10@gmail.com" }]
 keywords = [
     "simulation", "cae", "cad", "cfd", "fea",
     "llm", "agent", "agentic",
-    "plugins", "out-of-tree",
+    "parsing", "cae-files",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",

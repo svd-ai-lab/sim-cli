@@ -1,9 +1,7 @@
 # sim
 
 **`sim` reads existing CAE files and turns them into structured text an agent
-can use — without launching the solver.** It also detects local solver installs,
-validates scripts before you run them, and can hold a live solver session open
-when an agent needs to work one verified step at a time.
+can use — without launching the solver.**
 
 Python 3.10+ · Apache-2.0 · alpha
 
@@ -13,8 +11,8 @@ Python 3.10+ · Apache-2.0 · alpha
 
 Point `sim scan` at a folder of `.mph` / `.inp` / `.cas.h5` / `.aedt` files and
 get back structured JSON an agent can reason over — model inventory, materials,
-boundary conditions, mesh counts, solve settings. No solver, no license, and no
-plugin needed:
+boundary conditions, mesh counts, solve settings. No solver, no license, and
+nothing else to install:
 
 ```bash
 uv init                  # only if this is not already a uv project
@@ -65,6 +63,10 @@ redacted unless `--include-paths` is set. Use `--full` for the complete parser
 result on a small input set, `--limit` and `--no-recursive` to bound a directory
 walk, and `--format` to force a format for an explicitly named file.
 
+Every command takes `--json` and returns a stable envelope with a closed
+error-code enum — see [docs/agent-readability.md](docs/agent-readability.md).
+Run `uv run sim --json describe` for a machine-readable command manifest.
+
 ## Example: what's in this folder?
 
 ```text
@@ -73,101 +75,22 @@ studies, which already have solved results, and what total power each one
 assumes. Use `uv run sim --json scan`.
 ```
 
-## Find solvers and validate scripts
+## Optional: working with a local solver
 
-These need the solver's plugin installed — `sim-cli-core` ships with no drivers:
+Scanning never needs a solver. If an agent also has to detect solver installs,
+lint a script before running it, or keep a solver session open, add that
+solver's package (for example `sim-plugin-comsol`) and its agent skill:
 
 ```bash
 uv add sim-plugin-comsol
-uv run sim plugin sync-skills --target .agents/skills --copy
-uv run sim check comsol                    # detect local installs and versions
-uv run sim plugin doctor comsol --deep     # plugin wiring + solver detection
-uv run sim lint <script>                   # validate before running
+uv run sim plugin sync-skills --target .agents/skills --copy   # .claude/skills for Claude Code
+uv run sim check comsol
 ```
 
-Use `.agents/skills` for Codex and GitHub Copilot, `.claude/skills` for Claude
-Code. Two things are worth telling the agent explicitly: run through the project
-with `uv run sim ...` so it sees the project's installed plugins, and never
-guess solver API names — inspect the live model or the solver's local docs
-first.
-
-No uv, or installing from a wheel, git, or a local checkout — and the `sim.toml`
-project manifest schema — are covered in
-[docs/plugin-install.md](docs/plugin-install.md).
-
-## Drive a live solver session
-
-When an agent needs the solver held open across steps, `sim connect` starts a
-local runtime and keeps the session alive. A bounded step is one modeling,
-meshing, solving, or postprocessing action that can be inspected and verified
-before continuing: create a geometry feature, assign a material, generate a
-mesh, run one study, extract a probe value, export a result table.
-
-Prefer this loop over one large generated script:
-
-1. `uv run sim check <solver>`, then `uv run sim connect --solver <solver>`
-2. `uv run sim inspect session.versions` before changing state — including after
-   any human GUI edit, since an engineer can cut in through the solver GUI at
-   any time and a previous script may no longer match the real session
-3. `uv run sim exec --file step.py --label <step>` — one bounded step
-4. `uv run sim inspect last.result`, verify with numeric evidence (mesh
-   statistics, convergence, probes, conservation checks, tolerances), checkpoint
-5. `uv run sim disconnect`, then `uv run sim stop` to free the local runtime
-
-The bundled solver skill enforces the details, so give the agent the engineering
-goal in plain language rather than a list of `sim` sub-steps:
-
-```text
-Simulate the natural-convection cooling of the attached `pcb.mph` and report the
-maximum junction temperature. Use the installed COMSOL skill. If you need a
-visible COMSOL Desktop session, connect with `--ui-mode gui`.
-```
-
-Running the solver on a different host — and the security constraints that come
-with it — is covered in [docs/remote-solvers.md](docs/remote-solvers.md).
-
-## Solver plugins
-
-Solver knowledge is not in the core CLI. It comes from plugins, each of which
-provides a **driver**, so `sim` can launch or talk to the solver, and a
-**skill**, so the agent knows that solver's workflow, pitfalls, and inspection
-rules.
-
-Packages and entry points are listed in the [workspace plugin index](plugin-index.json).
-Each plugin remains independently installable from PyPI under its existing
-`sim-plugin-<solver>` name. Its source and bundled skills live in
-[`plugins/<solver>/`](plugins/).
-
-For a source install of one plugin:
-
-```bash
-uv add sim-cli-core "sim-plugin-fluent @ git+https://github.com/svd-ai-lab/sim-cli.git#subdirectory=plugins/fluent"
-```
-
-## Commands
-
-Every command takes `--json` and returns a stable envelope with a closed
-error-code enum — see [docs/agent-readability.md](docs/agent-readability.md).
-
-| Command | Use it for |
-|---|---|
-| `uv run sim --json scan <path>...` | Parse historical simulation assets without launching a solver. |
-| `uv run sim plugin list` | Show plugins visible in this project environment. |
-| `uv run sim plugin info <solver>` | Show plugin metadata and compatibility summary. |
-| `uv run sim plugin doctor <solver> --deep` | Check plugin wiring plus local solver detection. |
-| `uv run sim plugin sync-skills --target .agents/skills --copy` | Materialize installed plugin skills for your agent. |
-| `uv run sim check <solver>` | Detect local or remote solver installs. |
-| `uv run sim connect --solver <solver>` | Open a persistent solver session. |
-| `uv run sim exec --file step.py` | Run one bounded step in the live session. |
-| `uv run sim inspect <target>` | Query session, result, or solver-specific state. |
-| `uv run sim run script.py --solver <solver>` | Run a deterministic one-shot script. |
-| `uv run sim logs last --field <name>` | Read back a one-shot run's parsed result. |
-| `uv run sim disconnect` | Tear down the active session. |
-| `uv run sim stop` | Stop the local runtime that `sim connect` auto-started. |
-| `uv run sim setup` | Validate `sim.toml` and report declared plugin package specs. |
-
-Run `uv run sim --json describe` for a machine-readable command manifest, or
-`uv run sim <command> --help` for exact options.
+The supported solvers, install commands, live-session commands, and the
+`sim.toml` manifest are covered in
+[docs/plugin-install.md](docs/plugin-install.md). Running the solver on another
+host is covered in [docs/remote-solvers.md](docs/remote-solvers.md).
 
 ## Solver ownership
 
@@ -183,12 +106,12 @@ names remain the property of their respective owners.
 
 - [docs/agent-readability.md](docs/agent-readability.md) — `--json` envelope,
   error-code enum, exit codes. Read this first if you are an agent.
-- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — project setup, layout, driver
-  protocol, and architecture notes
-- [docs/plugin-install.md](docs/plugin-install.md) — plugin installation and
-  `sim.toml` reference
+- [docs/plugin-install.md](docs/plugin-install.md) — optional solver packages,
+  live sessions, and the `sim.toml` reference
 - [docs/remote-solvers.md](docs/remote-solvers.md) — running the solver on
   another host, and the security constraints that apply
+- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — project setup, layout, driver
+  protocol, and architecture notes
 - [docs/why-cli-first.md](docs/why-cli-first.md) — why a CLI rather than MCP
 - [CONTRIBUTING.md](CONTRIBUTING.md) — branch, test, and PR workflow
 

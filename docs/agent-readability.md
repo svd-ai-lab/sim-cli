@@ -101,9 +101,8 @@ name = "coolprop"
 version = ">=0.1.0"
 
 [[sim.plugins]]
-name = "gmsh"
-git = "https://github.com/svd-ai-lab/sim-plugin-gmsh"
-rev = "v0.1.0"
+name = "flotherm"
+git = "https://github.com/svd-ai-lab/sim-cli.git@<tag>#subdirectory=plugins/flotherm"
 
 [[sim.plugins]]
 name = "local_plugin"
