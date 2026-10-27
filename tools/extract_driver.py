@@ -131,7 +131,7 @@ description = "{summary}"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
-authors = [{{ name = "Weiqi Ji", email = "jiweiqi10@gmail.com" }}]
+authors = [{{ name = "SVD Lab", email = "jiweiqi10@gmail.com" }}]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",

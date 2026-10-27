@@ -9,7 +9,7 @@ description = "Dassault Systemes SIMULIA Abaqus driver for sim-cli, distributed 
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
-authors = [{ name = "Weiqi Ji", email = "jiweiqi10@gmail.com" }]
+authors = [{ name = "SVD Lab", email = "jiweiqi10@gmail.com" }]
 keywords = ["abaqus", "cae", "fea", "simulation", "sim-cli", "plugin"]
 classifiers = [
     "Development Status :: 3 - Alpha",
