@@ -25,6 +25,11 @@ Direct runtime dependencies (see pyproject.toml)
     - each distributed under its own open-source license (BSD / MIT /
       Apache-2.0 family); consult the respective package for terms.
 
+  simparse
+    - the parsing engine behind `sim scan`; distributed by SVD Lab as
+      prebuilt wheels under the simparse License (free to use, including
+      commercially). The license ships inside the simparse package.
+
 ================================================================================
 Trademarks
 ================================================================================
