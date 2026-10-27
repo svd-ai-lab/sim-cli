@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.10"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -173,19 +173,19 @@ resolution-markers = [
     "python_full_version < '3.11'",
 ]
 dependencies = [
-    { name = "ansys-api-mechanical", marker = "python_full_version < '3.12'" },
-    { name = "ansys-mechanical-stubs", version = "0.1.12", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
-    { name = "ansys-pythonnet", version = "3.1.0rc8", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "ansys-api-mechanical" },
+    { name = "ansys-mechanical-stubs", version = "0.1.12", source = { registry = "https://pypi.org/simple" } },
+    { name = "ansys-pythonnet", version = "3.1.0rc8", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version != '3.11.*'" },
     { name = "ansys-pythonnet", version = "3.2.0rc1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
-    { name = "ansys-tools-common", marker = "python_full_version < '3.12'" },
-    { name = "appdirs", marker = "python_full_version < '3.12'" },
-    { name = "click", marker = "python_full_version < '3.12'" },
-    { name = "clr-loader", marker = "python_full_version < '3.12'" },
-    { name = "grpcio", marker = "python_full_version < '3.12'" },
-    { name = "protobuf", marker = "python_full_version < '3.12'" },
-    { name = "psutil", marker = "python_full_version < '3.12'" },
-    { name = "requests", marker = "python_full_version < '3.12'" },
-    { name = "tqdm", marker = "python_full_version < '3.12'" },
+    { name = "ansys-tools-common" },
+    { name = "appdirs" },
+    { name = "click" },
+    { name = "clr-loader" },
+    { name = "grpcio" },
+    { name = "protobuf" },
+    { name = "psutil" },
+    { name = "requests" },
+    { name = "tqdm" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/78/4c/2d4e7b3e56671e073bf04b1f69ba6a5b53fc81965e71284f8b82dd40809f/ansys_mechanical_core-0.12.12.tar.gz", hash = "sha256:9618470d5f1ba4257416fe88f6bc268dc85234729a7d6f676c0b1919d38b0287", size = 105505, upload-time = "2026-07-15T14:56:26.692Z" }
 wheels = [
@@ -201,18 +201,18 @@ resolution-markers = [
     "python_full_version >= '3.12' and python_full_version < '3.14'",
 ]
 dependencies = [
-    { name = "ansys-api-mechanical", marker = "python_full_version >= '3.12'" },
-    { name = "ansys-mechanical-stubs", version = "0.1.15", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
-    { name = "ansys-pythonnet", version = "3.2.0rc1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
-    { name = "ansys-tools-common", marker = "python_full_version >= '3.12'" },
-    { name = "appdirs", marker = "python_full_version >= '3.12'" },
-    { name = "click", marker = "python_full_version >= '3.12'" },
-    { name = "clr-loader", marker = "python_full_version >= '3.12'" },
-    { name = "grpcio", marker = "python_full_version >= '3.12'" },
-    { name = "protobuf", marker = "python_full_version >= '3.12'" },
-    { name = "psutil", marker = "python_full_version >= '3.12'" },
-    { name = "requests", marker = "python_full_version >= '3.12'" },
-    { name = "tqdm", marker = "python_full_version >= '3.12'" },
+    { name = "ansys-api-mechanical" },
+    { name = "ansys-mechanical-stubs", version = "0.1.15", source = { registry = "https://pypi.org/simple" } },
+    { name = "ansys-pythonnet", version = "3.2.0rc1", source = { registry = "https://pypi.org/simple" } },
+    { name = "ansys-tools-common" },
+    { name = "appdirs" },
+    { name = "click" },
+    { name = "clr-loader" },
+    { name = "grpcio" },
+    { name = "protobuf" },
+    { name = "psutil" },
+    { name = "requests" },
+    { name = "tqdm" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/8b/08/78cbf43d262c7058edd227953dacd270a0dea4c0d9e88344f1cfc6cabb78/ansys_mechanical_core-0.13.4.tar.gz", hash = "sha256:f3d7fbff2417ea0443cb4e54374f556ab05406f74fe712fa6f8a2783c7b3e8f1", size = 105997, upload-time = "2026-10-12T17:26:53.901Z" }
 wheels = [
@@ -267,7 +267,7 @@ resolution-markers = [
     "python_full_version < '3.11'",
 ]
 dependencies = [
-    { name = "clr-loader", marker = "python_full_version < '3.11'" },
+    { name = "clr-loader" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/ca/d4/5c5a51e69ceaf599251839fd4e8dc3d7a92463c03778ef660b27362c59c0/ansys_pythonnet-3.1.0rc8.tar.gz", hash = "sha256:cc0b73bcbbca77527ae7712e97dc17f442313a57c2e2e3f654111d31e99d5f98", size = 240682, upload-time = "2026-05-14T15:24:28.319Z" }
 wheels = [
@@ -284,7 +284,7 @@ resolution-markers = [
     "python_full_version == '3.11.*'",
 ]
 dependencies = [
-    { name = "clr-loader", marker = "python_full_version >= '3.11'" },
+    { name = "clr-loader" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/6d/27/ba35400348083a47e3ce45a81b78f91b80bc7feb07f36ec870c07a7d6094/ansys_pythonnet-3.2.0rc1.tar.gz", hash = "sha256:4b8aa44638356ceb5d2ff6f060bf05bca77c15b8a77c2baf285fe0f2876d5a85", size = 255190, upload-time = "2026-10-12T14:26:26.878Z" }
 wheels = [
@@ -820,7 +820,7 @@ resolution-markers = [
     "python_full_version < '3.11'",
 ]
 dependencies = [
-    { name = "wrapt", marker = "python_full_version < '3.12'" },
+    { name = "wrapt" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/49/85/12f0a49a7c4ffb70572b6c2ef13c90c88fd190debda93b23f026b25f9634/deprecated-1.3.1.tar.gz", hash = "sha256:b1b50e0ff0c1fddaa5708a2c6b0a6588bb09b892825ab2b214ac9ea9d92a5223", size = 2932523, upload-time = "2025-10-30T08:19:02.757Z" }
 wheels = [
@@ -836,7 +836,7 @@ resolution-markers = [
     "python_full_version >= '3.12' and python_full_version < '3.14'",
 ]
 dependencies = [
-    { name = "wrapt", marker = "python_full_version >= '3.12'" },
+    { name = "wrapt" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f7/9c/16649913bf14c73e0a9453782e148362ff2657067deff6aa9c7ebcddcc31/deprecated-3.0.0.tar.gz", hash = "sha256:16850204d3a1e6bb0acd06bff48d96e8b0a0d25d1c52f71705405a0f4894192d", size = 166912, upload-time = "2026-09-26T13:58:10.675Z" }
 wheels = [
@@ -862,7 +862,7 @@ name = "exceptiongroup"
 version = "1.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
+    { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/50/79/66800aadf48771f6b62f7eb014e352e5d06856655206165d775e675a02c9/exceptiongroup-1.3.1.tar.gz", hash = "sha256:8b412432c6055b0b7d14c310000ae93352ed6754f70fa8f7c34141f91c4e3219", size = 30371, upload-time = "2025-11-21T23:01:54.787Z" }
 wheels = [
@@ -2180,8 +2180,8 @@ name = "pywinauto"
 version = "0.6.9"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "comtypes", marker = "sys_platform == 'win32'" },
-    { name = "pywin32", marker = "sys_platform == 'win32'" },
+    { name = "comtypes" },
+    { name = "pywin32" },
     { name = "six" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/2c/85/cc65e3b64e7473cc86c07f0b5c415d509402c03ef19dadc39c583835eb5f/pywinauto-0.6.9.tar.gz", hash = "sha256:94d710bfa796df245250f952ffa65d97233d9807bcd42e052b71b81af469b6de", size = 434734, upload-time = "2025-01-06T11:30:01.801Z" }
@@ -2721,7 +2721,7 @@ wheels = [
 
 [[package]]
 name = "sim-cli-core"
-version = "0.4.1"
+version = "0.4.2"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
@@ -2763,7 +2763,7 @@ requires-dist = [
     { name = "pywinauto", marker = "sys_platform == 'win32'", specifier = ">=0.6.8" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4" },
-    { name = "simparse", specifier = ">=0.3.2,<0.4" },
+    { name = "simparse", specifier = ">=0.4,<0.5" },
     { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2.0" },
     { name = "uvicorn", specifier = ">=0.34" },
 ]
@@ -3036,13 +3036,12 @@ provides-extras = ["test"]
 
 [[package]]
 name = "simparse"
-version = "0.3.2"
+version = "0.4.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/64/00/eda560b639c67b43c4511bbed178fd4898460f7707e854155c8ca6e2e791/simparse-0.3.2.tar.gz", hash = "sha256:cc7b907226a919bc1e681f300d9b36b232b293b158854c041a06225d0d98b27e", size = 41908, upload-time = "2026-08-27T11:55:10.862Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/fd/cb/e9f38085801c819b85def92de2947b89cb9848d18867b7991d602ce85d71/simparse-0.3.2-cp39-abi3-macosx_11_0_arm64.whl", hash = "sha256:54a360440b27f9cdae945abc5c79c4eb014a0e27bae1bf7a55344ad5a20a80a0", size = 1011780, upload-time = "2026-08-27T11:55:30.717Z" },
-    { url = "https://files.pythonhosted.org/packages/36/78/931d81c1e7bef1a82b947bef574947b48b8f2bb27874f83dffe62b30c4a0/simparse-0.3.2-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:c4f5d263990f8996fa448d2f008e347a08aa02ee91a15962e5389c29df21b419", size = 1089038, upload-time = "2026-08-27T11:55:09.007Z" },
-    { url = "https://files.pythonhosted.org/packages/9c/09/03ec2344d9258095c7ee3224e7db55ed2ddaf6b78099dcfb6a213289abf0/simparse-0.3.2-cp39-abi3-win_amd64.whl", hash = "sha256:601470daf0a67c2354222bd480df783ed39ba2d21897867151cca3f7d42d5d25", size = 984151, upload-time = "2026-08-27T11:55:20.415Z" },
+    { url = "https://files.pythonhosted.org/packages/9a/31/2fe528dae2496b539f99db763bb2b324708fb223504297181b5293b18616/simparse-0.4.0-cp39-abi3-macosx_11_0_arm64.whl", hash = "sha256:14b599292e1fb7ca26476eb7f8b359665ec05483b274683fa7423ca09ee7241f", size = 1158368, upload-time = "2026-10-27T11:46:16.48Z" },
+    { url = "https://files.pythonhosted.org/packages/4b/45/b695233268d3adcd6b0683e8f9230def0a3e68d6756a98e5f7531ca85043/simparse-0.4.0-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:e9c8695370e42f3b14d968975ed25c131ebe4c7e989bb61b69ee7eace4cad8e7", size = 1230218, upload-time = "2026-10-27T11:46:19.035Z" },
+    { url = "https://files.pythonhosted.org/packages/1d/2d/efaac00c686275fc45169403d6d656a03e5f213fe57d1a25939d0c947fef/simparse-0.4.0-cp39-abi3-win_amd64.whl", hash = "sha256:3c08faa74c02a32524a0604d1f308bcedd23664ab7ea9b0653264f100eea643f", size = 1132794, upload-time = "2026-10-27T11:46:20.671Z" },
 ]
 
 [[package]]
