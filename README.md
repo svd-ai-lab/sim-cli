@@ -61,7 +61,8 @@ The default view is bounded — lists come back as `{total, sample, truncated}`
 so a large scan cannot blow up an agent's context — and absolute paths are
 redacted unless `--include-paths` is set. Use `--full` for the complete parser
 result on a small input set, `--limit` and `--no-recursive` to bound a directory
-walk, and `--format` to force a format for an explicitly named file.
+walk, and `--format` to force a format for an explicitly named file. What each
+format reports: [docs/simparse.md](docs/simparse.md).
 
 Every command takes `--json` and returns a stable envelope with a closed
 error-code enum — see [docs/agent-readability.md](docs/agent-readability.md).
