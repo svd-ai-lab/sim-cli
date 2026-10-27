@@ -41,12 +41,21 @@ category.
 
 ## Speed
 
+simparse scans roughly **4–20× faster** than a Python tool script doing the
+same scan (about 9× typical):
+
+| Files | simparse | Python script | Speed-up |
+| --- | --- | --- | --- |
+| Abaqus `.inp` | 22.9 ms | 202.6 ms | 8.8× |
+| COMSOL `.mph` | 45.2 ms | 270.7 ms | 6.0× |
+| Fluent `.cas.h5` / `.msh.h5` | 22.3 ms | 436.7 ms | 19.6× |
+| HFSS `.aedt` | 48.6 ms | 176.6 ms | 3.6× |
+
 ![Agent tool-call scan benchmark](../assets/simparse-benchmark.svg)
 
 The benchmark models one agent tool call: a single external command scans a
 group of public simulation artifacts. Times are medians of 5 runs and include
-process startup and import cost; the comparison is a Python tool script doing
-the same scan.
+process startup and import cost.
 
 ## Platforms and license
 

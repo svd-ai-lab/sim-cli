@@ -10,6 +10,8 @@ uv run sim --json scan ./historical-cases
 ```
 
 One call covers a whole folder. No solver, no license server, no vendor SDK.
+The parsing engine scans roughly 4–20× faster than an equivalent Python script
+([benchmark](docs/simparse.md#speed)).
 Output is bounded so a large scan fits in an agent's context, and absolute
 paths are redacted by default.
 
