@@ -5,7 +5,7 @@ description = "Agent-native simulation asset parsing and CAD/CAE runtime"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
-authors = [{ name = "SVD Lab", email = "jiweiqi10@gmail.com" }]
+authors = [{ name = "SVD Lab" }]
 keywords = [
     "simulation", "cae", "cad", "cfd", "fea",
     "llm", "agent", "agentic",
