@@ -3,8 +3,6 @@
 **`sim` reads existing CAE files and turns them into structured text an agent
 can use — without launching the solver.**
 
-Python 3.10+ · Apache-2.0 · alpha
-
 ```bash
 uv init                  # only if this is not already a uv project
 uv add sim-cli-core
