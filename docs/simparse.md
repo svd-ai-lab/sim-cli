@@ -39,6 +39,15 @@ category.
 - **Fast to call.** A single process start covers a whole directory, which is
   what an agent tool call pays for.
 
+## Speed
+
+![Agent tool-call scan benchmark](../assets/simparse-benchmark.svg)
+
+The benchmark models one agent tool call: a single external command scans a
+group of public simulation artifacts. Times are medians of 5 runs and include
+process startup and import cost; the comparison is a Python tool script doing
+the same scan.
+
 ## Platforms and license
 
 Prebuilt wheels: Windows x86_64, macOS Apple silicon, Linux x86_64

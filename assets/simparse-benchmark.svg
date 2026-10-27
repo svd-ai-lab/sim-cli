@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="406" viewBox="0 0 760 406" role="img" aria-labelledby="title desc">
+<title id="title">simparse agent tool-call benchmark</title>
+<desc id="desc">Median time for one external command scanning each public artifact group. Lower is faster.</desc>
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="24" y="28" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="#111827">Agent tool-call scan benchmark</text>
+<text x="24" y="50" font-family="Arial, sans-serif" font-size="12" fill="#4b5563">Median time for one external command scanning each public artifact group. Lower is faster.</text>
+<rect x="24" y="61" width="12" height="12" fill="#2563eb" rx="2"/>
+<text x="42" y="71" font-family="Arial, sans-serif" font-size="12" fill="#374151">simparse CLI</text>
+<rect x="145" y="61" width="12" height="12" fill="#f97316" rx="2"/>
+<text x="163" y="71" font-family="Arial, sans-serif" font-size="12" fill="#374151">Python tool script</text>
+<text x="24" y="88" font-family="Arial, sans-serif" font-size="13" font-weight="700" fill="#111827">abaqus inp</text>
+<rect x="155" y="72" width="22.8" height="16" fill="#2563eb" rx="3"/>
+<text x="185.8" y="84" font-family="Arial, sans-serif" font-size="12" fill="#111827">22.9 ms</text>
+<rect x="155" y="96" width="201.8" height="16" fill="#f97316" rx="3"/>
+<text x="364.8" y="108" font-family="Arial, sans-serif" font-size="12" fill="#111827">202.6 ms</text>
+<text x="650" y="98" font-family="Arial, sans-serif" font-size="13" fill="#374151">8.83x</text>
+<text x="24" y="158" font-family="Arial, sans-serif" font-size="13" font-weight="700" fill="#111827">comsol mph</text>
+<rect x="155" y="142" width="45.0" height="16" fill="#2563eb" rx="3"/>
+<text x="208.0" y="154" font-family="Arial, sans-serif" font-size="12" fill="#111827">45.2 ms</text>
+<rect x="155" y="166" width="269.6" height="16" fill="#f97316" rx="3"/>
+<text x="432.6" y="178" font-family="Arial, sans-serif" font-size="12" fill="#111827">270.7 ms</text>
+<text x="650" y="168" font-family="Arial, sans-serif" font-size="13" fill="#374151">6.00x</text>
+<text x="24" y="228" font-family="Arial, sans-serif" font-size="13" font-weight="700" fill="#111827">fluent hdf5</text>
+<rect x="155" y="212" width="22.2" height="16" fill="#2563eb" rx="3"/>
+<text x="185.2" y="224" font-family="Arial, sans-serif" font-size="12" fill="#111827">22.3 ms</text>
+<rect x="155" y="236" width="435.0" height="16" fill="#f97316" rx="3"/>
+<text x="598.0" y="248" font-family="Arial, sans-serif" font-size="12" fill="#111827">436.7 ms</text>
+<text x="650" y="238" font-family="Arial, sans-serif" font-size="13" fill="#374151">19.60x</text>
+<text x="24" y="298" font-family="Arial, sans-serif" font-size="13" font-weight="700" fill="#111827">hfss aedt</text>
+<rect x="155" y="282" width="48.4" height="16" fill="#2563eb" rx="3"/>
+<text x="211.4" y="294" font-family="Arial, sans-serif" font-size="12" fill="#111827">48.6 ms</text>
+<rect x="155" y="306" width="175.9" height="16" fill="#f97316" rx="3"/>
+<text x="338.9" y="318" font-family="Arial, sans-serif" font-size="12" fill="#111827">176.6 ms</text>
+<text x="650" y="308" font-family="Arial, sans-serif" font-size="13" fill="#374151">3.63x</text>
+</svg>
