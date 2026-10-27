@@ -9,7 +9,7 @@ description = "Autodesk Fusion official-MCP driver and bundled skill for sim"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
-authors = [{ name = "Weiqi Ji", email = "jiweiqi10@gmail.com" }]
+authors = [{ name = "SVD Lab", email = "jiweiqi10@gmail.com" }]
 keywords = ["autodesk-fusion", "fusion", "cad", "cae", "simulation", "sim-cli", "mcp"]
 classifiers = [
     "Development Status :: 3 - Alpha",
