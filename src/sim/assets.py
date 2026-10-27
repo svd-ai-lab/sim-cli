@@ -131,7 +131,7 @@ def scan_assets(
         return _error_envelope(
             "SIMPARSE_UNAVAILABLE",
             "simparse could not be loaded; reinstall sim-cli-core for this platform.",
-            {"dependency": "simparse>=0.3.2,<0.4", "reason": str(exc)[:280]},
+            {"dependency": "simparse>=0.4,<0.5", "reason": str(exc)[:280]},
         ), 3
 
     assets: list[dict[str, Any]] = []

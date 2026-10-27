@@ -1,6 +1,6 @@
 [project]
 name = "sim-cli-core"
-version = "0.4.1"
+version = "0.4.2"
 description = "Agent-native simulation asset parsing and CAD/CAE runtime"
 readme = "README.md"
 license = "Apache-2.0"
@@ -30,7 +30,7 @@ classifiers = [
 # corresponding plugin's install, or directly by the user. compat.yaml
 # documents which combinations are supported.
 dependencies = [
-    "simparse>=0.3.2,<0.4",
+    "simparse>=0.4,<0.5",
     "click>=8.0",
     "httpx>=0.28",
     "fastapi>=0.115",
