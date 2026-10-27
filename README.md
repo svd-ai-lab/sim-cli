@@ -5,45 +5,30 @@ can use — without launching the solver.**
 
 Python 3.10+ · Apache-2.0 · alpha
 
----
-
-## Scan existing simulation assets
-
-Point `sim scan` at a folder of `.mph` / `.inp` / `.cas.h5` / `.aedt` files and
-get back structured JSON an agent can reason over — model inventory, materials,
-boundary conditions, mesh counts, solve settings. No solver, no license, and
-nothing else to install:
-
 ```bash
 uv init                  # only if this is not already a uv project
 uv add sim-cli-core
 uv run sim --json scan ./historical-cases
 ```
 
+One call covers a whole folder. No solver, no license server, no vendor SDK.
+Output is bounded so a large scan fits in an agent's context, and absolute
+paths are redacted by default.
+
 ```console
 $ uv run sim --json scan ./cases/beam.inp --full
-{
-  "schema_version": "sim.scan/v1",
-  "assets": [{
-    "file_name": "beam.inp",
-    "format": "abaqus-inp",
-    "summary": {"data": {
-      "title": "Cantilever beam thermal-stress",
-      "node_count": 3,
-      "element_count": 1,
-      "materials": ["STEEL"],
-      "sections": ["SOLID SECTION:STEEL"],
-      "steps": ["STATIC"],
-      "boundary_keywords": ["BOUNDARY"],
-      "load_keywords": ["CLOAD"],
-      "output_keywords": ["NODE PRINT"]
-    }}
-  }]
-}
+{"schema_version": "sim.scan/v1",
+ "assets": [{"file_name": "beam.inp", "format": "abaqus-inp",
+   "summary": {"data": {"title": "Cantilever beam thermal-stress",
+     "node_count": 3, "element_count": 1, "materials": ["STEEL"],
+     "steps": ["STATIC"], "boundary_keywords": ["BOUNDARY"],
+     "load_keywords": ["CLOAD"], "output_keywords": ["NODE PRINT"]}}}]}
 ```
 
-(abridged — the real envelope also carries `ok`, `engine`, `request`, and a
-roll-up `summary` block.)
+(abridged — the full envelope also carries `ok`, `engine`, `request` and a
+roll-up `summary`.)
+
+## Supported files
 
 | Solver | Files | `--format` id |
 | --- | --- | --- |
@@ -57,65 +42,30 @@ roll-up `summary` block.)
 | Simulink | `.slx`, `.mdl` | `simulink-slx`, `simulink-mdl` |
 | MATLAB data | `.mat` | `matlab-mat` |
 
-The default view is bounded — lists come back as `{total, sample, truncated}`
-so a large scan cannot blow up an agent's context — and absolute paths are
-redacted unless `--include-paths` is set. Use `--full` for the complete parser
-result on a small input set, `--limit` and `--no-recursive` to bound a directory
-walk, and `--format` to force a format for an explicitly named file. What each
-format reports: [docs/simparse.md](docs/simparse.md).
+What each format reports: [docs/simparse.md](docs/simparse.md).
+
+## Options
+
+| Flag | Effect |
+| --- | --- |
+| `--full` | Complete parser result instead of the bounded summary (small input sets) |
+| `--include-paths` | Keep absolute source paths |
+| `--limit N`, `--no-recursive` | Bound a directory walk |
+| `--format ID` | Force a format for an explicitly named file |
 
 Every command takes `--json` and returns a stable envelope with a closed
-error-code enum — see [docs/agent-readability.md](docs/agent-readability.md).
-Run `uv run sim --json describe` for a machine-readable command manifest.
-
-## Example: what's in this folder?
-
-```text
-Scan ./legacy-cases and tell me which models are package-level thermal
-studies, which already have solved results, and what total power each one
-assumes. Use `uv run sim --json scan`.
-```
-
-## Optional: working with a local solver
-
-Scanning never needs a solver. If an agent also has to detect solver installs,
-lint a script before running it, or keep a solver session open, add that
-solver's package (for example `sim-plugin-comsol`) and its agent skill:
-
-```bash
-uv add sim-plugin-comsol
-uv run sim plugin sync-skills --target .agents/skills --copy   # .claude/skills for Claude Code
-uv run sim check comsol
-```
-
-The supported solvers, install commands, live-session commands, and the
-`sim.toml` manifest are covered in
-[docs/plugin-install.md](docs/plugin-install.md). Running the solver on another
-host is covered in [docs/remote-solvers.md](docs/remote-solvers.md).
-
-## Solver ownership
-
-`sim-cli` does not bundle or redistribute simulation solvers or vendor SDKs.
-Install and operate each underlying solver according to its vendor terms. See
-[NOTICE](NOTICE) for optional SDK dependency notes.
-
-`sim-cli` is an independent open-source project and is not affiliated with,
-endorsed by, or sponsored by any solver vendor. Product, solver, and company
-names remain the property of their respective owners.
+error-code enum. `uv run sim --json describe` prints the full command manifest.
 
 ## Docs
 
-- [docs/agent-readability.md](docs/agent-readability.md) — `--json` envelope,
-  error-code enum, exit codes. Read this first if you are an agent.
-- [docs/plugin-install.md](docs/plugin-install.md) — optional solver packages,
-  live sessions, and the `sim.toml` reference
-- [docs/remote-solvers.md](docs/remote-solvers.md) — running the solver on
-  another host, and the security constraints that apply
-- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — project setup, layout, driver
-  protocol, and architecture notes
-- [docs/why-cli-first.md](docs/why-cli-first.md) — why a CLI rather than MCP
-- [CONTRIBUTING.md](CONTRIBUTING.md) — branch, test, and PR workflow
+- [docs/agent-readability.md](docs/agent-readability.md) — JSON envelope,
+  error codes, exit codes. Read this first if you are an agent.
+- [docs/simparse.md](docs/simparse.md) — what each file format reports.
+- [docs/plugin-install.md](docs/plugin-install.md) — optional solver packages
+  for detecting installs and driving a live solver session.
+- [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
 ## License
 
-Apache-2.0 — see [LICENSE](LICENSE).
+Apache-2.0 — see [LICENSE](LICENSE). Solvers are not bundled; vendor and
+trademark notes are in [NOTICE](NOTICE).
