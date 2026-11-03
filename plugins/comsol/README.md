@@ -74,6 +74,19 @@ tag. `session.health` should report `model_builder_live: true` and a
 `live_model_binding.ok` value of `true` before relying on the GUI as a live
 view of agent edits.
 
+### 5. Bare Codex Java loop — when sim-cli is not installed
+
+COMSOL's public blog
+[Using Agentic Workflows with COMSOL Multiphysics®](https://www.comsol.com/blogs/using-agentic-workflows-with-comsol-multiphysics)
+describes a minimal Codex harness: generate Java, `comsolcompile`, connect to
+an already-running Multiphysics server, mutate, disconnect. The bundled skill
+documents that path in
+`src/sim_plugin_comsol/_skills/comsol/base/reference/codex_client_server_loop.md`
+and a bounded nonlinear/segregated solver-tuning workflow in
+`.../base/workflows/nonlinear_solver_tuning.md`. Prefer `sim connect` when this
+plugin is installed; use the bare loop as the no-sim fallback (and as the
+blog-compatible smoke: set a parameter and read it back).
+
 ## Install
 
 For agent projects, install sim-cli-core and the COMSOL plugin in the project

@@ -32,6 +32,7 @@ Then pick the smallest path that can produce real evidence.
 | direct `comsolbatch -inputfile` | Running a saved model headlessly, stripping solutions with `-norun`, regression/CI/fan-out over `.mph` files, and one-shot saved-model output artifacts. | output `.mph`, `-batchlog`, shell exit status, and extracted KPIs/artifacts. |
 | `comsolcompile` + `comsolbatch` | Settled Java recipes that build, solve, and extract KPIs in a fresh COMSOL process. | compiled class, batch log/stdout KPI lines, output `.mph` or exported data. |
 | `comsolmphserver` / Java API | Stateful model exploration, live property/tag probing, incremental mutation, debugging, and API work where the agent needs to ask the live model questions. | model tags/properties, run/build results, saved checkpoints, and explicit model identity. |
+| bare Codex Java loop (no sim) | Blog-style agent harness: `comsolcompile` + bundled JRE + `plugins/*`, connect to an already-running Multiphysics server, mutate, disconnect, keep `.java`/logs. Use when sim-cli is unavailable. | connect/tags/param smoke log, per-step `.java` + stdout, optional Desktop-visible parameter. |
 | sim runtime / shared Desktop | The same server-backed Java API work when the plugin's structured `inspect`/`exec`/checkpoint tools or managed visible Model Builder collaboration are useful. | `session.health`, `comsol.model.identity`, `last.result`, live binding checks, checkpoints. |
 
 If the user already has a `comsolmphserver` plus `comsol.exe mphclient -host
@@ -47,6 +48,20 @@ uv run sim connect --solver comsol --ui-mode no_gui `
 Then verify model tags and binding through `session.health`/`ModelUtil.tags()`.
 Use `visual_mode=shared-desktop` only when the plugin should launch or manage
 the visible Desktop client.
+
+When following COMSOL's public Codex client–server recipe (or when `sim` is
+not installed), use the bare Java connect loop in
+[`base/reference/codex_client_server_loop.md`](base/reference/codex_client_server_loop.md):
+start or attach to `comsolmphserver`, compile with `comsolcompile`, run with
+COMSOL's JRE and `plugins/*`, **read tags before edits**, and keep `.java` plus
+logs for audit. That path matches the official blog's minimal `comsol-api`
+skill; **this `comsol-sim` skill replaces it** once `sim-plugin-comsol` is
+available—do not layer a second conflicting thin skill unless the user asks.
+
+For segregated / nonlinear solver speed-ups (CFD heat-sink style), follow
+[`base/workflows/nonlinear_solver_tuning.md`](base/workflows/nonlinear_solver_tuning.md):
+bounded sweeps, Copy-as-Code or live `properties()` discovery, and KPI gates so
+“fewer iterations” cannot mean a non-physical solve.
 
 For the `comsolcompile` path, Java code needs chain-style
 `model.X("tag").Y("tag2")...` calls. There is no public `Component`,
@@ -113,7 +128,9 @@ specific behavior matters.
 |---|---|
 | `base/workflows/model_review_loop.md` | Checkpoint loop for live/incremental geometry, materials, physics, mesh, study, and results work. |
 | `base/workflows/debug_failed_exec.md` | Failure and divergence triage: preserve the first causal error, inspect live state, separate singular/setup/mesh/nonlinear causes, then retry one hypothesis at a time. |
+| `base/workflows/nonlinear_solver_tuning.md` | Agentic segregated/nonlinear solver tuning: bounded property sweeps, Copy-as-Code discovery, KPI gates (COMSOL Codex/CFD blog pattern). |
 | `base/reference/runtime_introspection.md` | Live-session inspection contract: preferred `uv run sim inspect` targets, compatibility rules, partial results, and raw Java fallbacks. |
+| `base/reference/codex_client_server_loop.md` | Bare Codex/Java client–server loop aligned with COMSOL's public agentic blog: `comsolmphserver`, `comsolcompile`, JRE+`plugins/*`, tag-first mutate, artifact layout. |
 | `base/reference/java_api_patterns.md` | Stable Java API probing patterns: tags first, properties before `set`, selection checks, and version-safe try/except snippets. |
 | `base/reference/java_batch_patterns.md` | Read before writing `.java` for `comsolcompile`: chain-style calls, anti-patterns that fail to compile, source-property toggles (`<prop>_src`), study/sol skeleton, KPI extraction via stdout, error triage. |
 | `base/reference/mph_file_format.md` | `.mph` is a ZIP archive — internal layout, the three `nodeType` variants (compact/solved/preview), the Global Parameter `T="33"` contract, and the stdlib `mph_inspect` reader. Read this when you need to introspect a `.mph` *without* spinning up `comsolmphserver`. |
