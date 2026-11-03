@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.15 - 2026-11-03
+
+- Align the bundled `comsol-sim` skill with COMSOL's public Codex / client–server
+  agentic blog: bare Java connect–mutate–disconnect loop, artifact layout, and
+  guidance that `comsol-sim` supersedes the blog-minimal `comsol-api` skill when
+  this plugin is installed.
+- Add `nonlinear_solver_tuning` workflow for bounded segregated-solver sweeps
+  with physical KPI gates (heat-sink CFD pattern).
+
 ## 0.1.13 - 2026-05-08
 
 - Clarify COMSOL Java API build/run calls as intentional synchronization points for layered model state and live Desktop refresh.
