@@ -12,7 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Solver discovery and script validation** (`sim check`, `sim lint`) — require the solver's plugin. With no plugins installed, `check --all` reports "scanned 0 drivers" and `lint` errors with `No registered driver claims ...`.
 - **Execution** — requires a plugin, and comes in two modes:
   - **One-shot** (`sim run script --solver=X`): subprocess execution, result stored as a numbered run, `sim logs` to browse.
-  - **Persistent session** (`sim connect/exec/inspect/disconnect`): a long-lived HTTP server holds a live solver session; agents send code snippets and inspect state without restarting the solver. `sim connect` auto-starts a local server when none is reachable (`session.py:_auto_start_server`), so `sim serve` is only needed explicitly for remote hosts — and `sim stop` is the counterpart that reaps that background process.
+  - **Persistent session** (`sim connect/exec/inspect/disconnect`): a local HTTP server holds a live solver session so agents can run snippets and inspect state without restarting the solver. `sim connect` starts the server on demand, `sim serve` starts it explicitly, and `sim stop` stops it.
 
 This tiering is load-bearing for docs and error messages: never imply `sim scan` needs a plugin, and never imply `sim check` works without one.
 
@@ -37,15 +37,16 @@ ruff check --fix src/sim tests
 sim --json scan ./historical-cases    # bounded summary, paths redacted
 sim --json scan model.mph --full --include-paths
 sim --json scan case.inp --format abaqus-inp   # force format for a named file
+sim export mesh model.mph --sequence mesh1 -o mesh.vtu
+sim --json export solution solved.mph --list
+sim export solution solved.mph --sequence sol1 --solnum 1 -o solution.json
 
 # CLI — sessions
-sim serve --host 0.0.0.0             # start HTTP server (default port 7600)
-sim --host <ip> connect --solver <name> --mode solver --ui-mode gui
-sim --host <ip> exec "solver.settings.mesh.check()"
-sim --host <ip> inspect session.summary
-sim --host <ip> screenshot -o shot.png
-sim --host <ip> disconnect
-
+sim serve                            # start local HTTP server (default port 7600)
+sim connect --solver <name> --mode solver --ui-mode gui
+sim exec "solver.settings.mesh.check()"
+sim inspect session.summary
+sim screenshot -o shot.png
 sim disconnect                        # tear down the session
 sim stop                              # reap the auto-started local server
 
@@ -57,9 +58,9 @@ sim lint script.py                    # validate before running (needs the plugi
 sim --json describe                   # machine-readable command manifest
 ```
 
-**`--json` is a group-level flag and must precede the subcommand.** `sim --json describe` works; `sim describe --json` fails with `Error: No such option: --json`. The same applies to `--host`, `--port`, and `--session`. Note `docs/agent-readability.md` still shows the broken postfix form in two places.
+Put the group-level flags `--json`, `--port`, and `--session` before the subcommand, as in `sim --json describe`.
 
-Environment variables: `SIM_HOST`, `SIM_PORT` (CLI client, also `[server]` in config), `SIM_HOME` (global config + history dir, default `~/.sim/`), `SIM_DIR` (project dir, default `./.sim/`).
+Environment variables: `SIM_PORT` (local session port, also `[server].port` in config), `SIM_HOME` (global config + history dir, default `~/.sim/`), `SIM_DIR` (project dir, default `./.sim/`).
 
 Config files (issue #5): `~/.sim/config.toml` (global) + `.sim/config.toml` (project). Resolution order `env > project > global > default`. With no config files present, behavior is unchanged from pre-config sim. Run `sim config path | show | init` to manage. See `docs/architecture/multi-session-and-config.md` for the full schema.
 

@@ -22,10 +22,6 @@ Usage from an agent::
     # Full UIA tree of everything the solver currently has on screen
     state = gui.snapshot()
 
-Remote use is identical — the same object lives in the namespace of a
-``sim serve`` running on the remote Windows host; the agent just talks
-to it over ``sim exec --host <remote>``.
-
 All calls return JSON-serialisable dicts. Errors are surfaced via
 ``ok=False`` + ``error`` (from ``_pywinauto_tools``) — methods do not
 raise unless the caller passes invalid Python types. The agent's

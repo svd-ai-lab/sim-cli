@@ -111,17 +111,15 @@ naming the hypothesis and the evidence expected to change.
 
 ---
 
-## Where `sim serve` runs (Windows session-context foot-gun)
+## Where `sim serve` runs on Windows
 
-If you reach a remote `sim` host via `sim --host <host>` or `SIM_HOST`, **how
-the operator started `sim serve` changes which drivers actually work.** This
-is purely a Windows concern — Linux and macOS don't isolate display sessions
-the same way.
+Run GUI-capable solver sessions from an interactive Windows desktop. The
+local `sim serve` process uses the desktop session where it was started.
 
 | `sim serve` started from… | Headless / CLI drivers | GUI-capable drivers |
 |---|---|---|
 | Logged-in Windows desktop (Windows Terminal / RDP / Task Scheduler "run only when user is logged on" + interactive) | ✅ works | ✅ works — windows are visible; `gui` can find / click / screenshot them |
-| SSH session (`ssh <host>` then `sim serve …`) | ✅ works | ❌ silent breakage — windows launch in a non-interactive session with no display surface; `gui` finds zero windows, screenshots come back black |
+| Non-interactive shell or service | Works | Windows are unavailable to `gui` and screenshots can be black |
 
 If the host advertises `tools: ["gui"]` but `gui.find(...)` returns nothing
 for windows you have strong reason to believe exist, **do not retry** —

@@ -11,7 +11,7 @@ The contract has three pillars:
    error-code enum.
 2. **File-based setup** — no command requires interactive input. Every
    prompt has a flag or config-key equivalent.
-3. **Self-describing surface** — `sim describe --json` emits the full CLI
+3. **Self-describing surface** — `sim --json describe` emits the full CLI
    manifest so an agent can learn the surface from one call.
 
 ## 1. Predictable I/O
@@ -21,8 +21,7 @@ The contract has three pillars:
 | Flag | Meaning |
 |---|---|
 | `--json` | Emit JSON for the command's primary result. Honoured by every command that returns structured data. |
-| `--host <host>` | Override sim-server host (else `SIM_HOST` env, else `localhost`). |
-| `--port <port>` | Override sim-server port (else `SIM_PORT` env, else `[server].port` from config, else `7600`). |
+| `--port <port>` | Override local sim-server port (else `SIM_PORT` env, else `[server].port` from config, else `7600`). |
 | `--session <id>` | Target a specific session (else `SIM_SESSION` env, else server's sole session). |
 | `--no-interactive` | Fail fast with `error_code: NONINTERACTIVE_INPUT_REQUIRED` instead of blocking on stdin. Default ON when stdout is not a TTY. |
 
@@ -63,6 +62,7 @@ top-level keys (`stdout`, `stderr`); never inside `message`.
 | `PROTOCOL_VIOLATION` | A driver returned a value that doesn't match `DriverProtocol`. |
 | `NONINTERACTIVE_INPUT_REQUIRED` | `--no-interactive` is set and the command would otherwise prompt. |
 | `ASSET_SCAN_FAILED` | A simulation asset or directory could not be read or parsed. |
+| `ASSET_EXPORT_FAILED` | The saved MPH data could not be read or written to the requested output path. |
 | `ASSET_FORMAT_UNSUPPORTED` | An explicitly requested file is not a supported simulation asset format. |
 | `ASSET_PATH_NOT_FOUND` | A requested simulation asset path does not exist. |
 | `SIMPARSE_UNAVAILABLE` | The required native `simparse` dependency could not be loaded on this platform. |
@@ -75,7 +75,7 @@ and the JSON schema emitted by `sim describe --error-codes`.
 | Code | Meaning |
 |---|---|
 | 0 | Success. |
-| 1 | Run-level failure (solver returned non-zero, lint produced diagnostics). |
+| 1 | Operation failed (solver, lint, or export error). |
 | 2 | User error (bad args, unknown command). |
 | 3 | Environment error (solver not installed). |
 | 4 | Plugin error (retired mutation command invoked, plugin doctor FAIL). |

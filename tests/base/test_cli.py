@@ -25,6 +25,14 @@ def test_help():
     assert "sim" in result.output
 
 
+def test_session_commands_reject_host_overrides():
+    runner = CliRunner()
+    for args in (["--host", "192.0.2.1", "ps"], ["serve", "--host", "0.0.0.0"]):
+        result = runner.invoke(main, args)
+        assert result.exit_code == 2
+        assert "No such option: --host" in result.output
+
+
 def test_connect_help_exposes_driver_options():
     runner = CliRunner()
     result = runner.invoke(main, ["connect", "--help"])

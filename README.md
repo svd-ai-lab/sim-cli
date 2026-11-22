@@ -44,6 +44,18 @@ roll-up `summary`.)
 
 What each format reports: [docs/simparse.md](docs/simparse.md).
 
+## Export saved COMSOL data
+
+```bash
+uv run sim export mesh model.mph --sequence mesh1 -o mesh.vtu
+uv run sim --json export solution solved.mph --list
+uv run sim export solution solved.mph --sequence sol1 --solnum 1 -o solution.json
+```
+
+These commands read saved MPH data offline. The solution JSON contains the
+stored vector in solver order and its metadata. See the
+[export formats](docs/simparse.md#saved-comsol-meshes-and-solutions).
+
 ## Options
 
 | Flag | Effect |

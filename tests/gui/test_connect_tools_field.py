@@ -68,7 +68,7 @@ def client(monkeypatch):
     # Reset global state in case another test left something
     srv._sessions.clear()
 
-    return TestClient(srv.app)
+    return TestClient(srv.app, client=("127.0.0.1", 50000))
 
 
 def test_connect_advertises_gui_tool(client):

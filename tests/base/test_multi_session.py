@@ -75,7 +75,14 @@ def clean_sessions():
 
 @pytest.fixture
 def client():
-    return TestClient(server.app)
+    return TestClient(server.app, client=("127.0.0.1", 50000))
+
+
+def test_http_rejects_non_loopback_peers():
+    with TestClient(server.app, client=("192.0.2.1", 50000)) as client:
+        headers = {"X-Forwarded-For": "127.0.0.1"}
+        assert client.get("/ps", headers=headers).status_code == 403
+        assert client.post("/exec", json={"code": "pass"}, headers=headers).status_code == 403
 
 
 def _connect(client, solver: str) -> str:

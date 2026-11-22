@@ -109,7 +109,7 @@ def test_session_versions_reports_active_runtime(monkeypatch) -> None:
         lambda name: _VersionedDriver() if name == "versioned" else None,
     )
     server._sessions.clear()
-    client = TestClient(server.app)
+    client = TestClient(server.app, client=("127.0.0.1", 50000))
 
     response = client.post(
         "/connect",
@@ -146,7 +146,7 @@ def test_structured_launch_failure_does_not_register_session(monkeypatch) -> Non
         lambda name: _FailedDriver() if name == "failed" else None,
     )
     server._sessions.clear()
-    client = TestClient(server.app)
+    client = TestClient(server.app, client=("127.0.0.1", 50000))
 
     response = client.post(
         "/connect",

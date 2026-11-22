@@ -30,9 +30,9 @@ SCHEMA_VERSION = 1
 
 _EXAMPLES: dict[str, list[dict[str, str]]] = {
     "serve": [
-        {"cmd": "sim serve", "summary": "Start the HTTP server on the default port."},
-        {"cmd": "sim serve --host 0.0.0.0 --port 7600 --reload",
-         "summary": "Bind to all interfaces with auto-reload (dev mode)."},
+        {"cmd": "sim serve", "summary": "Start the local session server on the default port."},
+        {"cmd": "sim serve --port 7600 --reload",
+         "summary": "Start the local session server with development auto-reload."},
     ],
     "check": [
         {"cmd": "sim check --all", "summary": "Detect every installed solver."},
@@ -43,6 +43,16 @@ _EXAMPLES: dict[str, list[dict[str, str]]] = {
          "summary": "Parse a directory into bounded, machine-readable asset summaries."},
         {"cmd": "sim --json scan model.mph --full --include-paths",
          "summary": "Return the full parser result for one explicit asset."},
+    ],
+    "export mesh": [
+        {"cmd": "sim export mesh model.mph --sequence mesh1 -o mesh.vtu",
+         "summary": "Export a saved COMSOL mesh as VTK unstructured grid data."},
+    ],
+    "export solution": [
+        {"cmd": "sim --json export solution solved.mph --list",
+         "summary": "List saved COMSOL solution sequences and counts."},
+        {"cmd": "sim export solution solved.mph --sequence sol1 --solnum 1 -o solution.json",
+         "summary": "Write a saved COMSOL solution vector and its metadata."},
     ],
     "lint": [
         {"cmd": "sim lint script.py --solver gmsh",
@@ -166,6 +176,8 @@ ERROR_CODES: dict[str, str] = {
         "--no-interactive is set and the command would otherwise prompt.",
     "ASSET_SCAN_FAILED":
         "A simulation asset or directory could not be read or parsed.",
+    "ASSET_EXPORT_FAILED":
+        "The saved MPH data could not be read or written to the requested output path.",
     "ASSET_FORMAT_UNSUPPORTED":
         "An explicitly requested file is not a supported simulation asset format.",
     "ASSET_PATH_NOT_FOUND":
@@ -286,11 +298,35 @@ SCHEMAS: dict[str, dict[str, Any]] = {
             "truncated": {"type": "boolean"},
         },
     },
+    "ExportResult": {
+        "type": "object",
+        "description": "Saved COMSOL payload export receipt or solution inventory.",
+        "required": ["ok", "kind", "engine"],
+        "properties": {
+            "ok": {"const": True},
+            "kind": {"enum": ["mesh", "solution"]},
+            "engine": {
+                "type": "object",
+                "properties": {
+                    "name": {"const": "simparse"},
+                    "version": {"type": "string"},
+                },
+            },
+            "output": {"type": "string"},
+            "solutions": {"type": "array", "items": {"type": "object"}},
+            "sequence": {"type": "string"},
+            "solnum": {"type": "integer", "minimum": 1},
+            "values": {"type": "integer", "minimum": 0},
+            "complex": {"type": "boolean"},
+        },
+    },
 }
 
 
 _OUTPUT_SCHEMAS: dict[str, str] = {
     "scan": "ScanResult",
+    "export mesh": "ExportResult",
+    "export solution": "ExportResult",
 }
 
 

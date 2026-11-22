@@ -1,10 +1,7 @@
 """Session client — HTTP client that talks to sim-server.
 
-Always HTTP, whether local or remote:
-  sim connect --solver pyfluent                    # auto-starts sim-server locally
-  sim connect --solver pyfluent --host 100.90.x.x  # talks to remote sim-server
-
-If no server is running locally, `connect` auto-starts one as a background process.
+The client uses HTTP on the loopback interface. When no local server is
+running, `sim connect` starts one as a background process.
 
 Multi-session (issue #26): the client carries an optional `session_id`. When
 set, every per-session call (`run`, `query`, `disconnect`, `screenshot`)
@@ -20,30 +17,19 @@ from pathlib import Path
 
 import httpx
 
-DEFAULT_HOST = "localhost"
+DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 7600
 CONNECT_TIMEOUT_S = 180
 CMD_TIMEOUT_S = 600
 
 
-def _local_hosts() -> set[str]:
-    return {"localhost", "127.0.0.1", "::1", ""}
-
-
-def _httpx_client(host: str, timeout: float) -> httpx.Client:
-    """Build an httpx Client that bypasses system proxies for localhost.
-
-    Windows workstations often run a system-wide proxy (Privoxy, Clash, etc.)
-    which happily intercepts 127.0.0.1:* calls and returns garbage. Setting
-    trust_env=False for localhost targets sidesteps all of that.
-    """
-    if host in _local_hosts():
-        return httpx.Client(timeout=timeout, trust_env=False)
-    return httpx.Client(timeout=timeout)
+def _httpx_client(timeout: float) -> httpx.Client:
+    """Bypass system proxies for the local HTTP connection."""
+    return httpx.Client(timeout=timeout, trust_env=False)
 
 
 class SessionClient:
-    """HTTP client for sim-server. Works with local or remote servers.
+    """HTTP client for the local sim server.
 
     `session_id` is used as the `X-Sim-Session` header on per-session
     endpoints. Leave it None to use the server's default-picking rules
@@ -52,21 +38,16 @@ class SessionClient:
 
     def __init__(
         self,
-        host: str = DEFAULT_HOST,
         port: int = DEFAULT_PORT,
         session_id: str | None = None,
     ):
-        self._base = f"http://{host}:{port}"
-        self._host = host
+        self._base = f"http://{DEFAULT_HOST}:{port}"
         self._port = port
         self.session_id = session_id
 
-    def _is_local(self) -> bool:
-        return self._host in ("localhost", "127.0.0.1")
-
     def _server_reachable(self) -> bool:
         try:
-            with _httpx_client(self._host, timeout=3) as c:
+            with _httpx_client(timeout=3) as c:
                 r = c.get(f"{self._base}/ps")
                 return r.status_code == 200
         except (httpx.ConnectError, httpx.TimeoutException, httpx.ReadTimeout):
@@ -86,7 +67,8 @@ class SessionClient:
 
         cmd = [sys.executable, "-c",
                "import uvicorn; from sim.server import app; "
-               f"uvicorn.run(app, host='127.0.0.1', port={self._port}, log_level='warning')"]
+               f"uvicorn.run(app, host={DEFAULT_HOST!r}, port={self._port}, "
+               "log_level='warning', proxy_headers=False)"]
 
         try:
             log_fh = open(log_path, "ab")
@@ -137,7 +119,7 @@ class SessionClient:
         if session_scoped:
             headers = {**self._session_headers(), **headers}
         try:
-            with _httpx_client(self._host, timeout=timeout) as c:
+            with _httpx_client(timeout=timeout) as c:
                 r = getattr(c, method)(f"{self._base}{path}", headers=headers, **kwargs)
                 data = r.json()
                 if r.status_code >= 400:
@@ -154,10 +136,8 @@ class SessionClient:
                 ui_mode: str = "no_gui", processors: int = 1,
                 workspace: str | None = None,
                 driver_options: dict | None = None) -> dict:
-        # Auto-start local server if needed
-        if self._is_local() and not self._server_reachable():
-            if not self._auto_start_server():
-                return {"ok": False, "error": "failed to auto-start sim-server locally"}
+        if not self._server_reachable() and not self._auto_start_server():
+            return {"ok": False, "error": "failed to auto-start sim-server locally"}
 
         body: dict = {
             "solver": solver, "mode": mode,
@@ -206,7 +186,7 @@ class SessionClient:
         read the body — that's expected, treat it as success.
         """
         try:
-            with _httpx_client(self._host, timeout=10) as c:
+            with _httpx_client(timeout=10) as c:
                 r = c.post(f"{self._base}/shutdown")
                 try:
                     return r.json()
