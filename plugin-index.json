@@ -44,7 +44,7 @@
     {
       "solver": "comsol",
       "package": "sim-plugin-comsol",
-      "version": "0.1.14",
+      "version": "0.1.15",
       "install_spec": "sim-plugin-comsol",
       "path": "plugins/comsol",
       "repository": "https://github.com/svd-ai-lab/sim-cli",
