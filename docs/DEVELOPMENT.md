@@ -50,6 +50,9 @@ docs/                user, plugin, and architecture docs
 
 ### `uv run sim serve --reload`
 
+Session commands use a server on `127.0.0.1`. To use a custom port,
+start `sim serve --port 8000` and send commands with `sim --port 8000`.
+
 Auto-restarts the server when source files change. Useful during driver development:
 
 ```bash

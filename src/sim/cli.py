@@ -31,9 +31,6 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
 @click.group()
 @click.version_option(version=__version__)
 @click.option("--json", "output_json", is_flag=True, help="JSON output for all commands.")
-@click.option("--host", default=None,
-              help="Remote sim-server host. "
-                   "Default: SIM_HOST env > config [server].host > localhost.")
 @click.option("--port", default=None, type=int,
               help="sim-server port. Default: SIM_PORT env > config [server].port > 7600.")
 @click.option("--session", "session_id", default=None,
@@ -43,16 +40,10 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
               help="Fail fast (NONINTERACTIVE_INPUT_REQUIRED) instead of prompting. "
                    "Auto-on when stdout is not a TTY.")
 @click.pass_context
-def main(ctx, output_json, host, port, session_id, no_interactive):
+def main(ctx, output_json, port, session_id, no_interactive):
     """sim — unified CLI for LLM agents to control CAD/CAE simulation software."""
     ctx.ensure_object(dict)
     ctx.obj["json"] = output_json
-    # Flag > env > config > default. --host on the CLI wins because it is
-    # the most immediate caller intent. For the host side, "localhost" is
-    # the conventional default that triggers auto-start behavior in
-    # session.py; don't change that when config says otherwise unless the
-    # user explicitly asked.
-    ctx.obj["host"] = host or os.environ.get("SIM_HOST") or "localhost"
     ctx.obj["port"] = port if port is not None else _cfg.resolve_server_port()
     ctx.obj["session"] = session_id or os.environ.get("SIM_SESSION") or None
     # --no-interactive: explicit flag wins; otherwise auto-on when piped.
@@ -66,23 +57,21 @@ def main(ctx, output_json, host, port, session_id, no_interactive):
 # ── serve ────────────────────────────────────────────────────────────────────
 
 @main.command()
-@click.option("--host", "serve_host", default="127.0.0.1",
-              help="Bind address. Use 0.0.0.0 for Tailscale/network access.")
 @click.option("--port", "serve_port", default=7600, type=int)
 @click.option("--reload", is_flag=True, default=False,
               help="Auto-reload on code changes (dev mode).")
-def serve(serve_host, serve_port, reload):
-    """Start the sim HTTP server (like ollama serve)."""
+def serve(serve_port, reload):
+    """Start the local sim HTTP server."""
     import uvicorn
+    from sim.session import DEFAULT_HOST
 
-    click.echo(f"[sim] server starting on {serve_host}:{serve_port}")
-    if serve_host == "0.0.0.0":
-        click.echo("[sim] accessible on network (Tailscale)")
+    click.echo(f"[sim] server starting on {DEFAULT_HOST}:{serve_port}")
     if reload:
         click.echo("[sim] auto-reload enabled (watching for file changes)")
     uvicorn.run(
         "sim.server:app",
-        host=serve_host,
+        host=DEFAULT_HOST,
+        proxy_headers=False,
         port=serve_port,
         log_level="info",
         reload=reload,
@@ -91,13 +80,8 @@ def serve(serve_host, serve_port, reload):
 
 # ── check ────────────────────────────────────────────────────────────────────
 
-def _is_local_host(host: str) -> bool:
-    return host in ("localhost", "127.0.0.1", "::1", "")
-
-
 def _check_local(solver: str) -> dict:
-    """Run on-demand detection in this process. Returns the same shape
-    as the /detect/{solver} HTTP endpoint."""
+    """Detect local installs and resolve compatibility profiles."""
     from sim.compat import load_compatibility_by_name, safe_detect_installed
 
     try:
@@ -138,25 +122,8 @@ def _check_local(solver: str) -> dict:
     }
 
 
-def _check_remote(solver: str, host: str, port: int) -> dict:
-    """Hit GET /detect/{solver} on a remote sim serve."""
-    import httpx
-
-    from sim.session import _httpx_client
-
-    url = f"http://{host}:{port}/detect/{solver}"
-    try:
-        with _httpx_client(host, timeout=15.0) as c:
-            r = c.get(url)
-    except httpx.RequestError as e:
-        return {"ok": False, "error": f"cannot reach sim serve at {host}:{port} - {e}"}
-    if r.status_code != 200:
-        return {"ok": False, "error": f"{r.status_code}: {r.text}"}
-    return r.json()
-
-
 def _render_check(data: dict) -> None:
-    """Pretty-print a /detect/{solver} response."""
+    """Pretty-print local solver detection results."""
     solver = data["solver"]
     installs = data.get("installs", [])
     resolutions = data.get("resolutions", [])
@@ -277,22 +244,10 @@ def _render_check_all(data: dict) -> None:
 def check(ctx, solver, check_all):
     """Detect installed versions of a solver and resolve their profile.
 
-    With SOLVER given, checks that one driver (existing behaviour).
-    With no SOLVER (or --all), enumerates every registered driver and
-    returns the aggregated installation list.
-
-    By default scans THIS host. With `--host <ip>` (top-level option),
-    asks the remote sim serve to scan its own host.
+    With SOLVER given, check that driver on this machine. With no SOLVER
+    or with --all, enumerate every registered driver on this machine.
     """
-    host = ctx.obj["host"]
-    port = ctx.obj["port"]
-    is_local = _is_local_host(host)
-
     if solver is None or check_all:
-        if not is_local:
-            click.echo("[sim] check --all: remote aggregation not yet implemented; "
-                       "pass a specific solver name to query a remote host.", err=True)
-            sys.exit(2)
         resp = _check_all_local()
         if ctx.obj["json"]:
             click.echo(json_mod.dumps(resp, indent=2, default=str))
@@ -300,10 +255,7 @@ def check(ctx, solver, check_all):
         _render_check_all(resp["data"])
         sys.exit(0)
 
-    if is_local:
-        resp = _check_local(solver)
-    else:
-        resp = _check_remote(solver, host, port)
+    resp = _check_local(solver)
 
     if ctx.obj["json"]:
         click.echo(json_mod.dumps(resp, indent=2, default=str))
@@ -560,7 +512,7 @@ def connect(ctx, solver, mode, ui_mode, processors, workspace, driver_options):
     except click.BadParameter as exc:
         raise click.ClickException(str(exc)) from exc
 
-    client = SessionClient(host=ctx.obj["host"], port=ctx.obj["port"],
+    client = SessionClient(port=ctx.obj["port"],
                            session_id=ctx.obj.get("session"))
     result = client.connect(
         solver=solver,
@@ -602,7 +554,7 @@ def exec_cmd(ctx, code, code_file, label):
         sys.exit(1)
 
     from sim.session import SessionClient
-    client = SessionClient(host=ctx.obj["host"], port=ctx.obj["port"],
+    client = SessionClient(port=ctx.obj["port"],
                            session_id=ctx.obj.get("session"))
     result = client.run(code=code, label=label)
 
@@ -666,6 +618,68 @@ def scan(ctx, paths, recursive, include_paths, full, limit, format_name):
         sys.exit(exit_code)
 
 
+# ── export (saved simulation assets) ─────────────────────────────────────────
+
+@main.group()
+def export():
+    """Export saved simulation data without launching a solver."""
+
+
+def _print_export(ctx, payload, exit_code):
+    if ctx.obj["json"]:
+        click.echo(json_mod.dumps(payload, indent=2))
+    elif not payload["ok"]:
+        click.echo(f"[sim] {payload['message']}", err=True)
+    elif "solutions" in payload:
+        if not payload["solutions"]:
+            click.echo("[sim] no saved solutions")
+        for solution in payload["solutions"]:
+            study = solution["study_name"] or solution["study"] or "(no study)"
+            click.echo(
+                f"{solution['sequence']}  {study}  {solution['analysis_type']}  "
+                f"{solution['solution_count']} saved vector(s)"
+            )
+    else:
+        click.echo(f"[sim] exported {payload['kind']} to {payload['output']}")
+    if exit_code:
+        ctx.exit(exit_code)
+
+
+@export.command("mesh")
+@click.argument("path", type=click.Path(path_type=Path))
+@click.option("-o", "--output", type=click.Path(path_type=Path), required=True,
+              help="Destination VTU file.")
+@click.option("--sequence", help="Mesh sequence tag when the MPH stores several meshes.")
+@click.pass_context
+def export_mesh(ctx, path, output, sequence):
+    """Export a saved COMSOL MPH mesh to VTU."""
+    from sim.assets import export_comsol
+
+    _print_export(ctx, *export_comsol(path, "mesh", output, sequence))
+
+
+@export.command("solution")
+@click.argument("path", type=click.Path(path_type=Path))
+@click.option("-o", "--output", type=click.Path(path_type=Path),
+              help="Destination JSON file for one saved solution vector.")
+@click.option("--sequence", help="Solver sequence tag, for example sol1.")
+@click.option("--solnum", type=click.IntRange(min=1), help="One-based saved solution number.")
+@click.option("--list", "list_solutions", is_flag=True, help="List saved solutions instead of exporting a vector.")
+@click.pass_context
+def export_solution(ctx, path, output, sequence, solnum, list_solutions):
+    """Export a saved COMSOL MPH solution vector to JSON."""
+    from sim.assets import _error_envelope, export_comsol
+
+    if list_solutions and (output is not None or sequence is not None or solnum is not None):
+        _print_export(ctx, _error_envelope(
+            "ASSET_EXPORT_FAILED", "--list cannot be combined with --output, --sequence, or --solnum.",
+        ), 2)
+    if output is None and not list_solutions:
+        _print_export(ctx, _error_envelope("ASSET_EXPORT_FAILED", "Provide --output or --list."), 2)
+
+    _print_export(ctx, *export_comsol(path, "solution", output, sequence, solnum))
+
+
 # ── inspect (live session state) ─────────────────────────────────────────────
 
 @main.command()
@@ -684,7 +698,7 @@ def inspect(ctx, name):
       ...
     """
     from sim.session import SessionClient
-    client = SessionClient(host=ctx.obj["host"], port=ctx.obj["port"],
+    client = SessionClient(port=ctx.obj["port"],
                            session_id=ctx.obj.get("session"))
     result = client.query(name=name)
 
@@ -710,7 +724,7 @@ def ps(ctx):
     --session nor X-Sim-Session is set.
     """
     from sim.session import SessionClient
-    client = SessionClient(host=ctx.obj["host"], port=ctx.obj["port"],
+    client = SessionClient(port=ctx.obj["port"],
                            session_id=ctx.obj.get("session"))
     result = client.status()
 
@@ -757,7 +771,7 @@ def disconnect(ctx, stop_server):
     on its own).
     """
     from sim.session import SessionClient
-    client = SessionClient(host=ctx.obj["host"], port=ctx.obj["port"],
+    client = SessionClient(port=ctx.obj["port"],
                            session_id=ctx.obj.get("session"))
     result = client.disconnect()
 
@@ -802,7 +816,7 @@ def stop(ctx):
     to call `sim disconnect` first.
     """
     from sim.session import SessionClient
-    client = SessionClient(host=ctx.obj["host"], port=ctx.obj["port"],
+    client = SessionClient(port=ctx.obj["port"],
                            session_id=ctx.obj.get("session"))
     result = client.stop()
 
@@ -832,7 +846,7 @@ def screenshot(ctx, output):
     from pathlib import Path
 
     from sim.session import SessionClient
-    client = SessionClient(host=ctx.obj["host"], port=ctx.obj["port"],
+    client = SessionClient(port=ctx.obj["port"],
                            session_id=ctx.obj.get("session"))
     result = client.screenshot()
 
@@ -889,10 +903,8 @@ def config_show(ctx):
         click.echo(json_mod.dumps({
             "merged": merged,
             "server_port": _cfg.resolve_server_port(),
-            "server_host": _cfg.resolve_server_host(),
         }, indent=2))
     else:
-        click.echo(f"  server.host: {_cfg.resolve_server_host()}")
         click.echo(f"  server.port: {_cfg.resolve_server_port()}")
         solvers = _cfg.list_solver_pins()
         if solvers:

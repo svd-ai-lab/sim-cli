@@ -101,7 +101,7 @@ Given a detected solver version `V`:
 
 The user-facing flow stays per-solver and lazy:
 
-1. `sim check <solver>` calls the driver's `detect_installed()` (pure stdlib, no SDK import) on the local host or, with `--host`, on a remote `sim serve` over `GET /detect/<solver>`. It reports installs and resolved profiles; it does **not** install anything.
+1. `sim check <solver>` calls the driver's `detect_installed()` (pure stdlib, no SDK import) on the local machine and reports installs and resolved profiles.
 2. `sim connect --solver <name>` resolves the driver from the plugin entry point, attaches any matching compatibility profile to the session response, and dispatches through `DriverProtocol`.
 
 The current CLI does not create per-profile plugin environments. The `sim`

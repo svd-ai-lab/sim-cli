@@ -3,8 +3,7 @@
 Like `ollama serve`: start once, then use `sim connect/exec/inspect/disconnect`.
 
     sim serve                          # local (127.0.0.1:7600)
-    sim serve --host 0.0.0.0           # expose on network (Tailscale)
-    sim serve --host 0.0.0.0 --port 8000
+    sim serve --port 8000              # local, on a custom port
 
 Multi-session model (issue #26):
 
@@ -34,6 +33,7 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass, field
+from ipaddress import ip_address
 from typing import Any
 
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Request
@@ -67,6 +67,18 @@ class _NaNSafeJSONResponse(JSONResponse):
 
 
 app = FastAPI(title="sim", version="0.2.0", default_response_class=_NaNSafeJSONResponse)
+
+
+@app.middleware("http")
+async def _require_loopback(request: Request, call_next):
+    client_host = request.client.host if request.client else ""
+    try:
+        local = ip_address(client_host).is_loopback
+    except ValueError:
+        local = False
+    if not local:
+        return JSONResponse(status_code=403, content={"detail": "sim-server accepts loopback connections only"})
+    return await call_next(request)
 
 
 # ── Request models ───────────────────────────────────────────────────────────
@@ -175,56 +187,6 @@ def _list_sessions() -> list[SessionState]:
 def version():
     from sim import __version__
     return {"version": __version__}
-
-
-@app.get("/detect/{solver}")
-def detect_solver(solver: str):
-    """On-demand detection of one named solver on this host.
-
-    Returns the same shape that local `sim check <solver>` produces, so
-    the CLI can use the same rendering code for both local and remote
-    detection.
-    """
-    from sim.compat import load_compatibility_by_name, safe_detect_installed
-    from sim.drivers import get_driver
-
-    try:
-        driver = get_driver(solver)
-    except Exception as e:  # noqa: BLE001 — surface lazy-import failures distinctly
-        raise HTTPException(500, f"driver '{solver}' failed to load: {type(e).__name__}: {e}")
-    if driver is None:
-        raise HTTPException(404, f"unknown solver: {solver}")
-
-    installs = safe_detect_installed(driver)
-
-    resolutions: list[dict] = []
-    compat_dict: dict | None = None
-    compat = load_compatibility_by_name(solver)
-    if compat is not None:
-        compat_dict = {
-            "driver": compat.driver,
-            "sdk_package": compat.sdk_package,
-            "profiles": [p.to_dict() for p in compat.profiles],
-        }
-        for inst in installs:
-            profile = compat.resolve(inst.version)
-            resolutions.append({
-                "install": inst.to_dict(),
-                "profile": profile.to_dict() if profile else None,
-            })
-    else:
-        for inst in installs:
-            resolutions.append({"install": inst.to_dict(), "profile": None})
-
-    return {
-        "ok": True,
-        "data": {
-            "solver": solver,
-            "installs": [i.to_dict() for i in installs],
-            "resolutions": resolutions,
-            "compatibility": compat_dict,
-        },
-    }
 
 
 def _resolve_profile(driver, solver: str, solver_version: str | None = None):
@@ -627,21 +589,8 @@ def disconnect(
 
 
 @app.post("/shutdown")
-def shutdown(request: Request, background_tasks: BackgroundTasks):
-    """Stop the sim-server process cleanly.
-
-    Tears down ALL active sessions, then schedules the process to exit
-    once the response has been flushed. Localhost-only — when sim serve
-    is exposed via --host 0.0.0.0 we don't want a LAN peer to be able
-    to take it down.
-    """
-    client_host = request.client.host if request.client else None
-    if client_host not in ("127.0.0.1", "::1", "localhost"):
-        raise HTTPException(
-            403,
-            f"/shutdown is localhost-only (request from {client_host})",
-        )
-
+def shutdown(background_tasks: BackgroundTasks):
+    """Tear down all solver sessions and stop the local server."""
     torn_down = _teardown_all()
 
     def _exit_after_flush() -> None:

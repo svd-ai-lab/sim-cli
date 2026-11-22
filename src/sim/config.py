@@ -28,7 +28,6 @@ else:  # pragma: no cover — exercised only on 3.10
 
 
 DEFAULT_SERVER_PORT = 7600
-DEFAULT_SERVER_HOST = "127.0.0.1"
 
 
 # ── Paths ────────────────────────────────────────────────────────────────────
@@ -135,18 +134,6 @@ def resolve_server_port() -> int:
     return DEFAULT_SERVER_PORT
 
 
-def resolve_server_host() -> str:
-    """env SIM_HOST > config [server].host > default 127.0.0.1."""
-    raw = os.environ.get("SIM_HOST")
-    if raw:
-        return raw
-    cfg = _cached_config()
-    host = cfg.get("server", {}).get("host")
-    if isinstance(host, str) and host:
-        return host
-    return DEFAULT_SERVER_HOST
-
-
 def resolve_solver_path(solver: str) -> str | None:
     """Look up a solver's install path override.
 
@@ -191,7 +178,6 @@ GLOBAL_STUB = """\
 
 # [server]
 # port = 7600
-# host = "127.0.0.1"
 
 # [solvers.fluent]
 # path = "C:\\\\Program Files\\\\ANSYS Inc\\\\v252"

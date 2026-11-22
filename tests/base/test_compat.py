@@ -311,7 +311,7 @@ class TestConnectIncludesSkillsBlock(unittest.TestCase):
             self.skipTest("sim.drivers not importable")
 
         try:
-            client = TestClient(server.app)
+            client = TestClient(server.app, client=("127.0.0.1", 50000))
             r = client.post("/connect", json={
                 "solver": "comsol",
                 "mode": "solver",
@@ -353,7 +353,7 @@ class TestConnectIncludesSkillsBlock(unittest.TestCase):
         drivers_mod.get_driver = lambda name: _StubDriver() if name == "comsol" else None
 
         try:
-            client = TestClient(server.app)
+            client = TestClient(server.app, client=("127.0.0.1", 50000))
             r = client.post("/connect", json={
                 "solver": "comsol",
                 "mode": "solver",

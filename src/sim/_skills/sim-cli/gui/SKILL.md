@@ -45,27 +45,17 @@ If the SDK has a programmatic path (`session.tui.*`, `model.solve()`,
 `ModelUtil.loadCopy()`), prefer that. `gui` is for the UI-only surface
 that the SDK doesn't cover.
 
-## Remote equivalence
+## Local session
 
-`gui` is in the session namespace on the `sim serve` side. You talk to
-it via the existing `/exec` HTTP channel:
+`gui` is available through `sim exec` in the local solver session.
 
 ```bash
-# local Windows box
 sim exec "dlg = gui.find('Login'); dlg.click('OK')"
-
-# Windows box on the LAN / Tailscale
-sim --host 10.0.x.y exec "dlg = gui.find('Login'); dlg.click('OK')"
 ```
 
-No new endpoint, no new protocol — the same API shape from anywhere
-the agent runs.
-
-Requirement on the server host: `sim serve` must run in a **real
-interactive desktop session** (normal login or RDP). Windows
-service / SSH session 0 has no desktop, so pywinauto can't enumerate
-any windows even though the solver processes are running. This is the
-same constraint GUI-capable drivers document.
+Run `sim serve` from an interactive Windows desktop session, such as a
+console login or RDP session. A non-interactive Windows session has no
+desktop for pywinauto to enumerate.
 
 ## API
 
@@ -219,16 +209,9 @@ Things that commonly make `ok` false:
 - **Don't rely on `gui` for SDK-shaped work.** Solver objects (`session`,
   `model`) are always faster and more reliable than UI clicks. `gui` is
   the fallback for the UI-only surface.
-- **Remote servers need a real desktop.** If `sim serve` runs from an
-  SSH session, a Windows service, or any non-interactive context, the
-  spawned solver process inherits a session with no display surface.
-  pywinauto then finds zero windows, screenshots come back uniformly
-  black, and `find(...)` silently times out — the server itself is up
-  and reachable, only the GUI half is dead. Restart `sim serve` from a
-  desktop session (Windows Terminal on the console, RDP, or Task
-  Scheduler with "run only when user is logged on" + interactive). See
-  [`../SKILL.md` → "Where `sim serve` runs"](../SKILL.md) for the full
-  driver-by-driver matrix.
+- **Check the desktop session.** If pywinauto finds zero windows or
+  screenshots are black, verify where `sim serve` was started. See
+  [Where `sim serve` runs on Windows](../SKILL.md#where-sim-serve-runs-on-windows).
 
 ## Related skills
 

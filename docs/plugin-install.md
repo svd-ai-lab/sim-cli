@@ -131,7 +131,7 @@ engineering goal in plain language rather than a list of `sim` sub-steps.
 
 | Command | Use it for |
 |---|---|
-| `uv run sim check <solver>` | Detect local or remote solver installs. |
+| `uv run sim check <solver>` | Detect local solver installs. |
 | `uv run sim lint <script>` | Validate a script before running it. |
 | `uv run sim run script.py --solver <solver>` | Run a deterministic one-shot script. |
 | `uv run sim logs last --field <name>` | Read back a one-shot run's parsed result. |

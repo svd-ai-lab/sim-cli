@@ -66,8 +66,7 @@ def test_every_command_has_examples_or_is_a_pure_group():
     m = _describe.build_manifest(main, version="0")
     leaf_commands_missing_examples: list[str] = []
     for cmd in m["commands"]:
-        # Skip pure groups (config, plugin) — their leaves carry the examples.
-        if cmd["name"] in {"config", "plugin"}:
+        if cmd["name"] in {"config", "export", "plugin"}:
             continue
         if not cmd["examples"]:
             leaf_commands_missing_examples.append(cmd["name"])
@@ -114,6 +113,14 @@ def test_scan_command_declares_its_output_schema():
     assert entry is not None
     assert entry["output_schema"] == "ScanResult"
     assert "ScanResult" in _describe.SCHEMAS
+
+
+@pytest.mark.parametrize("command", ["export mesh", "export solution"])
+def test_export_command_declares_its_output_schema(command):
+    entry = _describe.build_command_entry(main, command)
+    assert entry is not None
+    assert entry["output_schema"] == "ExportResult"
+    assert "ExportResult" in _describe.SCHEMAS
 
 
 # ── CLI invocation ──────────────────────────────────────────────────────────

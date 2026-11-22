@@ -1,16 +1,32 @@
-# simparse — the parsing engine behind `sim scan`
+# simparse — offline scanning and export
 
 `sim scan` is powered by [simparse](https://pypi.org/project/simparse/), a
 native (Rust) scanner for simulation project and case files. It installs as a
 dependency of `sim-cli-core`; no solver, license server or vendor SDK is
 needed.
 
-simparse is built for one agent task: look at a file or a folder of historical
-simulation work and answer "what is in here?" quickly, before deciding
-which heavier vendor tool to call next. It reads metadata, inventories and
-setup hints with plain text, ZIP, XML and shallow HDF5 reads, and leaves
-geometry, mesh and result payloads where they are, referenced by size and
-category.
+`sim scan` reads metadata, inventories and setup hints from historical
+simulation files. Its output inventories large payloads by size and category.
+
+## Saved COMSOL meshes and solutions
+
+```bash
+sim export mesh model.mph --sequence mesh1 -o mesh.vtu
+sim --json export solution solved.mph --list
+sim export solution solved.mph --sequence sol1 --solnum 1 -o solution.json
+```
+
+- `export mesh` writes a VTK unstructured grid with saved coordinates,
+  element connectivity, and the `comsol_entity` cell array.
+- `export solution --list` displays saved solution tags and counts. Select a
+  tag with `--sequence` and a 1-based solution number with `--solnum`.
+  The JSON file contains `solution` metadata, `solnum`, `real`, and
+  `imaginary` or `time_s` when present. Values follow COMSOL's solver DOF
+  order. Mapping them to mesh fields requires DOF metadata.
+
+Omit a mesh or solution sequence to let simparse select one. The commands
+read the saved payload directly from the MPH file. With `sim --json export`,
+the CLI emits a machine-readable receipt or solution inventory on stdout.
 
 ## What each format reports
 

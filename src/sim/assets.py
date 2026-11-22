@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import importlib
 import importlib.metadata
+import json
 import os
+import tempfile
 from collections import Counter
 from pathlib import Path
 from typing import Any, Iterable
@@ -103,6 +105,66 @@ def _error_envelope(
     if details:
         payload["details"] = details
     return payload
+
+
+def export_comsol(
+    path: Path,
+    kind: str,
+    output: Path | None,
+    sequence: str | None,
+    solnum: int | None = None,
+) -> tuple[dict[str, Any], int]:
+    """Export a saved COMSOL mesh or primary solution from a local MPH."""
+    if not path.is_file():
+        return _error_envelope("ASSET_PATH_NOT_FOUND", f"No file at {path}"), 2
+    if path.suffix.lower() != ".mph":
+        return _error_envelope("ASSET_FORMAT_UNSUPPORTED", "Expected a COMSOL .mph file."), 2
+    try:
+        simparse, version = _load_simparse()
+    except (ImportError, OSError) as exc:
+        return _error_envelope("SIMPARSE_UNAVAILABLE", str(exc)), 3
+
+    result: dict[str, Any] = {
+        "ok": True,
+        "kind": kind,
+        "engine": {"name": "simparse", "version": version},
+    }
+    try:
+        if output is None:
+            result["solutions"] = simparse.comsol_solutions(path)
+            return result, 0
+
+        if output.resolve() == path.resolve() or (output.exists() and output.samefile(path)):
+            return _error_envelope("ASSET_EXPORT_FAILED", "Output refers to the input MPH."), 2
+
+        if kind == "mesh":
+            simparse.comsol_vtu(path, output, sequence=sequence)
+        else:
+            vector = simparse.comsol_solution(path, sequence=sequence, solnum=solnum)
+            temp_path = None
+            try:
+                # Close the temporary handle before replacing the destination on Windows.
+                with tempfile.NamedTemporaryFile(
+                    mode="w", encoding="utf-8", dir=output.parent, delete=False,
+                ) as file:
+                    temp_path = Path(file.name)
+                    json.dump(vector, file, allow_nan=False, separators=(",", ":"))
+                    file.write("\n")
+                temp_path.replace(output)
+            finally:
+                if temp_path is not None:
+                    temp_path.unlink(missing_ok=True)
+            result.update(
+                sequence=vector["solution"]["sequence"],
+                solnum=vector["solnum"],
+                values=len(vector["real"]),
+                complex="imaginary" in vector,
+            )
+
+        result["output"] = str(output)
+        return result, 0
+    except (OSError, RuntimeError, ValueError) as exc:
+        return _error_envelope("ASSET_EXPORT_FAILED", str(exc)), 1
 
 
 def scan_assets(
